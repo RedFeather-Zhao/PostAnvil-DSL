@@ -414,15 +414,3 @@ RULE FOR Animal:
 **A:** 使用 `CONTAINS Class min-max` 语法。例如 `CONTAINS B 2-5` 表示包含 2 到 5 个 B。单值 `CONTAINS B 1` 表示精确匹配 1 个 B。
 
 ---
-
-## 10. 附录：技术架构
-
-PostAnvil 由以下组件构成：
-
-| 组件 | 文件 | 说明 |
-|------|------|------|
-| 数据结构 | `context.hpp` | Image、Instance、Scene 定义 |
-| AST 节点 | `ast.hpp` | 表达式、规则、数量范围 |
-| 词法分析器 | `lexer.hpp` / `lexer.cpp` | Token 拆分 |
-| 解析器 | `parser.hpp` | 递归下降解析 |
-| 评估器 | `evaluator.hpp` | 运行时规则评估 |
