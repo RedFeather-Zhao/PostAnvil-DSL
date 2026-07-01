@@ -5,7 +5,7 @@
  *         识别缩进感知的 RULE FOR 块结构
  *         使用递归下降法将条件表达式解析为 AST
  *         支持注释行（# 和 // 开头）
- * 
+ *
  * 支持的递归下降表达式语法：
  * @code
  *		expr      := or_expr
@@ -18,8 +18,8 @@
  *		unary_expr:= ("-" )? primary
  *		primary   := number | identifier [ ("." identifier)* | '(' arglist ')' ] | '(' expr ')'
  * @endcode
- * 
- * 
+ *
+ *
  * @author RedFeather-Zhao
  * @date   June 2026
  * @copyright Copyright (c) 2026 RedFeather-Zhao, All Rights Reserved.
@@ -44,7 +44,7 @@ class ParseError : public std::runtime_error {
 public:
 	int line; //< 出错行号（-1 表示未知）
 	int col;  //< 出错列号（-1 表示未知）
-	
+
 	/**
 	 * @brief 构造解析异常
 	 * @param m 错误消息
@@ -60,24 +60,30 @@ public:
 /**
  * @brief PostAnvil DSL 解析器。
  *
- * 解析器读取 DSL 源文本，识别 RULE FOR 块结构，
- * 并将每个条件表达式解析为 AST 节点。
+ * 解析器读取 DSL 源文本，通过状态机识别 RULE FOR 块结构，
+ * 内部 ExprParser 使用递归下降法将每个条件表达式解析为 AST 节点。
  */
 class Parser {
+	/**
+	 * @brief 解析状态机：识别 RULE FOR 块结构的当前状态。
+	 */
 	enum class State {
-		OUT_RULE,	// 
-		IN_RULE,	// 
-	}; //< 状态机
+		OUT_RULE,	//< 规则块外，等待 RULE FOR 头部
+		IN_RULE,	//< 规则块内，解析条件表达式
+	};
+
+	using Token = Lexer::Token;
+	using enum Lexer::TokenKind;
 
 public:
 	/**
 	 * @brief 解析 DSL 源文本，生成规则列表。
 	 *
-	 * 解析过程：
-	 * 1. 按行读取源文本
-	 * 2. 识别 `RULE FOR <target>:` 头部
-	 * 3. 收集缩进块内的条件表达式
-	 * 4. 对每个条件表达式调用递归下降解析器
+	 * 状态机流程：
+	 * 1. OUT_RULE → 逐行扫描，调用 parse_rule_header() 识别 `RULE FOR <target>:` 头部
+	 * 2. IN_RULE  → 收集缩进块内的条件表达式，交给 ExprParser 递归下降解析
+	 * 3. 缩进回归 → 规则块结束，保存当前规则，reparse_line 标记当前行重新检查
+	 * 4. EOF     → 若仍在规则块内，保存最后一个规则
 	 *
 	 * @param src DSL 源文本
 	 * @param[out] out_rules 解析生成的规则列表
@@ -85,9 +91,13 @@ public:
 	 * @throws ParseError 语法错误时抛出
 	 * @throws std::runtime_error 格式错误时抛出
 	 */
-	bool parse(const std::string& src, std::vector<Rule>& out_rules) {
+	static bool
+	parse(const std::string& src, std::vector<Rule>& out_rules)
+	{
 		out_rules.clear();
-		
+
+		ExprParser parser; // 内部递归下降解析器实例
+
 		std::istringstream ss(src);
 		std::string raw_line;
 		Rule current;
@@ -96,34 +106,27 @@ public:
 		int lineno = 0;
 		bool reparse_line = false; // 是否重新解析当前行（用于规则块结束后检查新规则头部）
 
+		auto is_skip_line = [](std::string_view s) {
+			return (s.empty() || starts_with(s, "#") || starts_with(s, "//"));
+		};
+
 		// 循环主体，按行读取解析源文本
 		while (true) {
 			if (reparse_line == false && !std::getline(ss, raw_line)) {
 				break;
 			}
 			reparse_line = false;
-			
+
 			std::string line = trim(raw_line);
 
 			// 1. 跳过空行和注释行
-			if (line.empty()) {
-				continue;
-			}
-			if (starts_with(line, "#") || starts_with(line, "//")) {
+			if (is_skip_line(line)) {
 				continue;
 			}
 
 			// 2. 状态机：规则块外，解析规则头部 "RULE FOR"
 			if (state == State::OUT_RULE) {
-				std::string up = to_upper(line);
-				auto [matched, pos] = starts_with_seg(up, {"RULE", "FOR"});
-				if (matched) {
-					size_t colon = line.find(':', pos);
-					if (colon == std::string::npos) {
-						throw ParseError("Missing ':' in RULE FOR header", lineno, (int)line.size());
-					}
-					current = Rule();
-					current.target = trim(std::string_view(line).substr(pos, colon - pos));
+				if (parse_rule_header(line, lineno, current)) {
 					state = State::IN_RULE;
 					rule_indent = -1;
 				}
@@ -133,7 +136,7 @@ public:
 			// 3. 状态机：规则块内，解析条件表达式
 			if (state == State::IN_RULE) {
 				int leading = count_leading(raw_line);
-				
+
 				// 记录规则块的缩进量，首次遇到非空行时确定缩进
 				if (rule_indent == -1) {
 					if (leading == 0) {
@@ -157,19 +160,51 @@ public:
 
 				// 解析条件表达式字符串为 AST
 				const std::string& cond = line;
-				auto expr = parse_condition_expr(cond, lineno);
+				auto expr = parser.parse_condition_expr(cond, lineno);
 				current.conditions.push_back(std::move(expr));
 			}
 		}
 
 		// 处理文件末尾的规则块，如果仍在规则块内，则保存当前规则
-		if (state== State::IN_RULE) {
+		if (state == State::IN_RULE) {
 			out_rules.push_back(std::move(current));
 		}
 		return true;
 	}
 
 private: // Tool functions for parsing
+	/**
+	 * @brief 解析 RULE FOR 头部，提取目标类别名称。
+	 *
+	 * 匹配格式：RULE FOR <target>:
+	 * - 先通过 starts_with_seg() 忽略大小写匹配 "RULE" "FOR" 前缀
+	 * - 再查找冒号分隔符，提取中间的目标类别名
+	 *
+	 * @param line   - 当前行内容（已去除首尾空白）
+	 * @param lineno - 当前行号，用于错误报告
+	 * @param[out] rule - 解析结果写入此规则对象
+	 * @return true 表示成功匹配 RULE FOR 头部，false 表示当前行不是规则头部
+	 * @throws ParseError 如果匹配到前缀但缺少冒号
+	 */
+	static bool
+	parse_rule_header(std::string_view line, int lineno, Rule& rule)
+	{
+		std::string up = to_upper(line);
+
+		auto [matched, pos] = starts_with_seg(up, { "RULE", "FOR" });
+		if (!matched) {
+			return false;
+		}
+
+		size_t colon = line.find(':', pos);
+		if (colon == std::string::npos) {
+			throw ParseError("Missing ':' in RULE FOR header", lineno, (int)line.size());
+		}
+
+		rule = Rule();
+		rule.target = trim(line.substr(pos, colon - pos));
+		return true;
+	}
 
 	/**
 	 * @brief 去除字符串首尾空白字符。
@@ -274,60 +309,69 @@ private: // Tool functions for parsing
 		return res;
 	}
 
+//==================== Expression parsing ========================
+
 	/**
-	 * @brief 使用递归下降法将单行条件表达式解析为 AST。
+	 * @brief 内部递归下降解析器，将条件表达式字符串解析为 AST。
 	 *
-	 * 支持的语法层次：
-	 * @code
-	 * expr      := or_expr
-	 * or_expr   := and_expr ("OR" and_expr)*
-	 * and_expr  := not_expr ("AND" not_expr)*
-	 * not_expr  := "NOT" not_expr | cmp_expr
-	 * cmp_expr  := add_expr ( ("<"|">"|"<="|">="|"=="|"!=") add_expr )*
-	 * add_expr  := mul_expr ( ("+"|"-") mul_expr )*
-	 * mul_expr  := unary_expr ("*" unary_expr)*
-	 * unary_expr:= ("-")? primary
-	 * primary   := number | identifier [ ("." identifier)* | '(' arglist ')' ] | '(' expr ')'
-	 * @endcode
+	 * 解析器按运算符优先级分层，每层一个 parse_* 方法：
+	 * | 层级     | 方法                    | 运算符              |
+	 * |---------|------------------------|--------------------|
+	 * | 入口    | parse_expr()           | → parse_or()       |
+	 * | 逻辑或  | parse_or()             | OR                 |
+	 * | 逻辑与  | parse_and()            | AND                |
+	 * | 逻辑非  | parse_not()            | NOT                |
+	 * | 比较    | parse_cmp()            | < > <= >= == !=    |
+	 * | 加减    | parse_add()            | + -                |
+	 * | 乘      | parse_mul()            | *                  |
+	 * | 一元    | parse_unary()          | - (取负)           |
+	 * | 基本    | parse_primary()        | 数字/标识符/括号    |
 	 *
-	 * @param s 条件表达式字符串
-	 * @param lineno 行号（用于错误报告）
-	 * @return 解析后的 AST 根节点
-	 * @throws std::runtime_error 语法错误时抛出
+	 * parse_primary() 进而分发到：
+	 * - parse_number()             — 数字字面量
+	 * - parse_identifier_primary() — 标识符（分叉为函数调用/断言式调用/属性访问/普通标识符）
+	 *   - parse_function_call()    — 函数调用：name(arg1, arg2, ...)
+	 *   - parse_predicate_call()   — 断言式调用：PREDICATE arg1 arg2 [数量范围]
+	 *     - parse_identifier_argument() — 断言式调用中的标识符参数
+	 *     - parse_quantity_range()      — 数量范围：a 或 a-b
+	 *     - parse_property_access_argument() — 断言式调用中的 obj.prop 参数
+	 *   - parse_property_access()  — 属性访问：obj.prop
+	 * - parse_paren_expr()         — 括号分组：(expr)
 	 */
-	std::unique_ptr<Expr> parse_condition_expr(const std::string& s, int lineno = 0) {
-		auto tokens = tokenize_expr(s);
-		size_t pos = 0;
-		
-		// 递归下降解析器的辅助函数：peek - 查看当前 token，consume - 消耗当前 token 并前进
-		auto peek = [&](size_t k = 0) -> Token& {
-			return tokens[pos + k];
-		};
-		auto consume = [&](void) ->Token& {
-			return tokens[pos++];
-		};
+	class ExprParser {
+	private:
+		/**
+		 * @brief 查看当前 token，支持向前 k 个 token
+		 * @param k - 向前偏移量，默认 0 表示当前 token
+		 * @return const Token& - 当前 token 的引用
+		 */
+		const Token& peek(size_t k = 0) const {
+			return m_tokens[m_pos + k];
+		}
 
-		// 递归下降解析函数声明
-		using ParseFunc = std::function<std::unique_ptr<Expr>()>;
-		ParseFunc parse_expr;		// 
-		ParseFunc parse_or;			// 
-		ParseFunc parse_and;		// 
-		ParseFunc parse_not;		// 
-		ParseFunc parse_cmp;		// 
-		ParseFunc parse_add;		// 
-		ParseFunc parse_mul;		// 
-		ParseFunc parse_unary;		// 
-		ParseFunc parse_primary;	// 
-		
-		using enum TokenKind;
+		/**
+		 * @brief 消耗当前 token 并前进到下一个 token
+		 * @return const Token& - 被消耗的 token 的引用
+		 */
+		const Token& consume() {
+			return m_tokens[m_pos++];
+		}
 
-		// expr      := or_expr
-		parse_expr = [&] {
+		/**
+		 * @brief 解析表达式，入口函数，规则：expr := or_expr
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_expr() {
 			return parse_or();
-		};
+		}
 
-		// or_expr   := and_expr ("OR" and_expr)*
-		parse_or = [&] {
+		/**
+		 * @brief 解析逻辑或表达式，规则：or_expr := and_expr ("OR" and_expr)*
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的逻辑或表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_or() {
 			auto left = parse_and();
 			while (peek().kind == Keyword && to_upper(peek().text) == "OR") {
 				consume();
@@ -335,10 +379,14 @@ private: // Tool functions for parsing
 				left = std::unique_ptr<Expr>(std::make_unique<BinaryExpr>(std::move(left), "OR", std::move(right)));
 			}
 			return left;
-		};
+		}
 
-		// and_expr  := not_expr ("AND" not_expr)*
-		parse_and = [&] {
+		/**
+		 * @brief 解析逻辑与表达式，规则：and_expr := not_expr ("AND" not_expr)*
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的逻辑与表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_and() {
 			auto left = parse_not();
 			while (peek().kind == Keyword && to_upper(peek().text) == "AND") {
 				consume();
@@ -346,38 +394,50 @@ private: // Tool functions for parsing
 				left = std::unique_ptr<Expr>(std::make_unique<BinaryExpr>(std::move(left), "AND", std::move(right)));
 			}
 			return left;
-		};
+		}
 
-		// not_expr  := "NOT" not_expr | cmp_expr
-		parse_not = [&] {
+		/**
+		 * @brief 解析逻辑非表达式，规则：not_expr := "NOT" not_expr | cmp_expr
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的逻辑非表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_not() {
 			if (peek().kind == Keyword && to_upper(peek().text) == "NOT") {
 				consume();
 				auto rhs = parse_not();
 				return std::unique_ptr<Expr>(std::make_unique<UnaryExpr>("NOT", std::move(rhs)));
 			}
 			return parse_cmp();
-		};
+		}
 
-		// cmp_expr  := add_expr ( ("<"|">"|"<="|">="|"=="|"!=") add_expr )*
-		parse_cmp = [&] {
+		/**
+		 * @brief 解析比较表达式，规则：cmp_expr := add_expr ( ("<"|">"|"<="|">="|"=="|"!=") add_expr )*
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的比较表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_cmp() {
 			auto left = parse_add();
 			while (peek().kind == Op
 				&& (peek().text == "<"
-				|| peek().text == ">"
-				|| peek().text == "<="
-				|| peek().text == ">="
-				|| peek().text == "=="
-				|| peek().text == "!="))
+					|| peek().text == ">"
+					|| peek().text == "<="
+					|| peek().text == ">="
+					|| peek().text == "=="
+					|| peek().text == "!="))
 			{
 				std::string op = consume().text;
 				auto right = parse_add();
 				left = std::unique_ptr<Expr>(std::make_unique<BinaryExpr>(std::move(left), op, std::move(right)));
 			}
 			return left;
-		};
+		}
 
-		// add_expr  := mul_expr ( ("+"|"-") mul_expr )*
-		parse_add = [&] {
+		/**
+		 * @brief 解析加法表达式，规则：add_expr := mul_expr ( ("+"|"-") mul_expr )*
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的加法表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_add() {
 			auto left = parse_mul();
 			while (peek().kind == Op && (peek().text == "+" || peek().text == "-")) {
 				std::string op = consume().text;
@@ -385,10 +445,14 @@ private: // Tool functions for parsing
 				left = std::unique_ptr<Expr>(std::make_unique<BinaryExpr>(std::move(left), op, std::move(right)));
 			}
 			return left;
-		};
+		}
 
-		// mul_expr  := unary_expr ("*" unary_expr)*
-		parse_mul = [&] {
+		/**
+		 * @brief 解析乘法表达式，规则：mul_expr := unary_expr ("*" unary_expr)*
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的乘法表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_mul() {
 			auto left = parse_unary();
 			while (peek().kind == Op && peek().text == "*") {
 				consume();
@@ -396,152 +460,278 @@ private: // Tool functions for parsing
 				left = std::unique_ptr<Expr>(std::make_unique<BinaryExpr>(std::move(left), "*", std::move(right)));
 			}
 			return left;
-		};
+		}
 
-		// unary_expr:= ("-")? primary
-		parse_unary = [&] {
+		/**
+		 * @brief 解析一元表达式，规则：unary_expr := ("-")? primary
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的一元表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_unary() {
 			if (peek().kind == Op && peek().text == "-") {
 				consume();
 				auto rhs = parse_unary();
 				return std::unique_ptr<Expr>(std::make_unique<UnaryExpr>("-", std::move(rhs)));
 			}
 			return parse_primary();
-		};
+		}
 
-		// primary   := number | identifier [ ("." identifier)* | '(' arglist ')' ] | '(' expr ')'
-		parse_primary = [&] {
-			// 数字终结符
+		/**
+		 * @brief 解析基本表达式，按 token 类型分发到子解析器。
+		 *
+		 * 分发规则：
+		 * - Number     → parse_number()              — 数字字面量
+		 * - Identifier → parse_identifier_primary()  — 标识符（分叉为函数调用/断言式调用/属性访问/普通标识符）
+		 * - '('        → parse_paren_expr()          — 括号分组表达式
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的基本表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_primary() {
+			// 数字
 			if (peek().kind == Number) {
-				double v = std::stod(consume().text);
-				return std::unique_ptr<Expr>(std::make_unique<NumberExpr>(v));
+				return parse_number();
 			}
 
-			// 标识符终结符，可能是函数调用或属性访问
+			// 标识符
 			if (peek().kind == Identifier) {
-				std::string id = consume().text;
-				
-				// 函数调用形式：name(arg1, arg2, ...)
-				if (peek().kind == Op && peek().text == "(") {
-					consume();
-					auto call = std::make_unique<CallExpr>(id);
-
-					if (!(peek().kind == Op && peek().text == ")")) {
-						while (true) {
-							call->args.push_back(parse_expr());
-							if (peek().kind == Op && peek().text == ",") {
-								consume();
-								continue;
-							}
-							break;
-						}
-					}
-					if (!(peek().kind == Op && peek().text == ")")) {
-						throw ParseError("Expected ) in call", lineno);
-					}
-					consume(); // "("
-					
-					return std::unique_ptr<Expr>(call.release());
-				}
-
-				// 空格分隔的断言式调用语法：函数名 参数 1 参数 2 … [数量范围]
-				if (peek().kind == Identifier || peek().kind == Number) {
-					auto call = std::make_unique<CallExpr>(id);
-
-					// 收集所有位置参数（支持标识符、数字、属性访问表达式）
-					while (peek().kind == Identifier || peek().kind == Number || (peek().kind == Op && peek().text == ".")) {
-						// 标识符参数
-						if (peek().kind == Identifier) {
-							call->args.push_back(std::unique_ptr<Expr>(std::make_unique<IdentExpr>(consume().text)));
-							continue;
-						}
-
-						// 数字参数，此处的数字可能是独立参数数量限制（单值），或是区间范围的起始数字
-						if (peek().kind == Number) {
-							std::string numtxt = consume().text;
-							auto v = (int)std::stod(numtxt);
-
-							// 判断是否为 a-b 形式的区间范围
-							if (peek().kind == Op && peek().text == "-") {
-								consume();
-								if (peek().kind == Number) {
-									auto v2 = (int)std::stod(consume().text);
-									call->qtyRange = std::make_unique<QuantityRange>(v, v2);
-									break;
-								}
-								else {
-									throw ParseError("Expected number after - in quantity range", lineno);
-								}
-							}
-							else {
-								// 单个数量限制
-								call->qtyRange = std::make_unique<QuantityRange>(v);
-								break;
-							}
-						}
-
-						// 处理形如 Class.prop 的点号属性访问语法，将其构建为属性访问表达式 PropAccessExpr
-						if (peek().kind == Op && peek().text == ".") {
-							// 前一个token必须是代表对象的标识符 for obj
-							// 消费掉点号 '.' 以及后续的属性标识符r
-							// 我们会用参数列表里最后一个标识符构造属性访问表达式 PropAccessExprExpr constructed from the last identifier argument
-							// 如果前面没有任何参数，则直接抛出错误
-							consume();
-							if (peek().kind != Identifier) {
-								throw ParseError("Expected identifier after .", lineno);
-							}
-							std::string prop = consume().text;
-
-							if (call->args.empty()) {
-								throw ParseError("Unexpected . without object in predicate args", lineno);
-							}
-
-							// 取出最后一个参数标识符作为对象名，并将其替换为属性访问表达式
-							auto&& last = std::move(call->args.back());
-							auto const* ie = static_cast<IdentExpr*>(last.get());
-							std::string obj = ie->name;
-							call->args.pop_back();
-							call->args.push_back(std::unique_ptr<Expr>(std::make_unique<PropAccessExpr>(obj, prop)));
-							continue;
-						}
-					}
-					return std::unique_ptr<Expr>(call.release());
-				}
-				
-				// 属性访问链 id(.id)*
-				if (peek().kind == Op && peek().text == ".") {
-					std::string obj = id;
-					if (peek().kind == Op && peek().text == ".") {
-						consume();
-						if (peek().kind != Identifier) {
-							throw ParseError("Expected identifier after .", lineno);
-						}
-						std::string prop = consume().text;
-						return std::unique_ptr<Expr>(std::make_unique<PropAccessExpr>(obj, prop));
-					}
-				}
-				return std::unique_ptr<Expr>(std::make_unique<IdentExpr>(id));
+				return parse_identifier_primary();
 			}
 
 			// 括号表达式
 			if (peek().kind == Op && peek().text == "(") {
-				consume();
-				auto e = parse_expr();
-				if (!(peek().kind == Op && peek().text == ")")) {
-					throw ParseError("Expected )", lineno);
-				}
-				consume();
-				return e;
+				return parse_paren_expr();
 			}
-			throw ParseError("Unexpected token in expression", lineno);
-		};
 
-		auto res = parse_expr();
-		if (peek().kind != End) {
-			// allow trailing
+			throw ParseError("Unexpected token in expression", m_lineno);
 		}
-		return res;
-	}
 
+		/**
+		 * @brief 解析数字字面量，规则：number := [0-9]+(\.[0-9]+)?
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的数字表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_number() {
+			double v = std::stod(consume().text);
+			return std::make_unique<NumberExpr>(v);
+		}
+
+		/**
+		 * @brief 解析标识符开头的基本表达式，可能是变量、函数调用、属性访问或断言式调用。
+		 *
+		 * 分叉规则：
+		 * - 后跟 '('           → parse_function_call()     — 标准函数调用
+		 * - 后跟标识符或数字     → parse_predicate_call()   — 断言式调用（空格分隔参数）
+		 * - 后跟 '.'           → parse_property_access()  — 属性访问链
+		 * - 其他               → 普通 IdentExpr
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_identifier_primary() {
+			std::string id = consume().text;
+
+			// 函数调用形式：name(arg1, arg2, ...)
+			if (peek().kind == Op && peek().text == "(") {
+				return parse_function_call(id);
+			}
+
+			// 空格分隔的断言式调用语法：函数名 参数1 参数2 … [数量范围]
+			if (peek().kind == Identifier || peek().kind == Number) {
+				return parse_predicate_call(id);
+			}
+
+			// 属性访问链 id(.id)*
+			if (peek().kind == Op && peek().text == ".") {
+				return parse_property_access(id);
+			}
+
+			// 普通标识符
+			return std::make_unique<IdentExpr>(id);
+		}
+
+		/**
+		 * @brief 解析标准函数调用：name(arg1, arg2, ...)
+		 *
+		 * @param id 函数名
+		 * @return std::unique_ptr<Expr> - 解析得到的 CallExpr AST 节点
+		 */
+		std::unique_ptr<Expr> parse_function_call(const std::string& id) {
+			consume(); // 消耗 '('
+			auto call = std::make_unique<CallExpr>(id);
+
+			// 解析参数列表
+			if (!(peek().kind == Op && peek().text == ")")) {
+				while (true) {
+					call->args.push_back(parse_expr());
+					if (peek().kind == Op && peek().text == ",") {
+						consume();
+						continue;
+					}
+					break;
+				}
+			}
+
+			// 验证并消耗 ')'
+			if (!(peek().kind == Op && peek().text == ")")) {
+				throw ParseError("Expected ) in call", m_lineno);
+			}
+			consume(); // 消耗 ')'
+
+			return call;
+		}
+
+		/**
+		 * @brief 解析断言式调用：函数名 参数1 参数2 … [数量范围]
+		 *
+		 * 支持空格分隔的参数列表，最后一个参数可以是数量范围（如 1-3 或 5）。
+		 *
+		 * @param id 函数名
+		 * @return std::unique_ptr<Expr> - 解析得到的 CallExpr AST 节点
+		 */
+		std::unique_ptr<Expr> parse_predicate_call(const std::string& id) {
+			auto call = std::make_unique<CallExpr>(id);
+
+			// 收集所有位置参数（支持标识符、数字、属性访问表达式）
+			while (peek().kind == Identifier || peek().kind == Number || (peek().kind == Op && peek().text == ".")) {
+				if (peek().kind == Identifier) {
+					parse_identifier_argument(*call);
+				}
+				else if (peek().kind == Number) {
+					if (parse_quantity_range(*call)) {
+						break; // 数量范围是最后一个参数
+					}
+					// 否则是普通数字参数，继续循环
+				}
+				else if (peek().kind == Op && peek().text == ".") {
+					parse_property_access_argument(*call);
+				}
+			}
+
+			return call;
+		}
+
+		/**
+		 * @brief 解析断言式调用中的标识符参数，添加到调用表达式的参数列表中。
+		 *
+		 * @param[out] call 目标 CallExpr
+		 */
+		void parse_identifier_argument(CallExpr& call) {
+			call.args.push_back(std::make_unique<IdentExpr>(consume().text));
+		}
+
+		/**
+		 * @brief 解析数量范围：a-b 或单个数字 a，返回 true 表示解析了数量范围（结束标志）。
+		 *
+		 * @param[out] call 目标 CallExpr，数量范围写入 call.qtyRange
+		 * @return true 表示已解析数量范围（断言式调用的参数列表结束）
+		 */
+		bool parse_quantity_range(CallExpr& call) {
+			std::string numtxt = consume().text;
+			auto v = (int)std::stod(numtxt);
+
+			// 判断是否为 a-b 形式的区间范围
+			if (peek().kind == Op && peek().text == "-") {
+				consume();
+				if (peek().kind != Number) {
+					throw ParseError("Expected number after - in quantity range", m_lineno);
+				}
+				auto v2 = (int)std::stod(consume().text);
+				call.qtyRange = std::make_unique<QuantityRange>(v, v2);
+				return true;
+			}
+			else {
+				// 单个数量限制
+				call.qtyRange = std::make_unique<QuantityRange>(v);
+				return true;
+			}
+		}
+
+		/**
+		 * @brief 解析断言式调用中的属性访问参数：obj.prop，替换参数列表中最后一个标识符。
+		 *
+		 * @param[out] call 目标 CallExpr
+		 */
+		void parse_property_access_argument(CallExpr& call) {
+			consume(); // 消耗 '.'
+			if (peek().kind != Identifier) {
+				throw ParseError("Expected identifier after .", m_lineno);
+			}
+			std::string prop = consume().text;
+
+			if (call.args.empty()) {
+				throw ParseError("Unexpected . without object in predicate args", m_lineno);
+			}
+
+			// 取出最后一个参数标识符作为对象名，并将其替换为属性访问表达式
+			auto&& last = std::move(call.args.back());
+			auto const* ie = static_cast<IdentExpr*>(last.get());
+			std::string obj = ie->name;
+			call.args.pop_back();
+			call.args.push_back(std::make_unique<PropAccessExpr>(obj, prop));
+		}
+
+		/**
+		 * @brief 解析属性访问链：obj.prop
+		 *
+		 * @param obj 对象名
+		 * @return std::unique_ptr<Expr> - 解析得到的 PropAccessExpr AST 节点
+		 */
+		std::unique_ptr<Expr> parse_property_access(const std::string& obj) {
+			if (peek().kind == Op && peek().text == ".") {
+				consume(); // 消耗 '.'
+				if (peek().kind != Identifier) {
+					throw ParseError("Expected identifier after .", m_lineno);
+				}
+				std::string prop = consume().text;
+				return std::make_unique<PropAccessExpr>(obj, prop);
+			}
+			throw ParseError("Expected . for property access", m_lineno);
+		}
+
+		/**
+		 * @brief 解析括号分组表达式：(expr)
+		 *
+		 * @return std::unique_ptr<Expr> - 解析得到的括号内表达式 AST 节点
+		 */
+		std::unique_ptr<Expr> parse_paren_expr() {
+			consume(); // 消耗 '('
+			auto e = parse_expr();
+			if (!(peek().kind == Op && peek().text == ")")) {
+				throw ParseError("Expected )", m_lineno);
+			}
+			consume(); // 消耗 ')'
+			return e;
+		}
+
+	public:
+		/**
+		 * @brief 使用递归下降法将单行条件表达式解析为 AST。
+		 *
+		 * 语法层次参见文件头 @code 块中的完整定义。
+		 *
+		 * @param s 条件表达式字符串
+		 * @param lineno 行号（用于错误报告）
+		 * @return 解析后的 AST 根节点
+		 * @throws ParseError 语法错误时抛出
+		 */
+		std::unique_ptr<Expr> parse_condition_expr(const std::string& s, int lineno = 0) {
+			m_tokens = Lexer::tokenize_expr(s);
+			m_pos = 0;
+			m_lineno = lineno;
+
+			using enum Lexer::TokenKind;
+
+			auto res = parse_expr();
+			if (peek().kind != End) {
+				// allow trailing
+			}
+			return res;
+		}
+
+	private:
+		std::vector<Lexer::Token> m_tokens;	///< 词法分析后的 token 序列
+		size_t m_pos = 0;			///< 当前 token 位置
+		int m_lineno = 0;			///< 当前行号（用于错误报告）
+	};
 };
 
 } // namespace postanvil

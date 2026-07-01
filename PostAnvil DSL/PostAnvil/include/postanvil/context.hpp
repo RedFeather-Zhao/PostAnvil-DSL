@@ -87,8 +87,22 @@ struct Instance {
 using Instances = std::vector<Instance>;
 
 /**
+ * @brief 支持透明哈希的字符串哈希函数	
+ */
+struct TransparentStrHash
+{
+	using is_transparent = void;
+
+	template<typename TStr>
+	size_t operator()(const TStr& s) const noexcept
+	{
+		return std::hash<std::string_view>{}(s);
+	}
+};
+
+/**
  * @brief 场景类型：按类别名组织的实例集合
  */
-using Scene = std::unordered_map<std::string, Instances>;
-
+using Scene = std::unordered_map<std::string, Instances,
+	TransparentStrHash, std::equal_to<>>;
 } // namespace postanvil
