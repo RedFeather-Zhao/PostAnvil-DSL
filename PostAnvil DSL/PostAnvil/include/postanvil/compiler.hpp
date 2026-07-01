@@ -1,5 +1,5 @@
 ﻿/**
- * @file   scene_rule_compiler.hpp
+ * @file   compiler.hpp
  * @brief  场景规则编译器 —— 将 DSL 规则编译为可复用的算子管道（CompiledProgram）
  * @detail 本文件实现了 PostAnvil 的编译型评估架构，核心设计为"算子管道"模式：
  *
@@ -10,22 +10,16 @@
  *
  * 编译流程（Compile）：
  *         SceneRuleCompiler 遍历 AST 规则列表，将每个规则编译为对应的算子
- *         当前支持 Filter（过滤）算子，同时预留了 Score、ScoreFilter、Cluster、
- *         CategoryCreate、Attribute 等算子类型供后续扩展
+ *         当前支持 OP_FILTER（过滤）算子，同时预留了 Score、ScoreFilter、Cluster、
+ *         CategoryCreate、OP_ATTRIBUTE 等算子类型供后续扩展
  *
  * 执行流程（Evaluate）：
  *         CompiledProgram 持有算子序列，对输入场景依次执行每个算子的 apply()，
  *         最终输出 EvalResult
  *
- * 算子类型一览：
- *         | 算子            | 状态   | 功能                                   |
- *         |----------------|--------|---------------------------------------|
- *         | Filter         | 已实现 | 按条件过滤实例，保留满足条件的实例         |
- *         | Score          | 预留   | 按条件为实例计算自定义分值               |
- *         | ScoreFilter    | 预留   | 基于自定义分值筛选实例                   |
- *         | Cluster        | 预留   | 将实例聚类，生成新的类别                 |
- *         | CategoryCreate | 预留   | 基于条件从现有类别创建新类别             |
- *         | Attribute      | 预留   | 为实例添加临时属性（计算字段）            |
+ * 算子类型（Operator）：
+ *         1. OP_FILTER：按条件过滤实例，保留满足条件的实例
+ *         2. OP_ATTRIBUTE：为类别每个实例添加临时属性（预留）
  *
  * 支持的表达式类型：
  * - 数值常量、属性访问（self.width / image.width / OtherClass.prop）
@@ -48,14 +42,13 @@
 #include <functional>
 #include <cmath>
 #include <unordered_map>
+#include <algorithm>
 #include <stdexcept>
 #include <memory>
 
 namespace postanvil {
 
-// ============================================================
-// 编译期类型别名
-// ============================================================
+// ========================== Func Type ============================
 
 /**
  * @brief 编译后的数值表达式函数
@@ -67,24 +60,24 @@ using NumFunc = std::function<double(const Instance&, const Scene&, const Image&
  */
 using FilterFunc = std::function<bool(const Instance&, const Scene&, const Image&)>;
 
-// ============================================================
-// 评估结果
-// ============================================================
+// ========================== Eval Struct ============================
 
 /**
  * @brief 评估结果，包含每个类别中保留的实例列表
  */
 struct EvalResult {
-	Scene kept;		//< 保留的场景，按类别组织的保留实例映射
+	Scene kept;		//< 评估保留的场景，保留按类别组织的实例映射
+
 public:
-	explicit EvalResult(Scene scene = {}) : kept(std::move(scene)) {}
+	explicit EvalResult(Scene scene = {})
+		: kept(std::move(scene))
+	{
+	}
+
 	EvalResult(EvalResult&&) noexcept = default;
+	
 	EvalResult& operator=(EvalResult&&) noexcept = default;
 };
-
-// ============================================================
-// 评估上下文 —— 算子间的数据传递载体
-// ============================================================
 
 /**
  * @brief 评估上下文，在算子管道中传递的可变状态
@@ -126,9 +119,7 @@ struct EvaluationContext {
 	}
 };
 
-// ============================================================
-// 算子体系 —— 管道中的变换单元
-// ============================================================
+// ========================= Operator ============================
 
 /**
  * @brief 算子类型枚举
@@ -136,10 +127,9 @@ struct EvaluationContext {
  * 定义了场景规则编译后支持的所有算子类型
  */
 enum class OperatorKind {
-	Base,           //< 基类（抽象）
-	Filter,         //< 过滤算子：按条件保留/丢弃实例
-	Category,       //< 类别算子：基于条件创建新类别（预留）
-	Attribute,      //< 属性算子：为实例添加计算字段（预留）
+	OP_BASE,           //< 基类（抽象）
+	OP_FILTER,         //< 过滤算子：按条件保留/丢弃实例
+	OP_ATTRIBUTE,      //< 属性算子：为实例添加计算字段（预留）
 };
 
 /**
@@ -149,15 +139,19 @@ enum class OperatorKind {
  * 派生类通过重写 apply() 实现具体的变换逻辑
  */
 struct SceneOperator {
-	OperatorKind kind = OperatorKind::Base;		//< 算子类型
-	std::string target;		//< 目标类别名称，"GLOBAL" 表示全局算子
+	OperatorKind kind = OperatorKind::OP_BASE;	//< 算子类型
+	std::string target;							//< 目标类别名称
 
 public:
+	explicit SceneOperator(OperatorKind kind_ = OperatorKind::OP_BASE): kind(kind_)
+	{
+	}
+
 	virtual ~SceneOperator() = default;
 
 	/**
 	 * @brief 对评估上下文执行变换，派生类必须实现此方法，定义具体的变换逻辑
-	 * @param ctx 评估上下文
+	 * @param ctx - 评估上下文
 	 */
 	virtual void apply(EvaluationContext& ctx) const = 0;
 };
@@ -181,12 +175,8 @@ struct FilterOperator : SceneOperator {
 	std::vector<FilterFunc> conditions;		//< 过滤条件链，按顺序执行，AND 关系
 
 public:
-	/**
-	 * @brief 构造过滤算子
-	 */
-	FilterOperator()
+	FilterOperator() : SceneOperator(OperatorKind::OP_FILTER)
 	{
-		kind = OperatorKind::Filter;
 	}
 
 	/**
@@ -197,46 +187,32 @@ public:
 	 *
 	 * @param ctx 评估上下文
 	 */
-	void apply(EvaluationContext& ctx) const override {
+	void apply(EvaluationContext& ctx) const override
+	{
+		// 单实例合法性校验：所有条件均满足则返回 true
+		auto is_valid = [&](const auto& inst) {
+			return std::ranges::all_of(conditions, [&](const auto& cond) {
+				return cond(inst, ctx.scene, ctx.image);
+			});
+		};
+
+		// 容器过滤：原地删除不合法的实例
+		auto filterInstances = [&](Instances& instances) {
+			std::erase_if(instances, [&](const auto& inst) {
+				return !is_valid(inst);
+			});
+		};
+
 		if (target == "GLOBAL") {
-			// 全局过滤：对所有类别生效
 			for (auto& [name, instances] : ctx.scene) {
-				Instances kept;
-				for (const auto& inst : instances) {
-					bool ok = true;
-					for (const auto& cond : conditions) {
-						if (!cond(inst, ctx.scene, ctx.image)) {
-							ok = false;
-							break;
-						}
-					}
-					if (ok) {
-						kept.push_back(inst);
-					}
-				}
-				instances = std::move(kept);
+				filterInstances(instances);
 			}
-		} else {
-			// 类别过滤：仅对指定类别生效
-			auto it = ctx.scene.find(target);
-			if (it == ctx.scene.end()) {
-				return;
-			}
-			auto& instances = it->second;
-			Instances kept;
-			for (const auto& inst : instances) {
-				bool ok = true;
-				for (const auto& cond : conditions) {
-					if (!cond(inst, ctx.scene, ctx.image)) {
-						ok = false;
-						break;
-					}
-				}
-				if (ok) {
-					kept.push_back(inst);
-				}
-			}
-			instances = std::move(kept);
+			return;
+		}
+
+		auto it = ctx.scene.find(target);
+		if (it != ctx.scene.end()) {
+			filterInstances(it->second);
 		}
 	}
 };
@@ -265,16 +241,14 @@ struct AttributeOperator : SceneOperator {
 	 */
 	NumFunc expression;
 
-	AttributeOperator() { kind = OperatorKind::Attribute; }
+	AttributeOperator() { kind = OperatorKind::OP_ATTRIBUTE; }
 
 	void apply(EvaluationContext& /*ctx*/) const override {
 		// TODO: 为 target 类别的每个实例计算 attr_name 的值，存储到 ctx.temp_attrs[target][i][attr_name]
 	}
 };
 
-// ============================================================
-// 编译产物 —— 可复用的算子管道
-// ============================================================
+// ========================== Program ===========================
 
 /**
  * @brief 编译后的场景规则程序（CompiledProgram）
@@ -282,7 +256,7 @@ struct AttributeOperator : SceneOperator {
  * CompiledProgram 是 SceneRuleCompiler 的编译产物，内部持有
  * 一系列算子（SceneOperator），按序对输入场景执行变换
  *
- * 它可以安全地复制、存储，并反复对不同的场景数据执行评估
+ * 它可以安全地复制、存储，并反复对不同的场景数据执行相同评估
  *
  * 使用方式：
  * @code
@@ -293,36 +267,17 @@ struct AttributeOperator : SceneOperator {
  */
 class CompiledProgram {
 public:
-	/**
-	 * @brief 默认构造一个空的程序
-	 */
 	CompiledProgram() = default;
-
-	/**
-	 * @brief 禁用拷贝构造 —— unique_ptr 不可拷贝
-	 */
-	CompiledProgram(const CompiledProgram&) = delete;
-
-	/**
-	 * @brief 禁用拷贝赋值 —— unique_ptr 不可拷贝
-	 */
-	CompiledProgram& operator=(const CompiledProgram&) = delete;
-
-	/**
-	 * @brief 默认移动构造
-	 */
-	CompiledProgram(CompiledProgram&&) = default;
-
-	/**
-	 * @brief 默认移动赋值
-	 */
-	CompiledProgram& operator=(CompiledProgram&&) = default;
+	CompiledProgram(const CompiledProgram&)				= delete;
+	CompiledProgram(CompiledProgram&&)					= default;
+	CompiledProgram& operator=(const CompiledProgram&)	= delete;
+	CompiledProgram& operator=(CompiledProgram&&)		= default;
 
 	/**
 	 * @brief 对场景执行所有算子，返回最终结果
 	 *
 	 * 执行流程：
-	 * 1. 构造 EvaluationContext（拷贝输入场景为可变副本）
+	 * 1. 拷贝输入场景，构造 EvaluationContext
 	 * 2. 按序执行每个算子的 apply() 方法
 	 * 3. 将最终上下文转换为 EvalResult 返回
 	 *
@@ -346,9 +301,7 @@ public:
 	std::vector<std::unique_ptr<SceneOperator>> operators;
 };
 
-// ============================================================
-// 场景规则编译器 —— AST → CompiledProgram
-// ============================================================
+// ====================== SceneRuleCompiler =========================
 
 /**
  * @brief 场景规则编译器，将 AST 规则编译为可复用的 CompiledProgram
@@ -357,7 +310,7 @@ public:
  * 将每个规则编译为对应的算子（SceneOperator），最终生成一个包含算子管道
  * 的 CompiledProgram 对象
  *
- * 编译器采用分发模式：根据规则类型（当前仅支持 Filter）将规则分发到
+ * 编译器采用分发模式：根据规则类型（当前仅支持 OP_FILTER）将规则分发到
  * 对应的编译方法未来新增算子类型时，只需添加新的编译方法并在 compile()
  * 中添加分发逻辑
  *
@@ -392,16 +345,14 @@ public:
 		CompiledProgram program;
 
 		for (const auto& rule : rules) {
-			program.operators.push_back(compile_filter_rule(rule));
+			program.operators.emplace_back(compile_filter_rule(rule));
 		}
 
 		return program;
 	}
 
 private:
-	// ============================================================
-	// 过滤规则编译（当前已实现）
-	// ============================================================
+	// ======================== Compile ============================
 
 	/**
 	 * @brief 将一条规则编译为 FilterOperator
@@ -416,23 +367,13 @@ private:
 		auto op = std::make_unique<FilterOperator>();
 		op->target = rule.target;
 		op->conditions.reserve(rule.conditions.size());
+
 		for (const auto& cond : rule.conditions) {
-			op->conditions.push_back(compile_filter(cond.get()));
+			op->conditions.emplace_back(compile_filter(cond.get()));
 		}
 		return op;
 	}
 
-	// ============================================================
-	// 预留：未来算子编译入口
-	// ============================================================
-
-	// ============================================================
-	// 表达式编译
-	// ============================================================
-
-	/**
-	 * @brief 将表达式 AST 编译为布尔过滤函数
-	 */
 	FilterFunc compile_filter(const Expr* e) const {
 		auto num = compile_num(e);
 		return [num](const Instance& self, const Scene& scene, const Image& image) {
@@ -440,9 +381,6 @@ private:
 		};
 	}
 
-	/**
-	 * @brief 将表达式 AST 递归编译为数值函数
-	 */
 	NumFunc compile_num(const Expr* e) const {
 		if (!e) {
 			return [](const Instance&, const Scene&, const Image&) { return 0.0; };
@@ -468,9 +406,6 @@ private:
 					}
 					if (obj == "image") {
 						return get_image_prop(image, prop);
-					}
-					if (auto it = scene.find(obj); it != scene.end() && !it->second.empty()) {
-						return get_instance_prop(it->second.front(), prop);
 					}
 					return 0.0;
 				};
@@ -522,10 +457,6 @@ private:
 		return [](const Instance&, const Scene&, const Image&) { return 0.0; };
 	}
 
-	// ============================================================
-	// 函数调用编译
-	// ============================================================
-
 	NumFunc compile_call(const CallExpr* ce) const {
 		if (ce->name == "abs" && ce->args.size() == 1) {
 			auto arg = compile_num(ce->args[0].get());
@@ -557,10 +488,6 @@ private:
 		return [](const Instance&, const Scene&, const Image&) { return 0.0; };
 	}
 
-	// ============================================================
-	// 空间谓词编译
-	// ============================================================
-
 	NumFunc compile_contains(const CallExpr* ce) const {
 		std::string target;
 		if (ce->args.size() >= 1) target = extract_class_name(ce->args[0].get());
@@ -577,7 +504,7 @@ private:
 			explicit_count = static_cast<int>(static_cast<const NumberExpr*>(ce->args[1].get())->value);
 		}
 
-		return [=] (const Instance& self, const Scene& scene, const Image&) {
+		return [=](const Instance& self, const Scene& scene, const Image&) {
 			if (target.empty()) {
 				return 0.0;
 			}
@@ -652,46 +579,86 @@ private:
 		};
 	}
 
-	// ============================================================
-	// 辅助工具函数
-	// ============================================================
 
-	static std::string extract_class_name(const Expr* e) {
-		if (!e) return {};
-		if (e->type == Expr::Type::IDENT) return static_cast<const IdentExpr*>(e)->name;
-		if (e->type == Expr::Type::PROP_ACCESS) return static_cast<const PropAccessExpr*>(e)->object;
-		return {};
+	// ======================== Tool Functions =========================
+
+	static std::string
+	extract_class_name(const Expr* e)
+	{
+		if (!e) {
+			return {};
+		}
+
+		switch (e->type) {
+		case Expr::Type::IDENT: {
+			return static_cast<const IdentExpr*>(e)->name;
+		}
+		case Expr::Type::PROP_ACCESS: {
+			return static_cast<const PropAccessExpr*>(e)->object;
+		}
+		default:
+			return {};
+		}
 	}
 
-	static double get_instance_prop(const Instance& inst, std::string_view prop) {
-		if (prop == "x")              return inst.x;
-		if (prop == "y")              return inst.y;
-		if (prop == "width")          return inst.width;
-		if (prop == "height")         return inst.height;
-		if (prop == "right")          return inst.right();
-		if (prop == "bottom")         return inst.bottom();
-		if (prop == "center_x")       return inst.center_x();
-		if (prop == "center_y")       return inst.center_y();
-		if (prop == "area")           return inst.area();
-		if (prop == "aspect_ratio")   return inst.aspect_ratio();
-		if (prop == "conf" || prop == "confidence") return inst.conf;
+	/**
+	 * @brief 获取实例的属性值，包括临时属性
+	 * 
+	 * @param inst - 实例
+	 * @param prop - 属性名（如 "x", "y", "width", "height", "conf" 等）
+	 * @return double - 属性值；若属性不存在则返回 0.0
+	 */
+	static double
+	get_instance_prop(const Instance& inst, std::string_view prop)
+	{
+		if (prop == "x")				return inst.x;
+		if (prop == "y")				return inst.y;
+		if (prop == "width")			return inst.width;
+		if (prop == "height")			return inst.height;
+		if (prop == "right")			return inst.right();
+		if (prop == "bottom")			return inst.bottom();
+		if (prop == "center_x")			return inst.center_x();
+		if (prop == "center_y")			return inst.center_y();
+		if (prop == "area")				return inst.area();
+		if (prop == "aspect_ratio")		return inst.aspect_ratio();
+		if (prop == "conf")				return inst.conf;
 		return 0.0;
 	}
 
-	static double get_image_prop(const Image& img, std::string_view prop) {
+	/**
+	 * 
+	 * 
+	 * @param img
+	 * @param prop
+	 * @return 
+	 */
+	static double
+	get_image_prop(const Image& img, std::string_view prop)
+	{
 		if (prop == "width")  return img.width;
 		if (prop == "height") return img.height;
 		return 0.0;
 	}
 
-	static double compute_iou(const Instance& a, const Instance& b) {
+	/**
+	 * .
+	 * 
+	 * @param a
+	 * @param b
+	 * @return 
+	 */
+	static double
+	compute_iou(const Instance& a, const Instance& b)
+	{
 		double ix1 = std::max(a.x, b.x);
 		double iy1 = std::max(a.y, b.y);
 		double ix2 = std::min(a.right(), b.right());
 		double iy2 = std::min(a.bottom(), b.bottom());
 		double iw = ix2 - ix1;
 		double ih = iy2 - iy1;
-		if (iw <= 0.0 || ih <= 0.0) return 0.0;
+		if (iw <= 0.0 || ih <= 0.0) {
+			return 0.0;
+		}
 		double inter = iw * ih;
 		double uni = a.area() + b.area() - inter;
 		return uni > 0.0 ? inter / uni : 0.0;

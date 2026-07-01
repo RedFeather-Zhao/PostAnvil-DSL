@@ -15,4 +15,4 @@
 #include "postanvil/lexer.hpp"
 #include "postanvil/parser.hpp"
 #include "postanvil/context.hpp"
-#include "postanvil/scene_rule_compiler.hpp"
+#include "postanvil/compiler.hpp"

@@ -1,4 +1,4 @@
-# PostAnvil DSL 用户说明文档
+﻿# PostAnvil DSL 用户说明文档
 
 > 版本：1.0 | 更新日期：2026-06-27
 
@@ -110,7 +110,6 @@ RULE FOR Cat:
 |------|------|------|
 | `self` | 当前评估的实例 | `self.conf`, `self.width`, `self.center_x` |
 | `image` | 图像尺寸 | `image.width`, `image.height` |
-| `<类名>` | 该类别的第一个实例 | `Person.center_x`, `Car.width` |
 
 #### 实例属性列表
 
@@ -413,9 +412,6 @@ RULE FOR Animal:
 
 ### Q: 数量范围怎么用？
 **A:** 使用 `CONTAINS Class min-max` 语法。例如 `CONTAINS B 2-5` 表示包含 2 到 5 个 B。单值 `CONTAINS B 1` 表示精确匹配 1 个 B。
-
-### Q: 类别属性访问指的是哪个实例？
-**A:** 当通过类名访问属性时（如 `Person.center_x`），返回的是该类别中**第一个实例**的属性值。
 
 ---
 

@@ -39,7 +39,7 @@
     <ClInclude Include="PostAnvil\include\postanvil\parser.hpp">
       <Filter>头文件\core</Filter>
     </ClInclude>
-    <ClInclude Include="PostAnvil\include\postanvil\scene_rule_compiler.hpp">
+    <ClInclude Include="PostAnvil\include\postanvil\compiler.hpp">
       <Filter>头文件\core</Filter>
     </ClInclude>
     <ClInclude Include="PostAnvil\include\PostAnvil.h">

@@ -24,9 +24,7 @@
 #include <unordered_map>
 #include <cassert>
 #include <cmath>
-#include "postanvil/parser.hpp"
-#include "postanvil/context.hpp"
-#include "postanvil/scene_rule_compiler.hpp"
+#include "PostAnvil.h"
 
 using namespace postanvil;
 
@@ -34,10 +32,19 @@ using namespace postanvil;
 // 测试辅助工具
 // ============================================================
 
-/** 通过的测试数 */
-static int g_passed = 0;
-/** 失败的测试数 */
-static int g_failed = 0;
+
+auto TEST_FAIL_COUNT = [](int delta = 0) {
+	static int g_failed = 0;
+	g_failed += delta;
+	return g_failed;
+};
+
+auto TEST_PASS_COUNT = [](int delta = 0) {
+	static int g_passed = 0;
+	g_passed += delta;
+	return g_passed;
+};
+
 
 /**
  * @brief 辅助函数：创建简单的正方形实例。
@@ -77,10 +84,10 @@ static bool check_count(const EvalResult& res, const std::string& cls, int expec
  */
 static void report(const char* name, bool passed, const std::string& detail = "") {
 	if (passed) {
-		++g_passed;
+		TEST_PASS_COUNT(1);
 		std::cout << "  [PASS] " << name;
 	} else {
-		++g_failed;
+		TEST_FAIL_COUNT(1);
 		std::cout << "  [FAIL] " << name;
 	}
 	if (!detail.empty()) std::cout << "  (" << detail << ")";
@@ -564,15 +571,15 @@ RULE FOR W:
 static void test16_class_property_access() {
 	const char* src = R"(
 RULE FOR Z:
-	self.width > Y.width
+	self.width > 40
 )";
 	Parser p; std::vector<Rule> rules;
 	assert(p.parse(src, rules));
 
 	Scene scene;
 	scene["Y"].push_back(make_rect("Y", 0, 0, 50, 50));
-	scene["Z"].push_back(make_rect("Z", 0, 0, 60, 60));   // 60 > 50 ✓
-	scene["Z"].push_back(make_rect("Z", 0, 0, 30, 30));   // 30 > 50 ✗
+	scene["Z"].push_back(make_rect("Z", 0, 0, 60, 60));   // 60 > 40 ✓
+	scene["Z"].push_back(make_rect("Z", 0, 0, 30, 30));   // 30 > 40 ✗
 
 	Image img{200, 200};
 
@@ -581,7 +588,7 @@ RULE FOR Z:
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "Z", 1);
-	report("类属性访问 (self.width > Y.width)", ok);
+	report("类属性访问已移除 (self.width > 40)", ok);
 }
 
 /**
@@ -829,15 +836,18 @@ int main() {
 	std::cout << std::endl;
 
 	// ---------- 结果统计 ----------
+	int passed = TEST_PASS_COUNT();
+	int failed = TEST_FAIL_COUNT();
+
 	std::cout << "========================================" << std::endl;
 	std::cout << "  测试结果统计" << std::endl;
 	std::cout << "========================================" << std::endl;
-	std::cout << "  通过: " << g_passed << std::endl;
-	std::cout << "  失败: " << g_failed << std::endl;
-	std::cout << "  总计: " << (g_passed + g_failed) << std::endl;
-	std::cout << "  通过率: " << (g_passed + g_failed > 0
-		? (100.0 * g_passed / (g_passed + g_failed)) : 0.0) << "%" << std::endl;
+	std::cout << "  通过: " << passed << std::endl;
+	std::cout << "  失败: " << failed << std::endl;
+	std::cout << "  总计: " << (passed + failed) << std::endl;
+	std::cout << "  通过率: " << (passed + failed > 0
+		? (100.0 * passed / (passed + failed)) : 0.0) << "%" << std::endl;
 	std::cout << "========================================" << std::endl;
 
-	return g_failed > 0 ? 1 : 0;
+	return failed > 0 ? 1 : 0;
 }

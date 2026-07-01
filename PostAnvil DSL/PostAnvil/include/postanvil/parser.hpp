@@ -16,7 +16,12 @@
  *		add_expr  := mul_expr ( ("+"|"-") mul_expr )*
  *		mul_expr  := unary_expr ("*" unary_expr)*
  *		unary_expr:= ("-" )? primary
- *		primary   := number | identifier [ ("." identifier)* | '(' arglist ')' ] | '(' expr ')'
+ *		primary   := number
+ *		           | identifier [ '(' arglist ')' | arg+ [qty_range] | '.' identifier ]
+ *		           | '(' expr ')'
+ *		arg       := identifier | number | identifier '.' identifier
+ *		arglist   := expr (',' expr)*
+ *		qty_range := number | number '-' number
  * @endcode
  *
  *
@@ -32,13 +37,14 @@
 #include <stdexcept>
 #include <sstream>
 #include <functional>
+#include <format>
 #include "postanvil/ast.hpp"
 #include "postanvil/lexer.hpp"
 
 namespace postanvil {
 
 /**
- * @brief 解析异常类，携带行号和列号信息。
+ * @brief 解析异常类，携带行号和列号信息
  */
 class ParseError : public std::runtime_error {
 public:
@@ -51,21 +57,22 @@ public:
 	 * @param l 行号，默认为 -1
 	 * @param c 列号，默认为 -1
 	 */
-	explicit ParseError(const std::string &m, int l=-1, int c=-1)
-		: std::runtime_error(m), line(l), col(c)
+	explicit ParseError(const std::string &m, int l = -1, int c = -1)
+		: std::runtime_error(std::format("parse error: {}, line: {}, col: {}", m, l, c))
+		, line(l), col(c)
 	{
 	}
 };
 
 /**
- * @brief PostAnvil DSL 解析器。
+ * @brief PostAnvil DSL 解析器
  *
  * 解析器读取 DSL 源文本，通过状态机识别 RULE FOR 块结构，
- * 内部 ExprParser 使用递归下降法将每个条件表达式解析为 AST 节点。
+ * 内部 ExprParser 使用递归下降法将每个条件表达式解析为 AST 节点
  */
 class Parser {
 	/**
-	 * @brief 解析状态机：识别 RULE FOR 块结构的当前状态。
+	 * @brief 解析状态机：识别 RULE FOR 块结构的当前状态
 	 */
 	enum class State {
 		OUT_RULE,	//< 规则块外，等待 RULE FOR 头部
@@ -77,104 +84,94 @@ class Parser {
 
 public:
 	/**
-	 * @brief 解析 DSL 源文本，生成规则列表。
+	 * @brief 解析 DSL 源文本，生成规则列表
 	 *
 	 * 状态机流程：
-	 * 1. OUT_RULE → 逐行扫描，调用 parse_rule_header() 识别 `RULE FOR <target>:` 头部
-	 * 2. IN_RULE  → 收集缩进块内的条件表达式，交给 ExprParser 递归下降解析
-	 * 3. 缩进回归 → 规则块结束，保存当前规则，reparse_line 标记当前行重新检查
-	 * 4. EOF     → 若仍在规则块内，保存最后一个规则
+	 * 1. OUT_RULE	- 逐行扫描，调用 parse_rule_header() 识别 RULE FOR <target>: 头部
+	 * 2. IN_RULE	- 收集缩进块内的条件表达式，交给 ExprParser 递归下降解析
+	 * 3. 缩进回归	- 规则块结束，保存当前规则，reparse_line 标记当前行重新检查
+	 * 4. EOF		- 若仍在规则块内，保存最后一个规则
 	 *
-	 * @param src DSL 源文本
-	 * @param[out] out_rules 解析生成的规则列表
-	 * @return 解析成功返回 true
+	 * @param src DSL	- 源文本
+	 * @param out_rules	- 解析生成的规则列表
+	 * @return bool 解析成功返回 true
 	 * @throws ParseError 语法错误时抛出
-	 * @throws std::runtime_error 格式错误时抛出
 	 */
-	static bool
-	parse(const std::string& src, std::vector<Rule>& out_rules)
-	{
+	static bool parse(const std::string& src, std::vector<Rule>& out_rules) {
 		out_rules.clear();
 
-		ExprParser parser; // 内部递归下降解析器实例
-
+		// 将源文本按行拆分，保留原始行内容
+		std::vector<std::string> raw_lines;
 		std::istringstream ss(src);
-		std::string raw_line;
-		Rule current;
-		State state = State::OUT_RULE;
+		std::string line;
+		while (std::getline(ss, line)) {
+			raw_lines.push_back(line);
+		}
+
+		ExprParser parser;
+		Rule curr_rule;
+		auto state = State::OUT_RULE;
 		int rule_indent = -1;
-		int lineno = 0;
-		bool reparse_line = false; // 是否重新解析当前行（用于规则块结束后检查新规则头部）
 
-		auto is_skip_line = [](std::string_view s) {
-			return (s.empty() || starts_with(s, "#") || starts_with(s, "//"));
-		};
+		size_t i = 0;
+		while (i < raw_lines.size()) {
+			const std::string& raw_line = raw_lines[i];
+			std::string trimmed = trim(raw_line);
+			int lineno = static_cast<int>(i) + 1;
 
-		// 循环主体，按行读取解析源文本
-		while (true) {
-			if (reparse_line == false && !std::getline(ss, raw_line)) {
-				break;
-			}
-			reparse_line = false;
-
-			std::string line = trim(raw_line);
-
-			// 1. 跳过空行和注释行
-			if (is_skip_line(line)) {
+			// 空行或注释，直接跳过
+			if (trimmed.empty() || starts_with(trimmed, "#") || starts_with(trimmed, "//")) {
+				++i;
 				continue;
 			}
 
-			// 2. 状态机：规则块外，解析规则头部 "RULE FOR"
 			if (state == State::OUT_RULE) {
-				if (parse_rule_header(line, lineno, current)) {
+				// 处理 RULE FOR 头部
+				if (parse_rule_header(trimmed, lineno, curr_rule)) {
 					state = State::IN_RULE;
-					rule_indent = -1;
+					rule_indent = -1;   // 等待首次缩进确定
 				}
+				++i;
 				continue;
 			}
 
-			// 3. 状态机：规则块内，解析条件表达式
-			if (state == State::IN_RULE) {
-				int leading = count_leading(raw_line);
+			// IN_RULE
+			int leading = count_leading(raw_line);
 
-				// 记录规则块的缩进量，首次遇到非空行时确定缩进
-				if (rule_indent == -1) {
-					if (leading == 0) {
-						throw ParseError("Expected indented block after RULE FOR header", lineno);
-					}
-					rule_indent = leading;
+			if (rule_indent == -1) {
+				if (leading == 0) {
+					throw ParseError("Expected indented block after RULE FOR header", lineno);
 				}
-
-				// 检查缩进是否小于规则块缩进，若是且非空行，则表示规则块结束，否则继续解析条件表达式
-				if (leading < rule_indent && !trim(raw_line).empty()) {
-					// 块结束，保存当前规则并重置状态
-					out_rules.push_back(std::move(current));
-					current = Rule();
-					state = State::OUT_RULE;
-					rule_indent = -1;
-
-					// 重解析当前行
-					reparse_line = true;
-					continue;
-				}
-
-				// 解析条件表达式字符串为 AST
-				const std::string& cond = line;
-				auto expr = parser.parse_condition_expr(cond, lineno);
-				current.conditions.push_back(std::move(expr));
+				rule_indent = leading;
 			}
+
+			// 缩进减少且当前行非空：规则块结束
+			if (leading < rule_indent && !trim(raw_line).empty()) {
+				out_rules.push_back(std::move(curr_rule));
+				curr_rule = Rule();
+				state = State::OUT_RULE;
+				rule_indent = -1;
+				// 注意：这里不 ++i，让当前行在下一次循环中以 OUT_RULE 状态重新处理
+				continue;
+			}
+
+			// 解析条件表达式并加入当前规则
+			auto expr = parser.parse_condition_expr(trimmed, lineno);
+			curr_rule.conditions.push_back(std::move(expr));
+			++i;
 		}
 
-		// 处理文件末尾的规则块，如果仍在规则块内，则保存当前规则
+		// 文件末尾若还在规则块内，则保存最后一个规则
 		if (state == State::IN_RULE) {
-			out_rules.push_back(std::move(current));
+			out_rules.push_back(std::move(curr_rule));
 		}
+
 		return true;
 	}
 
 private: // Tool functions for parsing
 	/**
-	 * @brief 解析 RULE FOR 头部，提取目标类别名称。
+	 * @brief 解析 RULE FOR 头部，提取目标类别名称
 	 *
 	 * 匹配格式：RULE FOR <target>:
 	 * - 先通过 starts_with_seg() 忽略大小写匹配 "RULE" "FOR" 前缀
@@ -207,7 +204,7 @@ private: // Tool functions for parsing
 	}
 
 	/**
-	 * @brief 去除字符串首尾空白字符。
+	 * @brief 去除字符串首尾空白字符
 	 * @param s 输入字符串
 	 * @return 去除首尾空白后的字符串
 	 */
@@ -239,12 +236,12 @@ private: // Tool functions for parsing
 	}
 
 	/**
-	 * @brief 检查字符串是否以指定前缀列表开头，列表元素按序匹配，忽略元素间隔空白符号。
+	 * @brief 检查字符串是否以指定前缀列表开头，列表元素按序匹配，忽略元素间隔空白符号
 	 * @note  首个前缀严格匹配，后续前缀允许空白间隔
 	 * 如
 	 *	str = "RULE FOR   CLASSA   :   "
 	 *	prefixes = {"RULE", "FOR"}
-	 * 则返回 true。
+	 * 则返回 true
 	 * @param str      - 待检查字符串
 	 * @param prefixes - 前缀列表
 	 * @return 返回 std::pair<bool, size_t>，first 为是否匹配，second 为当前匹配到的字符位置
@@ -267,7 +264,7 @@ private: // Tool functions for parsing
 	}
 
 	/**
-	 * @brief 计算行首空白字符数，制表符按指定对齐宽度计算。
+	 * @brief 计算行首空白字符数，制表符按指定对齐宽度计算
 	 * @param s - 输入字符串
 	 * @return 行首空白字符数
 	 */
@@ -295,7 +292,7 @@ private: // Tool functions for parsing
 	}
 
 	/**
-	 * @brief 将字符串转换为大写。
+	 * @brief 将字符串转换为大写
 	 * @param s 输入字符串视图
 	 * @return 大写字符串
 	 */
@@ -312,31 +309,7 @@ private: // Tool functions for parsing
 //==================== Expression parsing ========================
 
 	/**
-	 * @brief 内部递归下降解析器，将条件表达式字符串解析为 AST。
-	 *
-	 * 解析器按运算符优先级分层，每层一个 parse_* 方法：
-	 * | 层级     | 方法                    | 运算符              |
-	 * |---------|------------------------|--------------------|
-	 * | 入口    | parse_expr()           | → parse_or()       |
-	 * | 逻辑或  | parse_or()             | OR                 |
-	 * | 逻辑与  | parse_and()            | AND                |
-	 * | 逻辑非  | parse_not()            | NOT                |
-	 * | 比较    | parse_cmp()            | < > <= >= == !=    |
-	 * | 加减    | parse_add()            | + -                |
-	 * | 乘      | parse_mul()            | *                  |
-	 * | 一元    | parse_unary()          | - (取负)           |
-	 * | 基本    | parse_primary()        | 数字/标识符/括号    |
-	 *
-	 * parse_primary() 进而分发到：
-	 * - parse_number()             — 数字字面量
-	 * - parse_identifier_primary() — 标识符（分叉为函数调用/断言式调用/属性访问/普通标识符）
-	 *   - parse_function_call()    — 函数调用：name(arg1, arg2, ...)
-	 *   - parse_predicate_call()   — 断言式调用：PREDICATE arg1 arg2 [数量范围]
-	 *     - parse_identifier_argument() — 断言式调用中的标识符参数
-	 *     - parse_quantity_range()      — 数量范围：a 或 a-b
-	 *     - parse_property_access_argument() — 断言式调用中的 obj.prop 参数
-	 *   - parse_property_access()  — 属性访问：obj.prop
-	 * - parse_paren_expr()         — 括号分组：(expr)
+	 * @brief 内部递归下降解析器，将条件表达式字符串解析为 AST
 	 */
 	class ExprParser {
 	private:
@@ -358,7 +331,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析表达式，入口函数，规则：expr := or_expr
+		 * @brief 解析表达式，规则：expr := or_expr
 		 *
 		 * @return std::unique_ptr<Expr> - 解析得到的表达式 AST 节点
 		 */
@@ -477,12 +450,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析基本表达式，按 token 类型分发到子解析器。
-		 *
-		 * 分发规则：
-		 * - Number     → parse_number()              — 数字字面量
-		 * - Identifier → parse_identifier_primary()  — 标识符（分叉为函数调用/断言式调用/属性访问/普通标识符）
-		 * - '('        → parse_paren_expr()          — 括号分组表达式
+		 * @brief 解析基本表达式，规则：primary := number | identifier [ '(' arglist ')' | arg+ [qty_range] | '.' identifier ] | '(' expr ')'
 		 *
 		 * @return std::unique_ptr<Expr> - 解析得到的基本表达式 AST 节点
 		 */
@@ -516,13 +484,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析标识符开头的基本表达式，可能是变量、函数调用、属性访问或断言式调用。
-		 *
-		 * 分叉规则：
-		 * - 后跟 '('           → parse_function_call()     — 标准函数调用
-		 * - 后跟标识符或数字     → parse_predicate_call()   — 断言式调用（空格分隔参数）
-		 * - 后跟 '.'           → parse_property_access()  — 属性访问链
-		 * - 其他               → 普通 IdentExpr
+		 * @brief 解析标识符开头的基本表达式，规则：identifier [ '(' arglist ')' | arg+ [qty_range] | '.' identifier ]
 		 *
 		 * @return std::unique_ptr<Expr> - 解析得到的表达式 AST 节点
 		 */
@@ -549,7 +511,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析标准函数调用：name(arg1, arg2, ...)
+		 * @brief 解析标准函数调用，规则：'(' arglist ')'
 		 *
 		 * @param id 函数名
 		 * @return std::unique_ptr<Expr> - 解析得到的 CallExpr AST 节点
@@ -580,9 +542,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析断言式调用：函数名 参数1 参数2 … [数量范围]
-		 *
-		 * 支持空格分隔的参数列表，最后一个参数可以是数量范围（如 1-3 或 5）。
+		 * @brief 解析断言式调用，规则：arg+ [qty_range]
 		 *
 		 * @param id 函数名
 		 * @return std::unique_ptr<Expr> - 解析得到的 CallExpr AST 节点
@@ -610,7 +570,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析断言式调用中的标识符参数，添加到调用表达式的参数列表中。
+		 * @brief 解析断言式调用中的标识符参数，规则：identifier
 		 *
 		 * @param[out] call 目标 CallExpr
 		 */
@@ -619,7 +579,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析数量范围：a-b 或单个数字 a，返回 true 表示解析了数量范围（结束标志）。
+		 * @brief 解析数量范围，规则：qty_range := number | number '-' number
 		 *
 		 * @param[out] call 目标 CallExpr，数量范围写入 call.qtyRange
 		 * @return true 表示已解析数量范围（断言式调用的参数列表结束）
@@ -646,7 +606,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析断言式调用中的属性访问参数：obj.prop，替换参数列表中最后一个标识符。
+		 * @brief 解析断言式调用中的属性访问参数，规则：'.' identifier
 		 *
 		 * @param[out] call 目标 CallExpr
 		 */
@@ -670,7 +630,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析属性访问链：obj.prop
+		 * @brief 解析属性访问链，规则：'.' identifier
 		 *
 		 * @param obj 对象名
 		 * @return std::unique_ptr<Expr> - 解析得到的 PropAccessExpr AST 节点
@@ -688,7 +648,7 @@ private: // Tool functions for parsing
 		}
 
 		/**
-		 * @brief 解析括号分组表达式：(expr)
+		 * @brief 解析括号分组表达式，规则：'(' expr ')'
 		 *
 		 * @return std::unique_ptr<Expr> - 解析得到的括号内表达式 AST 节点
 		 */
@@ -704,13 +664,11 @@ private: // Tool functions for parsing
 
 	public:
 		/**
-		 * @brief 使用递归下降法将单行条件表达式解析为 AST。
+		 * @brief 使用递归下降法将单行条件表达式解析为 AST，规则：expr
 		 *
-		 * 语法层次参见文件头 @code 块中的完整定义。
-		 *
-		 * @param s 条件表达式字符串
-		 * @param lineno 行号（用于错误报告）
-		 * @return 解析后的 AST 根节点
+		 * @param s       条件表达式字符串
+		 * @param lineno  行号（用于错误报告）
+		 * @return std::unique_ptr<Expr> - 解析后的 AST 根节点
 		 * @throws ParseError 语法错误时抛出
 		 */
 		std::unique_ptr<Expr> parse_condition_expr(const std::string& s, int lineno = 0) {
@@ -728,9 +686,9 @@ private: // Tool functions for parsing
 		}
 
 	private:
-		std::vector<Lexer::Token> m_tokens;	///< 词法分析后的 token 序列
-		size_t m_pos = 0;			///< 当前 token 位置
-		int m_lineno = 0;			///< 当前行号（用于错误报告）
+		std::vector<Lexer::Token> m_tokens;	//< 词法分析后的 token 序列
+		size_t m_pos = 0;			//< 当前 token 位置
+		int m_lineno = 0;			//< 当前行号（用于错误报告）
 	};
 };
 

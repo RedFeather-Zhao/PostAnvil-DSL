@@ -24,7 +24,7 @@
     <ClInclude Include="PostAnvil\include\postanvil\context.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\lexer.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\parser.hpp" />
-    <ClInclude Include="PostAnvil\include\postanvil\scene_rule_compiler.hpp" />
+    <ClInclude Include="PostAnvil\include\postanvil\compiler.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PostAnvil\tests\test_builder.cpp" />
