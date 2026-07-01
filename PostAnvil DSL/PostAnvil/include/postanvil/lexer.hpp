@@ -120,16 +120,15 @@ namespace postanvil {
 				++j;
 			}
 
-			// 保留原始文本，避免标识符被大写
+			// 全部转换为大写，实现大小写不敏感
 			std::string txt(str.substr(pos, j - pos));
-			std::string txt_upper = txt;
-			for (auto& ch : txt_upper) {
+			for (auto& ch : txt) {
 				ch = static_cast<char>(
 					std::toupper(static_cast<unsigned char>(ch))
 					);
 			}
 
-			TokenKind kind = (txt_upper == "AND" || txt_upper == "OR" || txt_upper == "NOT")
+			TokenKind kind = (txt == "AND" || txt == "OR" || txt == "NOT")
 				? TokenKind::Keyword
 				: TokenKind::Identifier;
 			return { j, Token{kind, std::move(txt)} };

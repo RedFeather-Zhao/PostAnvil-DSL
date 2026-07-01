@@ -10,8 +10,7 @@
  *
  * 编译流程（Compile）：
  *         SceneRuleCompiler 遍历 AST 规则列表，将每个规则编译为对应的算子
- *         当前支持 OP_FILTER（过滤）算子，同时预留了 Score、ScoreFilter、Cluster、
- *         CategoryCreate、OP_ATTRIBUTE 等算子类型供后续扩展
+ *         当前支持 OP_FILTER（过滤）和 OP_ATTRIBUTE（属性）算子
  *
  * 执行流程（Evaluate）：
  *         CompiledProgram 持有算子序列，对输入场景依次执行每个算子的 apply()，
@@ -19,15 +18,16 @@
  *
  * 算子类型（Operator）：
  *         1. OP_FILTER：按条件过滤实例，保留满足条件的实例
- *         2. OP_ATTRIBUTE：为类别每个实例添加临时属性（预留）
+ *         2. OP_ATTRIBUTE：为类别每个实例添加计算属性
  *
  * 支持的表达式类型：
- * - 数值常量、属性访问（self.width / image.width / OtherClass.prop）
+ * - 数值常量、属性访问（self.* / image.*）
  * - 比较运算（< > <= >= == !=）
- * - 算术运算（+ - *）
+ * - 算术运算（+ - * /）
  * - 逻辑运算（AND / OR / NOT）
- * - 内置函数：abs(x)、iou(self, other)
- * - 空间谓词：CONTAINS、INSIDE、OVERLAP、CLOSE_TO
+ * - 函数调用（解析保留，编译暂不实现）
+ *
+ * 注意：所有标识符在词法分析阶段已转为大写，属性名比较均使用大写。
  *
  * @author RedFeather-Zhao
  * @date   June 2026
@@ -75,7 +75,7 @@ public:
 	}
 
 	EvalResult(EvalResult&&) noexcept = default;
-	
+
 	EvalResult& operator=(EvalResult&&) noexcept = default;
 };
 
@@ -88,11 +88,6 @@ public:
  * 当前包含：
  * - scene：可变场景（算子逐步变换，如过滤、新增类别等）
  * - image：图像元信息（只读）
- * - attrs: 按类别和实例索引存储的自定义属性
- * 
- * 预留字段：
- * - scores：按类别和实例索引存储的自定义分值
- * - temp_attrs：按类别和实例索引存储的临时属性
  */
 struct EvaluationContext {
 	Scene scene;		//< 可变场景，算子可修改（过滤、聚类、新增类别等）
@@ -129,7 +124,7 @@ struct EvaluationContext {
 enum class OperatorKind {
 	OP_BASE,           //< 基类（抽象）
 	OP_FILTER,         //< 过滤算子：按条件保留/丢弃实例
-	OP_ATTRIBUTE,      //< 属性算子：为实例添加计算字段（预留）
+	OP_ATTRIBUTE,      //< 属性算子：为实例添加计算字段
 };
 
 /**
@@ -164,10 +159,10 @@ public:
  *
  * 使用示例（DSL）：
  * @code
- *   RULE FOR GLOBAL:
- *       self.conf > 0.5
- *   RULE FOR Person:
- *       self.width > 20
+ *   RULE FILTER GLOBAL:
+ *       SELF.CONF > 0.5
+ *   RULE FILTER PERSON:
+ *       SELF.W > 20
  * @endcode
  */
 struct FilterOperator : SceneOperator {
@@ -213,38 +208,68 @@ public:
 		auto it = ctx.scene.find(target);
 		if (it != ctx.scene.end()) {
 			filterInstances(it->second);
+			}
 		}
-	}
 };
 
 /**
- * @brief 临时属性算子 —— 为实例添加计算字段（预留）
+ * @brief 属性算子 —— 为实例添加计算字段
  *
- * TODO:实现 DSL 语法
+ * 对目标类别的每个实例，计算并存储自定义属性值。
+ * 计算后的属性存储在 Instance::props 中，后续过滤算子可通过属性访问引用。
+ *
+ * 使用示例（DSL）：
  * @code
- *   ATTR FOR Person:
- *       risk_score = self.conf < 0.3 ? 1.0 : 0.0
- *       density = self.area / (self.width * self.height)
+ *   RULE ATTR PERSON:
+ *       RISK = SELF.CONF * 2.0
+ *       SIZE = SELF.W * SELF.H
  * @endcode
- *
- * 为每个实例计算指定的属性值，存储到 EvaluationContext::temp_attrs 中
- * 后续算子可通过特殊的属性访问语法引用这些临时属性
  */
 struct AttributeOperator : SceneOperator {
-	/**
-	 * @brief 临时属性名
-	 */
-	std::string attr_name;
 
 	/**
-	 * @brief 属性值计算表达式（编译后的数值函数）
+	 * @brief 单个属性定义：属性名 + 编译后的值表达式
 	 */
-	NumFunc expression;
+	struct AttrDef {
+		std::string name;			//< 属性名（大写）
+		NumFunc expression;			//< 编译后的数值计算函数
+	};
 
-	AttributeOperator() { kind = OperatorKind::OP_ATTRIBUTE; }
+	std::vector<AttrDef> attr_defs;		//< 属性定义列表
 
-	void apply(EvaluationContext& /*ctx*/) const override {
-		// TODO: 为 target 类别的每个实例计算 attr_name 的值，存储到 ctx.temp_attrs[target][i][attr_name]
+	AttributeOperator() : SceneOperator(OperatorKind::OP_ATTRIBUTE)
+	{
+	}
+
+	/**
+	 * @brief 执行属性计算变换
+	 *
+	 * 遍历目标类别的所有实例，为每个实例计算并存储属性值。
+	 * 若 target == "GLOBAL"，则对所有类别生效。
+	 *
+	 * @param ctx 评估上下文
+	 */
+	void apply(EvaluationContext& ctx) const override
+	{
+		auto compute_attrs = [&](Instances& instances) {
+			for (auto& inst : instances) {
+				for (const auto& def : attr_defs) {
+					inst.props[def.name] = def.expression(inst, ctx.scene, ctx.image);
+				}
+			}
+		};
+
+		if (target == "GLOBAL") {
+			for (auto& [name, instances] : ctx.scene) {
+				compute_attrs(instances);
+			}
+			return;
+		}
+
+		auto it = ctx.scene.find(target);
+		if (it != ctx.scene.end()) {
+			compute_attrs(it->second);
+		}
 	}
 };
 
@@ -256,7 +281,7 @@ struct AttributeOperator : SceneOperator {
  * CompiledProgram 是 SceneRuleCompiler 的编译产物，内部持有
  * 一系列算子（SceneOperator），按序对输入场景执行变换
  *
- * 它可以安全地复制、存储，并反复对不同的场景数据执行相同评估
+ * 它可以安全地移动、存储，并反复对不同的场景数据执行相同评估
  *
  * 使用方式：
  * @code
@@ -310,9 +335,7 @@ public:
  * 将每个规则编译为对应的算子（SceneOperator），最终生成一个包含算子管道
  * 的 CompiledProgram 对象
  *
- * 编译器采用分发模式：根据规则类型（当前仅支持 OP_FILTER）将规则分发到
- * 对应的编译方法未来新增算子类型时，只需添加新的编译方法并在 compile()
- * 中添加分发逻辑
+ * 编译器采用分发模式：根据 RuleKind 将规则分发到对应的编译方法
  *
  * 使用方式：
  * @code
@@ -335,8 +358,9 @@ public:
 	/**
 	 * @brief 将规则列表编译为算子管道
 	 *
-	 * 当前所有规则均编译为 FilterOperator未来可根据规则类型分发到
-	 * 不同的编译方法（如 compile_score_rule、compile_cluster_rule 等）
+	 * 根据 RuleKind 分发到不同的编译方法：
+	 * - FILTER → compile_filter_rule()
+	 * - ATTR   → compile_attr_rule()
 	 *
 	 * @param rules 解析后的规则列表
 	 * @return 编译后的 CompiledProgram 对象
@@ -344,8 +368,21 @@ public:
 	CompiledProgram compile(const std::vector<Rule>& rules) const {
 		CompiledProgram program;
 
+		using enum RuleKind;
 		for (const auto& rule : rules) {
-			program.operators.emplace_back(compile_filter_rule(rule));
+			switch (rule.kind) {
+			case FILTER: {
+				program.operators.emplace_back(compile_filter_rule(rule));
+				break;
+			}
+			case ATTR: {
+				program.operators.emplace_back(compile_attr_rule(rule));
+				break;
+			}
+			default: {
+				throw ParseError("Unsupported rule kind in compiler");
+			}
+			}
 		}
 
 		return program;
@@ -355,7 +392,7 @@ private:
 	// ======================== Compile ============================
 
 	/**
-	 * @brief 将一条规则编译为 FilterOperator
+	 * @brief 将一条 FILTER 规则编译为 FilterOperator
 	 *
 	 * 对规则中的每个条件表达式调用 compile_filter() 进行编译，
 	 * 将所有编译后的条件函数打包到 FilterOperator 中
@@ -370,6 +407,28 @@ private:
 
 		for (const auto& cond : rule.conditions) {
 			op->conditions.emplace_back(compile_filter(cond.get()));
+		}
+		return op;
+	}
+
+	/**
+	 * @brief 将一条 ATTR 规则编译为 AttributeOperator
+	 *
+	 * 对规则中的每个属性赋值编译其表达式，打包到 AttributeOperator 中
+	 *
+	 * @param rule 规则 AST
+	 * @return 编译后的属性算子
+	 */
+	std::unique_ptr<AttributeOperator> compile_attr_rule(const Rule& rule) const {
+		auto op = std::make_unique<AttributeOperator>();
+		op->target = rule.target;
+		op->attr_defs.reserve(rule.assignments.size());
+
+		for (const auto& assign : rule.assignments) {
+			AttributeOperator::AttrDef def;
+			def.name = assign.attr_name;
+			def.expression = compile_num(assign.value_expr.get());
+			op->attr_defs.push_back(std::move(def));
 		}
 		return op;
 	}
@@ -401,13 +460,13 @@ private:
 				std::string obj = pe->object;
 				std::string prop = pe->prop;
 				return [obj, prop](const Instance& self, const Scene& scene, const Image& image) {
-					if (obj == "self") {
+					if (obj == "SELF") {
 						return get_instance_prop(self, prop);
 					}
-					if (obj == "image") {
+					if (obj == "IMAGE") {
 						return get_image_prop(image, prop);
 					}
-					return 0.0;
+					return 0.0; // TODO 更多变量
 				};
 			}
 
@@ -434,6 +493,7 @@ private:
 					if (op == "+")   return l + r;
 					if (op == "-")   return l - r;
 					if (op == "*")   return l * r;
+					if (op == "/")   return r != 0.0 ? l / r : 0.0;
 					if (op == ">")   return l >  r ? 1.0 : 0.0;
 					if (op == "<")   return l <  r ? 1.0 : 0.0;
 					if (op == ">=")  return l >= r ? 1.0 : 0.0;
@@ -457,126 +517,15 @@ private:
 		return [](const Instance&, const Scene&, const Image&) { return 0.0; };
 	}
 
+	/**
+	 * @brief 编译函数/谓词调用
+	 *
+	 * 当前保留函数调用解析骨架，但编译阶段暂不实现任何函数/谓词。
+	 * 所有调用均返回 0.0，待未来重新设计谓词和函数功能。
+	 */
 	NumFunc compile_call(const CallExpr* ce) const {
-		if (ce->name == "abs" && ce->args.size() == 1) {
-			auto arg = compile_num(ce->args[0].get());
-			return [arg](const Instance& self, const Scene& scene, const Image& image) {
-				return std::abs(arg(self, scene, image));
-			};
-		}
-
-		if (ce->name == "iou" && ce->args.size() == 2) {
-			std::string other_class = extract_class_name(ce->args[1].get());
-			return [other_class](const Instance& self, const Scene& scene, const Image&) {
-				if (other_class.empty()) return 0.0;
-				auto it = scene.find(other_class);
-				if (it == scene.end() || it->second.empty()) return 0.0;
-				return compute_iou(self, it->second.front());
-			};
-		}
-
-		std::string name_up = ce->name;
-		for (auto& ch : name_up) {
-			ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-		}
-
-		if (name_up == "CONTAINS") return compile_contains(ce);
-		if (name_up == "INSIDE")   return compile_inside(ce);
-		if (name_up == "OVERLAP")  return compile_overlap(ce);
-		if (name_up == "CLOSE_TO") return compile_close_to(ce);
-
+		// TODO: 未来重新设计谓词和函数功能时在此处添加实现
 		return [](const Instance&, const Scene&, const Image&) { return 0.0; };
-	}
-
-	NumFunc compile_contains(const CallExpr* ce) const {
-		std::string target;
-		if (ce->args.size() >= 1) target = extract_class_name(ce->args[0].get());
-
-		bool has_qty = (ce->qtyRange != nullptr);
-		bool is_range = has_qty && ce->qtyRange->is_range;
-		int qty_min = has_qty ? ce->qtyRange->min : 1;
-		int qty_max = (has_qty && is_range) ? ce->qtyRange->max : qty_min;
-
-		bool has_explicit_count = false;
-		int explicit_count = 1;
-		if (ce->args.size() >= 2 && ce->args[1]->type == Expr::Type::CONST_NUM) {
-			has_explicit_count = true;
-			explicit_count = static_cast<int>(static_cast<const NumberExpr*>(ce->args[1].get())->value);
-		}
-
-		return [=](const Instance& self, const Scene& scene, const Image&) {
-			if (target.empty()) {
-				return 0.0;
-			}
-			int cnt = 0;
-			if (auto it = scene.find(target); it != scene.end()) {
-				for (const auto& b : it->second) {
-					if (b.x >= self.x && b.y >= self.y
-						&& b.right() <= self.right() && b.bottom() <= self.bottom()) {
-						++cnt;
-					}
-				}
-			}
-			if (has_qty) {
-				if (is_range) return (cnt >= qty_min && cnt <= qty_max) ? 1.0 : 0.0;
-				return (cnt >= qty_min) ? 1.0 : 0.0;
-			}
-			if (has_explicit_count) return (cnt == explicit_count) ? 1.0 : 0.0;
-			return (cnt >= 1) ? 1.0 : 0.0;
-		};
-	}
-
-	NumFunc compile_inside(const CallExpr* ce) const {
-		std::string target;
-		if (ce->args.size() >= 1) target = extract_class_name(ce->args[0].get());
-		return [target](const Instance& self, const Scene& scene, const Image&) {
-			if (target.empty()) return 0.0;
-			auto it = scene.find(target);
-			if (it == scene.end()) return 0.0;
-			for (const auto& b : it->second) {
-				if (self.x >= b.x && self.right() <= b.right()
-					&& self.y >= b.y && self.bottom() <= b.bottom()) {
-					return 1.0;
-				}
-			}
-			return 0.0;
-		};
-	}
-
-	NumFunc compile_overlap(const CallExpr* ce) const {
-		std::string target;
-		if (ce->args.size() >= 1) target = extract_class_name(ce->args[0].get());
-		return [target](const Instance& self, const Scene& scene, const Image&) {
-			if (target.empty()) return 0.0;
-			auto it = scene.find(target);
-			if (it == scene.end()) return 0.0;
-			for (const auto& b : it->second) {
-				if (compute_iou(self, b) > 0.0) return 1.0;
-			}
-			return 0.0;
-		};
-	}
-
-	NumFunc compile_close_to(const CallExpr* ce) const {
-		std::string target;
-		if (ce->args.size() >= 1) target = extract_class_name(ce->args[0].get());
-		double threshold = 0.0;
-		if (ce->args.size() >= 2 && ce->args[1]->type == Expr::Type::CONST_NUM) {
-			threshold = static_cast<const NumberExpr*>(ce->args[1].get())->value;
-		} else if (ce->qtyRange) {
-			threshold = static_cast<double>(ce->qtyRange->min);
-		}
-		return [target, threshold](const Instance& self, const Scene& scene, const Image&) {
-			if (target.empty()) return 0.0;
-			auto it = scene.find(target);
-			if (it == scene.end()) return 0.0;
-			for (const auto& b : it->second) {
-				double dx = self.center_x() - b.center_x();
-				double dy = self.center_y() - b.center_y();
-				if (std::sqrt(dx * dx + dy * dy) <= threshold) return 1.0;
-			}
-			return 0.0;
-		};
 	}
 
 
@@ -602,58 +551,76 @@ private:
 	}
 
 	/**
-	 * @brief 获取实例的属性值，包括临时属性
-	 * 
+	 * @brief 获取实例的属性值，包括内置属性和动态属性
+	 *
+	 * 内置属性：
+	 * - X1, Y1：左上角坐标
+	 * - X2, Y2：右下角坐标（计算值）
+	 * - W, H：宽度和高度
+	 * - CX, CY：中心点坐标（计算值）
+	 * - AREA：面积（计算值）
+	 * - ASPECT：宽高比（计算值）
+	 * - CONF：置信度
+	 *
+	 * 若内置属性未匹配，则查找动态属性（props 映射）。
+	 *
 	 * @param inst - 实例
-	 * @param prop - 属性名（如 "x", "y", "width", "height", "conf" 等）
+	 * @param prop - 属性名（大写）
 	 * @return double - 属性值；若属性不存在则返回 0.0
 	 */
 	static double
 	get_instance_prop(const Instance& inst, std::string_view prop)
 	{
-		if (prop == "x")				return inst.x;
-		if (prop == "y")				return inst.y;
-		if (prop == "width")			return inst.width;
-		if (prop == "height")			return inst.height;
-		if (prop == "right")			return inst.right();
-		if (prop == "bottom")			return inst.bottom();
-		if (prop == "center_x")			return inst.center_x();
-		if (prop == "center_y")			return inst.center_y();
-		if (prop == "area")				return inst.area();
-		if (prop == "aspect_ratio")		return inst.aspect_ratio();
-		if (prop == "conf")				return inst.conf;
-		return 0.0;
+		// 内置属性
+		if (prop == "X1")     return inst.x1;
+		if (prop == "Y1")     return inst.y1;
+		if (prop == "W")      return inst.w;
+		if (prop == "H")      return inst.h;
+		if (prop == "X2")     return inst.x2();
+		if (prop == "Y2")     return inst.y2();
+		if (prop == "CX")     return inst.cx();
+		if (prop == "CY")     return inst.cy();
+		if (prop == "AREA")   return inst.area();
+		if (prop == "ASPECT") return inst.aspect();
+		if (prop == "CONF")   return inst.conf;
+
+		// 动态属性（由 RULE ATTR 计算添加）
+		auto it = inst.props.find(std::string(prop));
+		if (it != inst.props.end()) {
+			return it->second;
+		}
+		throw ParseError("Unknown property '" + std::string(prop) + "' for instance of class '" + inst.cls + "'");
 	}
 
 	/**
+	 * @brief 获取图像属性
 	 * 
-	 * 
-	 * @param img
-	 * @param prop
-	 * @return 
+	 * @param img  - 图像信息
+	 * @param prop - 属性名，当前仅支持 "W"（宽度）和 "H"（高度）
+	 * @return double - 属性值；若属性不存在则返回 0.0
 	 */
 	static double
 	get_image_prop(const Image& img, std::string_view prop)
 	{
-		if (prop == "width")  return img.width;
-		if (prop == "height") return img.height;
-		return 0.0;
+		if (prop == "W") return img.width;
+		if (prop == "H") return img.height;
+		throw ParseError("Unknown property '" + std::string(prop) + "' for image");
 	}
 
 	/**
-	 * .
-	 * 
-	 * @param a
-	 * @param b
-	 * @return 
+	 * @brief 计算两个实例的 IoU（交并比）
+	 *
+	 * @param a - 实例 A
+	 * @param b - 实例 B
+	 * @return double - IoU 值 [0.0, 1.0]
 	 */
 	static double
 	compute_iou(const Instance& a, const Instance& b)
 	{
-		double ix1 = std::max(a.x, b.x);
-		double iy1 = std::max(a.y, b.y);
-		double ix2 = std::min(a.right(), b.right());
-		double iy2 = std::min(a.bottom(), b.bottom());
+		double ix1 = std::max(a.x1, b.x1);
+		double iy1 = std::max(a.y1, b.y1);
+		double ix2 = std::min(a.x2(), b.x2());
+		double iy2 = std::min(a.y2(), b.y2());
 		double iw = ix2 - ix1;
 		double ih = iy2 - iy1;
 		if (iw <= 0.0 || ih <= 0.0) {

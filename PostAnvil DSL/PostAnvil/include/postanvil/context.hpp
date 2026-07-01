@@ -2,9 +2,9 @@
  * @file   context.hpp
  * @brief  定义评估上下文：图像与实例的基本数据结构
  * @detail 本文件包含 PostAnvil 评估器使用的核心数据结构：
- *		   Image：图像尺寸信息
- *		   Instance：目标检测结果实例
- *		   Scene：按类别组织的实例集合
+ *         Image：图像尺寸信息
+ *         Instance：目标检测结果实例
+ *         Scene：按类别组织的实例集合
  * @author RedFeather-Zhao
  * @date   June 2026
  * @copyright Copyright (c) 2026 RedFeather-Zhao, All Rights Reserved.
@@ -16,6 +16,22 @@
 #include <unordered_map>
 
 namespace postanvil {
+
+namespace detail {
+/**
+* @brief 支持透明哈希的字符串哈希函数
+*/
+struct TransparentStrHash
+{
+	using is_transparent = void;
+
+	template<typename TStr>
+	size_t operator()(const TStr& s) const noexcept
+	{
+		return std::hash<std::string_view>{}(s);
+	}
+};
+} // namespace detail
 
 /**
  * @brief 图像尺寸信息
@@ -33,76 +49,70 @@ struct Image {
  */
 struct Instance {
 	std::string cls;	//< 类别名
-	double x = 0;		//< 边界/外接框左上角 x 坐标
-	double y = 0;		//< 边界/外接框左上角 y 坐标
-	double width = 0;	//< 边界/外接框宽度
-	double height = 0;	//< 边界/外接框高度
+	double x1 = 0;		//< 边界框左上角 x 坐标
+	double y1 = 0;		//< 边界框左上角 y 坐标
+	double w = 0;		//< 边界框宽度
+	double h = 0;		//< 边界框高度
 	double conf = 0.0;	//< 检测置信度，范围 [0.0, 1.0]
 
-	/**
-	 * @brief 返回右边界 x 坐标
-	 * @return x + width
-	 */
-	double right() const { return x + width; }
+	/** @brief 动态属性存储，用于属性算子（RULE ATTR）计算的结果 */
+	std::unordered_map<std::string, double> props;
 
 	/**
-	 * @brief 返回下边界 y 坐标
-	 * @return y + height
+	 * @brief 返回右下角 x 坐标
+	 * @return x1 + w
 	 */
-	double bottom() const { return y + height; }
+	double x2() const { return x1 + w; }
+
+	/**
+	 * @brief 返回右下角 y 坐标
+	 * @return y1 + h
+	 */
+	double y2() const { return y1 + h; }
 
 	/**
 	 * @brief 返回中心点 x 坐标
-	 * @return x + width / 2
+	 * @return x1 + w / 2
 	 */
-	double center_x() const { return x + width / 2.0; }
+	double cx() const { return x1 + w / 2.0; }
 
 	/**
 	 * @brief 返回中心点 y 坐标
-	 * @return y + height / 2
+	 * @return y1 + h / 2
 	 */
-	double center_y() const { return y + height / 2.0; }
+	double cy() const { return y1 + h / 2.0; }
 
 	/**
 	 * @brief 计算边界框面积
-	 * @return width * height
+	 * @return w * h
 	 */
-	double area() const { return width * height; }
+	double area() const { return w * h; }
 
 	/**
 	 * @brief 计算宽高比
-	 * @return width / height；若 height 为 0 则返回 0
+	 * @return w / h；若 h 为 0 则返回 0
 	 */
-	double aspect_ratio() const {
-		if (width == 0 || height == 0) {
+	double aspect() const {
+		if (w == 0 || h == 0) {
 			return 0.0;
 		}
-		return width / height;
+		return w / h;
 	}
 };
 
 /**
  * @brief 实例列表类型别名
+ * 
+ * @see   Instance
  */
 using Instances = std::vector<Instance>;
 
 /**
- * @brief 支持透明哈希的字符串哈希函数	
- */
-struct TransparentStrHash
-{
-	using is_transparent = void;
-
-	template<typename TStr>
-	size_t operator()(const TStr& s) const noexcept
-	{
-		return std::hash<std::string_view>{}(s);
-	}
-};
-
-/**
- * @brief 场景类型：按类别名组织的实例集合
+ * @brief 目标检测场景：按类别名组织的实例集合
+ *
+ * @see   Instances
  */
 using Scene = std::unordered_map<std::string, Instances,
-	TransparentStrHash, std::equal_to<>>;
+	detail::TransparentStrHash, std::equal_to<>>;
+
 } // namespace postanvil

@@ -1,17 +1,25 @@
-﻿# PostAnvil DSL 用户说明文档
+# PostAnvil DSL 用户说明文档
 
-> 版本：1.0 | 更新日期：2026-06-27
+> 版本：2.0 | 更新日期：2026-07-01
 
 ---
 
 ## 1. 简介
 
-PostAnvil 是一个用于**目标检测结果后处理**的领域特定语言（DSL）。它允许你编写规则来筛选和过滤检测到的目标实例，基于实例的属性、空间关系以及逻辑条件来决定保留哪些检测结果。
+PostAnvil 是一个用于**目标检测结果后处理**的领域特定语言（DSL）。它允许你编写规则来筛选和过滤检测到的目标实例，以及为实例添加计算属性，基于实例的属性、表达式计算来决定保留哪些检测结果。
+
+### 核心特性
+
+- **大小写不敏感**：所有关键字、标识符、属性名均不区分大小写
+- **过滤规则**：按条件筛选实例
+- **属性规则**：为实例计算并添加自定义属性
+- **管道执行**：属性规则和过滤规则按序执行，后续规则可引用前置规则计算的属性
 
 ### 典型使用场景
 
 - 过滤低置信度的检测结果
-- 基于空间关系筛选目标（如 A 包含 B）
+- 基于空间关系筛选目标
+- 为实例添加计算属性（如密度、风险评分等）
 - 组合多个条件进行复杂筛选
 
 ---
@@ -20,82 +28,120 @@ PostAnvil 是一个用于**目标检测结果后处理**的领域特定语言（
 
 ### 2.1 基本语法
 
+**过滤规则**：
 ```
-RULE FOR <目标类别>:
+RULE FILTER <目标类别>:
     <条件1>
     <条件2>
     ...
 ```
 
-- 规则以 `RULE FOR` 开头，后跟目标类别名（或 `GLOBAL`），以冒号结尾
-- 条件写在缩进块中，每行一个条件
-- 同一规则内的所有条件为 **AND（与）** 关系
+**属性规则**：
+```
+RULE ATTR <目标类别>:
+    <属性名> = <表达式>
+    ...
+```
+
+- 过滤规则以 `RULE FILTER` 开头，后跟目标类别名（或 `GLOBAL`），以冒号结尾
+- 属性规则以 `RULE ATTR` 开头，后跟目标类别名（或 `GLOBAL`），以冒号结尾
+- 条件/赋值写在缩进块中，每行一个
+- 同一过滤规则内的所有条件为 **AND（与）** 关系
 
 ### 2.2 第一个规则
 
 ```
-RULE FOR GLOBAL:
+RULE FILTER GLOBAL:
     self.conf > 0.5
 ```
 
 这个规则表示：**对于所有类别的实例，置信度必须大于 0.5 才保留。**
 
-### 2.3 完整示例
+### 2.3 属性计算示例
 
 ```
-RULE FOR GLOBAL:
+RULE ATTR Person:
+    density = self.conf / (self.w * self.h)
+    risk = self.conf * 2.0
+
+RULE FILTER Person:
+    self.density < 0.5
+    self.risk > 1.0
+```
+
+这个示例中：
+- 先为每个 Person 实例计算 density 和 risk 属性
+- 再过滤：只保留 density < 0.5 且 risk > 1.0 的实例
+
+### 2.4 完整示例
+
+```
+RULE FILTER GLOBAL:
     self.conf > 0.7
 
-RULE FOR Person:
-    self.width > 20
-    CONTAINS Face 1
+RULE FILTER Person:
+    self.w > 20
+    self.h > 30
 
-RULE FOR Car:
-    self.width > 50
-    OVERLAP Road
+RULE FILTER Car:
+    self.w > 50
+    self.area > 2000
 ```
 
 这个示例中：
 - 全局规则：所有实例置信度 > 0.7
-- Person 规则：宽度 > 20 且包含恰好 1 个 Face
-- Car 规则：宽度 > 50 且与 Road 重叠
+- Person 规则：宽度 > 20 且高度 > 30
+- Car 规则：宽度 > 50 且面积 > 2000
 
 ---
 
 ## 3. 规则结构
 
-### 3.1 GLOBAL 规则
+### 3.1 RULE FILTER（过滤规则）
+
+```
+RULE FILTER <target>:
+    <条件表达式>
+```
+
+- `target` 为 `GLOBAL` 时对所有类别生效
+- `target` 为具体类别名时仅对该类生效
+- 条件表达式每行一个，所有条件为 AND 关系
+
+### 3.2 RULE ATTR（属性规则）
+
+```
+RULE ATTR <target>:
+    <属性名> = <数值表达式>
+```
+
+- `target` 为 `GLOBAL` 时对所有类别生效
+- 属性名由用户自定义，可包含字母、数字和下划线
+- 数值表达式支持算术运算、属性访问等
+- 计算后的属性存储在实例中，后续 RULE FILTER 可通过 `self.<属性名>` 引用
+
+### 3.3 GLOBAL 规则
 
 目标类别为 `GLOBAL` 的规则对**所有类别**的实例生效。
 
 ```
-RULE FOR GLOBAL:
+RULE FILTER GLOBAL:
     self.conf > 0.5
     self.area > 100
 ```
 
-### 3.2 类别规则
-
-目标类别为具体类别的规则仅对**该类**的实例生效。
-
-```
-RULE FOR Dog:
-    self.width > 30
-    self.height > 30
-```
-
-### 3.3 注释
+### 3.4 注释
 
 支持行注释，以 `#` 或 `//` 开头：
 
 ```
-RULE FOR GLOBAL:
+RULE FILTER GLOBAL:
     # 过滤低置信度
     self.conf > 0.5
 
-RULE FOR Cat:
+RULE FILTER Cat:
     // 要求猫的尺寸足够大
-    self.width > 20
+    self.w > 20
 ```
 
 ---
@@ -108,25 +154,24 @@ RULE FOR Cat:
 
 | 对象 | 说明 | 示例 |
 |------|------|------|
-| `self` | 当前评估的实例 | `self.conf`, `self.width`, `self.center_x` |
+| `self` | 当前评估的实例 | `self.conf`, `self.w`, `self.cx` |
 | `image` | 图像尺寸 | `image.width`, `image.height` |
 
 #### 实例属性列表
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `x` | 数值 | 边界框左上角 x 坐标 |
-| `y` | 数值 | 边界框左上角 y 坐标 |
-| `width` | 数值 | 边界框宽度 |
-| `height` | 数值 | 边界框高度 |
-| `right` | 数值 | 右边界 x 坐标（x + width） |
-| `bottom` | 数值 | 下边界 y 坐标（y + height） |
-| `center_x` | 数值 | 中心点 x 坐标 |
-| `center_y` | 数值 | 中心点 y 坐标 |
-| `area` | 数值 | 边界框面积（width × height） |
-| `aspect_ratio` | 数值 | 宽高比（width / height） |
+| `x1` | 数值 | 边界框左上角 x 坐标 |
+| `y1` | 数值 | 边界框左上角 y 坐标 |
+| `w` | 数值 | 边界框宽度 |
+| `h` | 数值 | 边界框高度 |
+| `x2` | 数值 | 右下角 x 坐标（x1 + w） |
+| `y2` | 数值 | 右下角 y 坐标（y1 + h） |
+| `cx` | 数值 | 中心点 x 坐标（x1 + w/2） |
+| `cy` | 数值 | 中心点 y 坐标（y1 + h/2） |
+| `area` | 数值 | 边界框面积（w × h） |
+| `aspect` | 数值 | 宽高比（w / h） |
 | `conf` | 数值 | 置信度（0.0 ~ 1.0） |
-| `confidence` | 数值 | 置信度（同 conf） |
 
 #### 图像属性
 
@@ -135,34 +180,39 @@ RULE FOR Cat:
 | `image.width` | 数值 | 图像宽度（像素） |
 | `image.height` | 数值 | 图像高度（像素） |
 
+#### 动态属性
+
+通过 `RULE ATTR` 规则计算的自定义属性，同样可通过 `self.<属性名>` 访问。
+
 ### 4.2 比较运算符
 
 | 运算符 | 说明 | 示例 |
 |--------|------|------|
 | `>` | 大于 | `self.conf > 0.5` |
-| `<` | 小于 | `self.width < 100` |
+| `<` | 小于 | `self.w < 100` |
 | `>=` | 大于等于 | `self.area >= 500` |
-| `<=` | 小于等于 | `self.x <= 10` |
-| `==` | 等于 | `self.width == 30` |
+| `<=` | 小于等于 | `self.x1 <= 10` |
+| `==` | 等于 | `self.w == 30` |
 | `!=` | 不等于 | `self.conf != 0` |
 
 ### 4.3 算术运算符
 
 | 运算符 | 说明 | 示例 |
 |--------|------|------|
-| `+` | 加法 | `self.x + self.width > 100` |
-| `-` | 减法 | `self.right - self.x > 50` |
-| `*` | 乘法 | `self.width * self.height > 1000` |
-| `-` | 一元取负 | `-self.x > -10` |
+| `+` | 加法 | `self.x1 + self.w > 100` |
+| `-` | 减法 | `self.x2 - self.x1 > 50` |
+| `*` | 乘法 | `self.w * self.h > 1000` |
+| `/` | 除法 | `self.conf / self.area < 0.01` |
+| `-` | 一元取负 | `-self.x1 > -10` |
 
-> **注意**：运算符优先级为 `*` > `+` / `-` > 比较运算符。
+> **注意**：运算符优先级为 `*` / `/` > `+` / `-` > 比较运算符。除数为 0 时除法结果为 0。
 
 ### 4.4 逻辑运算符
 
 | 运算符 | 说明 | 示例 |
 |--------|------|------|
-| `AND` | 逻辑与 | `self.conf > 0.5 AND self.width > 20` |
-| `OR` | 逻辑或 | `self.width > 100 OR self.height > 100` |
+| `AND` | 逻辑与 | `self.conf > 0.5 AND self.w > 20` |
+| `OR` | 逻辑或 | `self.w > 100 OR self.h > 100` |
 | `NOT` | 逻辑非 | `NOT self.conf < 0.3` |
 
 > **注意**：同一规则内的多个条件行**默认是 AND 关系**。如需 OR 逻辑，请在单行内使用 `OR` 运算符。
@@ -172,110 +222,61 @@ RULE FOR Cat:
 使用括号 `()` 控制运算优先级：
 
 ```
-(self.width > 100 OR self.height > 100) AND self.conf > 0.5
+(self.w > 100 OR self.h > 100) AND self.conf > 0.5
 ```
 
 ---
 
-## 5. 空间谓词
+## 5. 属性规则详解
 
-空间谓词用于表达实例之间的空间关系。谓词名称**不区分大小写**。
-
-### 5.1 CONTAINS — 包含
-
-检查当前实例是否包含指定类别的实例。
+### 5.1 基本语法
 
 ```
-CONTAINS <类名> [数量]
-CONTAINS <类名> <最小数量>-<最大数量>
+RULE ATTR <类别名>:
+    <属性名> = <表达式>
 ```
 
-| 形式 | 语义 |
-|------|------|
-| `CONTAINS B` | 包含至少 1 个 B |
-| `CONTAINS B 1` | 精确包含 1 个 B |
-| `CONTAINS B 3` | 精确包含 3 个 B |
-| `CONTAINS B 0-2` | 包含 0~2 个 B |
-| `CONTAINS B 2-5` | 包含 2~5 个 B |
+属性规则为指定类别的每个实例计算一个属性值，结果存储在实例中，供后续过滤规则使用。
 
-**包含的判断标准**：目标实例的边界框完全在当前实例的边界框内。
+### 5.2 表达式支持
+
+属性值表达式支持所有数值运算：
 
 ```
-RULE FOR Room:
-    CONTAINS Chair 2-10
-    CONTAINS Table 1
+RULE ATTR Person:
+    density = self.area / (self.w * self.h)
+    score = self.conf * 100.0
+    cx_norm = self.cx / image.width
+    cy_norm = self.cy / image.height
 ```
 
-### 5.2 INSIDE — 被包含
-
-检查当前实例是否在指定类别的实例内部。
+### 5.3 全局属性
 
 ```
-INSIDE <类名>
+RULE ATTR GLOBAL:
+    area_calc = self.w * self.h
 ```
 
-**判断标准**：当前实例的边界框完全在目标实例的边界框内。
+为所有类别的所有实例计算 `area_calc` 属性。
+
+### 5.4 属性引用
+
+属性规则按顺序执行，后续的过滤规则可以直接引用属性规则计算的结果：
 
 ```
-RULE FOR Eye:
-    INSIDE Face
-```
+RULE ATTR Person:
+    risk = self.conf * 2.0
 
-### 5.3 OVERLAP — 重叠
-
-检查当前实例是否与指定类别的实例重叠（IoU > 0）。
-
-```
-OVERLAP <类名>
-```
-
-```
-RULE FOR Person:
-    OVERLAP Sidewalk
-```
-
-### 5.4 CLOSE_TO — 靠近
-
-检查当前实例的中心点与指定类别实例的中心点距离是否在阈值内。
-
-```
-CLOSE_TO <类名> <距离阈值>
-```
-
-**距离**：欧几里得距离（基于中心点坐标）。
-
-```
-RULE FOR Person:
-    CLOSE_TO Car 50
+RULE FILTER Person:
+    self.risk > 1.0
+    self.w > 20
 ```
 
 ---
 
-## 6. 内置函数
+## 6. 完整语法参考
 
-### 6.1 abs(x) — 绝对值
-
-返回参数的绝对值。
-
-```
-abs(self.x - self.center_x) < 10
-```
-
-### 6.2 iou(self, other) — 交并比
-
-计算当前实例与指定类别第一个实例的 IoU（Intersection over Union）。
-
-```
-iou(self, B) > 0.5
-```
-
-返回值范围：`[0.0, 1.0]`。
-
----
-
-## 7. 完整语法参考
-
-### 7.1 表达式语法（BNF 风格）
+### 6.1 表达式语法（BNF 风格）
 
 ```
 expr      := or_expr
@@ -284,122 +285,135 @@ and_expr  := not_expr ("AND" not_expr)*
 not_expr  := "NOT" not_expr | cmp_expr
 cmp_expr  := add_expr ( ("<"|">"|"<="|">="|"=="|"!=") add_expr )*
 add_expr  := mul_expr ( ("+"|"-") mul_expr )*
-mul_expr  := unary_expr ("*" unary_expr)*
+mul_expr  := unary_expr ( ("*"|"/") unary_expr )*
 unary_expr:= ("-" | "NOT")? primary
 primary   := number
            | identifier ( "." identifier )*
            | identifier "(" arg_list ")"
-           | identifier predicate_args
            | "(" expr ")"
+
+attr_assign := identifier "=" expr
 ```
 
-### 7.2 关键字
+### 6.2 关键字
 
 | 关键字 | 说明 |
 |--------|------|
-| `RULE FOR` | 规则声明头部 |
+| `RULE FILTER` | 过滤规则声明头部 |
+| `RULE ATTR` | 属性规则声明头部 |
 | `GLOBAL` | 全局规则目标 |
 | `AND` | 逻辑与 |
 | `OR` | 逻辑或 |
 | `NOT` | 逻辑非 |
 
-### 7.3 谓词列表
+### 6.3 大小写不敏感
 
-| 谓词 | 参数 | 说明 |
-|------|------|------|
-| `CONTAINS` | 类名 [, 数量/范围] | 检查是否包含指定类的实例 |
-| `INSIDE` | 类名 | 检查是否在指定类实例内部 |
-| `OVERLAP` | 类名 | 检查是否与指定类实例重叠 |
-| `CLOSE_TO` | 类名, 距离 | 检查中心距离是否在阈值内 |
+所有关键字、标识符、属性名均**不区分大小写**。以下写法等价：
 
-### 7.4 函数列表
-
-| 函数 | 参数 | 说明 |
-|------|------|------|
-| `abs(x)` | 1 个数值参数 | 返回绝对值 |
-| `iou(self, class)` | 2 个参数 | 返回与指定类第一个实例的 IoU |
+```
+self.conf > 0.5
+SELF.CONF > 0.5
+Self.Conf > 0.5
+RULE FILTER GLOBAL:
+rule filter global:
+```
 
 ---
 
-## 8. 实战示例
+## 7. 实战示例
 
-### 8.1 基础过滤
+### 7.1 基础过滤
 
 ```
 # 过滤低置信度实例
-RULE FOR GLOBAL:
+RULE FILTER GLOBAL:
     self.conf > 0.6
 
 # 过滤太小的实例
-RULE FOR GLOBAL:
-    self.width > 10
-    self.height > 10
+RULE FILTER GLOBAL:
+    self.w > 10
+    self.h > 10
 ```
 
-### 8.2 空间关系过滤
+### 7.2 属性计算 + 过滤
 
 ```
-# 人脸检测：人脸在图像内，包含眼睛
-RULE FOR Face:
+# 计算密度，然后过滤低密度实例
+RULE ATTR Person:
+    density = self.conf / self.area
+
+RULE FILTER Person:
+    self.density < 0.01
+    self.w > 20
+    self.conf > 0.5
+```
+
+### 7.3 边界检查
+
+```
+# 确保实例在图像内
+RULE FILTER Face:
     self.conf > 0.8
-    CONTAINS Eye 2
-    self.x > 0
-    self.y > 0
-
-# 眼睛在人脸内
-RULE FOR Eye:
-    INSIDE Face
-    self.conf > 0.5
+    self.x1 > 0
+    self.y1 > 0
+    self.x1 + self.w <= image.width
+    self.y1 + self.h <= image.height
 ```
 
-### 8.3 场景理解
+### 7.4 归一化坐标过滤
 
 ```
-# 车辆检测
-RULE FOR Car:
-    self.conf > 0.7
-    self.width > 50
-    OVERLAP Road
+# 使用中心点归一化坐标
+RULE ATTR Person:
+    cx_norm = self.cx / image.width
+    cy_norm = self.cy / image.height
 
-# 行人检测
-RULE FOR Person:
-    self.conf > 0.6
-    self.width > 20
-    CLOSE_TO Car 100
+RULE FILTER Person:
+    self.cx_norm > 0.2
+    self.cx_norm < 0.8
+    self.cy_norm > 0.1
+    self.cy_norm < 0.9
 ```
 
-### 8.4 数量约束
-
-```
-# 一个房间应该有 1-2 把椅子和 1 张桌子
-RULE FOR Room:
-    self.conf > 0.5
-    CONTAINS Chair 1-2
-    CONTAINS Table 1
-
-# 应该有多个窗户
-RULE FOR Room:
-    CONTAINS Window 1-5
-```
-
-### 8.5 复杂逻辑组合
+### 7.5 复杂逻辑组合
 
 ```
 # 使用 OR 组合条件
-RULE FOR Vehicle:
+RULE FILTER Vehicle:
     self.conf > 0.7
-    (self.width > 100 OR self.height > 80)
-    (OVERLAP Road OR OVERLAP Parking)
+    (self.w > 100 OR self.h > 80)
+    self.area > 2000
 
 # 使用 NOT 排除
-RULE FOR Animal:
+RULE ATTR Animal:
+    size_score = self.w * self.h * self.conf
+
+RULE FILTER Animal:
     self.conf > 0.5
-    NOT INSIDE Cage
+    NOT self.size_score < 100
+```
+
+### 7.6 多类别组合
+
+```
+RULE FILTER GLOBAL:
+    self.conf > 0.5
+
+RULE ATTR Person:
+    body_area = self.w * self.h
+
+RULE FILTER Person:
+    self.body_area > 500
+    self.w > 20
+
+RULE FILTER Vehicle:
+    self.w > 100
+    self.area > 3000
 ```
 
 ---
 
-## 9. 常见问题
+## 8. 常见问题
 
 ### Q: GLOBAL 规则和类别规则的区别？
 **A:** GLOBAL 规则对所有实例生效，类别规则仅对特定类别的实例生效。一个实例必须同时满足所有 GLOBAL 规则和其自身类别的规则才会被保留。
@@ -407,10 +421,16 @@ RULE FOR Animal:
 ### Q: 条件之间是 AND 还是 OR？
 **A:** 同一规则内不同行的条件之间是 **AND** 关系。如需 OR，请在同一行内使用 `OR` 运算符。
 
-### Q: 谓词名称大小写敏感吗？
-**A:** 不敏感。`CONTAINS`、`contains`、`Contains` 都是等价的。
+### Q: 大小写敏感吗？
+**A:** 不敏感。所有关键字、属性名、标识符均不区分大小写。`self.conf`、`SELF.CONF`、`Self.Conf` 都是等价的。
 
-### Q: 数量范围怎么用？
-**A:** 使用 `CONTAINS Class min-max` 语法。例如 `CONTAINS B 2-5` 表示包含 2 到 5 个 B。单值 `CONTAINS B 1` 表示精确匹配 1 个 B。
+### Q: RULE ATTR 和 RULE FILTER 的执行顺序？
+**A:** 按源代码中出现的顺序依次执行。先出现的 RULE ATTR 计算的属性，后续的 RULE FILTER 可以直接引用。
+
+### Q: 属性规则可以覆盖内置属性吗？
+**A:** 不建议覆盖内置属性（如 x1, w, conf 等）。自定义属性应使用不同的名称。
+
+### Q: 动态属性支持哪些运算？
+**A:** 支持所有数值运算：算术（+、-、*）、比较、逻辑运算，以及内置属性和图像属性的访问。
 
 ---
