@@ -12,4 +12,9 @@
 #pragma once
 
 #include "postanvil/context.hpp"
+#include "postanvil/common.hpp"
+#include "postanvil/operators.hpp"
+#include "postanvil/program.hpp"
+#include "postanvil/expr_compiler.hpp"
 #include "postanvil/compiler.hpp"
+

@@ -51,6 +51,18 @@
     <ClInclude Include="PostAnvil\antlr4\PostAnvilParser.h">
       <Filter>antlr4</Filter>
     </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\common.hpp">
+      <Filter>头文件\core</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\expr_compiler.hpp">
+      <Filter>头文件\core</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\operators.hpp">
+      <Filter>头文件\core</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\program.hpp">
+      <Filter>头文件\core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PostAnvil\tests\test_builder.cpp">

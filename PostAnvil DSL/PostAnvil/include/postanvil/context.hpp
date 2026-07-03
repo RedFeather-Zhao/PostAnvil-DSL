@@ -35,11 +35,12 @@ struct TransparentStrHash
 } // namespace detail
 
 /**
- * @brief 图像尺寸信息
+ * @brief 图像信息
  */
 struct Image {
-	double width = 0;  //< 图像宽度（像素）
-	double height = 0; //< 图像高度（像素）
+	double width = 0;	//< 图像宽度，单位 px
+	double height = 0;	//< 图像高度，单位 px
+	std::string path = "";	//< 图像路径，path/to/image.jpg
 };
 
 /**
@@ -51,29 +52,22 @@ struct Image {
  * 内部统一使用大写类别名，通过静态工厂 Create() 构造实例
  */
 struct Instance {
-	std::string cls;	//< 类别名（内部统一大写）
-	double x1 = 0;		//< 边界框左上角 x 坐标
-	double y1 = 0;		//< 边界框左上角 y 坐标
-	double w = 0;		//< 边界框宽度
-	double h = 0;		//< 边界框高度
-	double conf = 0.0;	//< 检测置信度，范围 [0.0, 1.0]
 
-	/** @brief 动态属性存储，用于属性算子（RULE ATTR）计算的结果 */
-	std::unordered_map<std::string, double,
-		detail::TransparentStrHash, std::equal_to<>> props;
+private:
+	// 禁止直接构造，必须使用静态工厂 Create()，以确保类别名统一大写
+	Instance() = default;
 
-	// ==================== 静态工厂 ====================
-
+public:
 	/**
-	 * @brief 创建实例，类别名自动转大写（统一内部大写规范）
+	 * @brief 静态工厂方法，创建实例，类别名不区分大小写，内部统一转大写
 	 *
-	 * @param cls   类别名（任意大小写）
+	 * @param cls   类别名
 	 * @param x1    左上角 x 坐标
 	 * @param y1    左上角 y 坐标
 	 * @param w     检测框宽度
 	 * @param h     检测框高度
 	 * @param conf  置信度，默认 1.0
-	 * @return      类别名已转大写的 Instance
+	 * @return      Instance 检测实例对象
 	 */
 	static Instance
 	Create(std::string_view cls, double x1, double y1, double w, double h, double conf = 1.0)
@@ -88,6 +82,19 @@ struct Instance {
 		}
 		return inst;
 	}
+
+	// ==================== 原生属性 ====================
+
+	std::string cls;	//< 类别名
+	double x1 = 0;		//< 边界框左上角 x 坐标
+	double y1 = 0;		//< 边界框左上角 y 坐标
+	double w = 0;		//< 边界框宽度
+	double h = 0;		//< 边界框高度
+	double conf = 0.0;	//< 检测置信度，范围 [0.0, 1.0]
+
+	/** @brief 动态属性存储，用于存储属性算子计算的结果 */
+	std::unordered_map<std::string, double,
+		detail::TransparentStrHash, std::equal_to<>> props;
 
 	// ==================== 派生属性 ====================
 
@@ -131,10 +138,6 @@ struct Instance {
 		}
 		return w / h;
 	}
-
-private:
-	// 禁止直接构造，必须使用静态工厂 Create()，以确保类别名统一大写
-	Instance() = default;
 };
 
 /**

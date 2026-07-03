@@ -24,8 +24,12 @@
     <ClInclude Include="PostAnvil\antlr4\PostAnvilListener.h" />
     <ClInclude Include="PostAnvil\antlr4\PostAnvilParser.h" />
     <ClInclude Include="PostAnvil\include\PostAnvil.h" />
-    <ClInclude Include="PostAnvil\include\postanvil\context.hpp" />
+    <ClInclude Include="PostAnvil\include\postanvil\common.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\compiler.hpp" />
+    <ClInclude Include="PostAnvil\include\postanvil\context.hpp" />
+    <ClInclude Include="PostAnvil\include\postanvil\expr_compiler.hpp" />
+    <ClInclude Include="PostAnvil\include\postanvil\operators.hpp" />
+    <ClInclude Include="PostAnvil\include\postanvil\program.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PostAnvil\antlr4\PostAnvilBaseListener.cpp" />
