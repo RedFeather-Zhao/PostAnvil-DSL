@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "PowerShell(Get-ChildItem \"D:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Professional\\\\MSBuild\\\\Current\\\\Bin\" -Filter \"MSBuild.exe\" | ForEach-Object { $_.FullName })",
-      "PowerShell($msbuild = \"D:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Professional\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild \"PostAnvil DSL\\\\PostAnvil DSL.vcxproj\" /p:Configuration=Debug /p:Platform=x64 /v:minimal 2>&1)"
+      "PowerShell($msbuild = \"D:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Professional\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild \"PostAnvil DSL\\\\PostAnvil DSL.vcxproj\" /p:Configuration=Debug /p:Platform=x64 /v:minimal 2>&1)",
+      "PowerShell(git *)"
     ]
   }
 }

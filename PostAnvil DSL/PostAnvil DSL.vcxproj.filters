@@ -25,6 +25,9 @@
     <Filter Include="源文件\test">
       <UniqueIdentifier>{e78fc19c-d042-46c5-bd5d-103bcf8c92ee}</UniqueIdentifier>
     </Filter>
+    <Filter Include="antlr4">
+      <UniqueIdentifier>{f2c80e81-538a-4438-9b14-0ce505de131c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PostAnvil\include\postanvil\ast.hpp">
@@ -45,10 +48,34 @@
     <ClInclude Include="PostAnvil\include\PostAnvil.h">
       <Filter>头文件\public</Filter>
     </ClInclude>
+    <ClInclude Include="PostAnvil\antlr4\PostAnvilBaseListener.h">
+      <Filter>antlr4</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\antlr4\PostAnvilLexer.h">
+      <Filter>antlr4</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\antlr4\PostAnvilListener.h">
+      <Filter>antlr4</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\antlr4\PostAnvilParser.h">
+      <Filter>antlr4</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PostAnvil\tests\test_builder.cpp">
       <Filter>源文件\test</Filter>
+    </ClCompile>
+    <ClCompile Include="PostAnvil\antlr4\PostAnvilBaseListener.cpp">
+      <Filter>antlr4</Filter>
+    </ClCompile>
+    <ClCompile Include="PostAnvil\antlr4\PostAnvilLexer.cpp">
+      <Filter>antlr4</Filter>
+    </ClCompile>
+    <ClCompile Include="PostAnvil\antlr4\PostAnvilListener.cpp">
+      <Filter>antlr4</Filter>
+    </ClCompile>
+    <ClCompile Include="PostAnvil\antlr4\PostAnvilParser.cpp">
+      <Filter>antlr4</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

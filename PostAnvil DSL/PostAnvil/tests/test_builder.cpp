@@ -10,7 +10,8 @@
  * - 数值运算：算术 + 比较 + 逻辑
  * - 属性访问：self.* / image.*（大小写不敏感）
  *
- * 每个测试用例独立构造场景与规则，验证后统计通过/失败。
+ * 内部统一使用大写：Parser 将源文本转大写，Instance::Create 将 cls 转大写，
+ * Scene key 也用大写，find() 直接精确匹配。
  *
  * @author RedFeather-Zhao
  * @date   June 2026
@@ -31,7 +32,6 @@ using namespace postanvil;
 // 测试辅助工具
 // ============================================================
 
-
 auto TEST_FAIL_COUNT = [](int delta = 0) {
 	static int g_failed = 0;
 	g_failed += delta;
@@ -43,31 +43,6 @@ auto TEST_PASS_COUNT = [](int delta = 0) {
 	g_passed += delta;
 	return g_passed;
 };
-
-
-/**
- * @brief 辅助函数：创建简单的正方形实例。
- */
-static Instance make_sq(std::string_view cls, double x1, double y1, double size, double conf = 1.0) {
-	Instance inst;
-	inst.cls = cls;
-	inst.x1 = x1; inst.y1 = y1;
-	inst.w = size; inst.h = size;
-	inst.conf = conf;
-	return inst;
-}
-
-/**
- * @brief 辅助函数：创建指定尺寸的矩形实例。
- */
-static Instance make_rect(std::string_view cls, double x1, double y1, double w, double h, double conf = 1.0) {
-	Instance inst;
-	inst.cls = cls;
-	inst.x1 = x1; inst.y1 = y1;
-	inst.w = w; inst.h = h;
-	inst.conf = conf;
-	return inst;
-}
 
 /**
  * @brief 辅助函数：验证评估结果中指定类别的保留实例数。
@@ -98,7 +73,7 @@ static void report(const char* name, bool passed, const std::string& detail = ""
 // ============================================================
 
 /**
- * @brief 测试 1：GLOBAL 置信度过滤（编译型）
+ * @brief 测试 1：GLOBAL 置信度过滤
  *
  * 规则：self.conf > 0.5
  * 预期：4 个实例中，conf=0.9 和 0.6 的保留，共 2 个。
@@ -112,18 +87,15 @@ RULE FILTER GLOBAL:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["A"].push_back(make_sq("A", 0, 0, 10, 0.9));
-	scene["A"].push_back(make_sq("A", 0, 0, 10, 0.6));
-	scene["A"].push_back(make_sq("A", 0, 0, 10, 0.4));
-	scene["A"].push_back(make_sq("A", 0, 0, 10, 0.2));
+	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.9));
+	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.6));
+	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.4));
+	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.2));
 
 	Image img{200, 200};
 
-	// 编译一次
 	SceneRuleCompiler compiler;
 	CompiledProgram program = compiler.compile(rules);
-
-	// 执行解码
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "A", 2);
@@ -135,7 +107,7 @@ RULE FILTER GLOBAL:
 }
 
 /**
- * @brief 测试 2：GLOBAL 多条件（尺寸 + 面积 + 宽高比）
+ * @brief 测试 2：GLOBAL 多条件（尺寸 + 面积）
  *
  * 规则：self.w > 10 AND self.h > 10 AND self.area > 200
  * 预期：20x30(area=600) 和 15x15(area=225) 保留，5x5 和 10x15 被过滤。
@@ -151,10 +123,10 @@ RULE FILTER GLOBAL:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["B"].push_back(make_rect("B", 0, 0, 20, 30));  // area=600 ✓
-	scene["B"].push_back(make_rect("B", 0, 0, 5, 5));     // w=5 ✗
-	scene["B"].push_back(make_rect("B", 0, 0, 15, 15));   // area=225 ✓
-	scene["B"].push_back(make_rect("B", 0, 0, 10, 15));   // w=10 ✗ (not >)
+	scene["B"].push_back(Instance::Create("B", 0, 0, 20, 30));  // area=600
+	scene["B"].push_back(Instance::Create("B", 0, 0, 5, 5));     // w=5
+	scene["B"].push_back(Instance::Create("B", 0, 0, 15, 15));   // area=225
+	scene["B"].push_back(Instance::Create("B", 0, 0, 10, 15));   // w=10 (not >)
 
 	Image img{200, 200};
 
@@ -170,7 +142,7 @@ RULE FILTER GLOBAL:
  * @brief 测试 3：比较运算符（>=, <=, !=）
  *
  * 规则：self.x1 >= 50 AND self.x1 <= 100 AND self.x1 != 75
- * 预期：x1=50 和 x1=100 保留，x1=10/x1=75/x1=200 被过滤。
+ * 预期：x1=50 和 x1=100 保留。
  */
 static void test03_comparison_operators() {
 	const char* src = R"(
@@ -183,11 +155,11 @@ RULE FILTER C:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["C"].push_back(make_rect("C", 10, 0, 10, 10));
-	scene["C"].push_back(make_rect("C", 50, 0, 10, 10));
-	scene["C"].push_back(make_rect("C", 100, 0, 10, 10));
-	scene["C"].push_back(make_rect("C", 200, 0, 10, 10));
-	scene["C"].push_back(make_rect("C", 75, 0, 10, 10));
+	scene["C"].push_back(Instance::Create("C", 10, 0, 10, 10));
+	scene["C"].push_back(Instance::Create("C", 50, 0, 10, 10));
+	scene["C"].push_back(Instance::Create("C", 100, 0, 10, 10));
+	scene["C"].push_back(Instance::Create("C", 200, 0, 10, 10));
+	scene["C"].push_back(Instance::Create("C", 75, 0, 10, 10));
 
 	Image img{200, 200};
 
@@ -201,9 +173,6 @@ RULE FILTER C:
 
 /**
  * @brief 测试 4：算术运算 + 一元取负
- *
- * 规则：self.x1 + self.w > 100 AND -self.y1 > -100
- * 预期：1 个保留。
  */
 static void test04_arithmetic_and_unary_minus() {
 	const char* src = R"(
@@ -215,9 +184,9 @@ RULE FILTER D:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["D"].push_back(make_rect("D", 10, 50, 20, 10));   // 30!>100 ✗
-	scene["D"].push_back(make_rect("D", 50, 50, 200, 10));  // 250>100 ✓, -50>-100 ✓ → kept
-	scene["D"].push_back(make_rect("D", 100, 150, 10, 10)); // 110>100 ✓, -150>-100 ✗
+	scene["D"].push_back(Instance::Create("D", 10, 50, 20, 10));
+	scene["D"].push_back(Instance::Create("D", 50, 50, 200, 10));
+	scene["D"].push_back(Instance::Create("D", 100, 150, 10, 10));
 
 	Image img{200, 200};
 
@@ -231,9 +200,6 @@ RULE FILTER D:
 
 /**
  * @brief 测试 5：乘法
- *
- * 规则：self.w * self.h > 300
- * 预期：20x30=600 > 300 ✓，其余被过滤 → 1 个保留。
  */
 static void test05_multiplication() {
 	const char* src = R"(
@@ -244,10 +210,10 @@ RULE FILTER E:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["E"].push_back(make_rect("E", 0, 0, 20, 30));  // 600 ✓
-	scene["E"].push_back(make_rect("E", 0, 0, 10, 10));  // 100 ✗
-	scene["E"].push_back(make_rect("E", 0, 0, 15, 15));  // 225 ✗
-	scene["E"].push_back(make_rect("E", 0, 0, 5, 20));   // 100 ✗
+	scene["E"].push_back(Instance::Create("E", 0, 0, 20, 30));  // 600
+	scene["E"].push_back(Instance::Create("E", 0, 0, 10, 10));  // 100
+	scene["E"].push_back(Instance::Create("E", 0, 0, 15, 15));  // 225
+	scene["E"].push_back(Instance::Create("E", 0, 0, 5, 20));   // 100
 
 	Image img{200, 200};
 
@@ -261,9 +227,6 @@ RULE FILTER E:
 
 /**
  * @brief 测试 5b：除法
- *
- * 规则：self.x1 / self.w < 2
- * 预期：x1=10,w=20→0.5<2 ✓, x1=100,w=20→5<2 ✗, x1=30,w=30→1<2 ✓ → 2 个保留。
  */
 static void test05b_division() {
 	const char* src = R"(
@@ -274,9 +237,9 @@ RULE FILTER E2:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["E2"].push_back(make_rect("E2", 10, 0, 20, 10));   // 10/20=0.5 < 2 ✓
-	scene["E2"].push_back(make_rect("E2", 100, 0, 20, 10));  // 100/20=5 < 2 ✗
-	scene["E2"].push_back(make_rect("E2", 30, 0, 30, 10));   // 30/30=1 < 2 ✓
+	scene["E2"].push_back(Instance::Create("E2", 10, 0, 20, 10));
+	scene["E2"].push_back(Instance::Create("E2", 100, 0, 20, 10));
+	scene["E2"].push_back(Instance::Create("E2", 30, 0, 30, 10));
 
 	Image img{200, 200};
 
@@ -290,9 +253,6 @@ RULE FILTER E2:
 
 /**
  * @brief 测试 6：逻辑 OR + 括号分组
- *
- * 规则：(self.w > 100 OR self.h > 100) AND self.conf > 0.5
- * 预期：2 个保留。
  */
 static void test06_logical_or_with_parens() {
 	const char* src = R"(
@@ -303,10 +263,10 @@ RULE FILTER F:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["F"].push_back(make_rect("F", 0, 0, 150, 10, 0.9));
-	scene["F"].push_back(make_rect("F", 0, 0, 10, 150, 0.9));
-	scene["F"].push_back(make_rect("F", 0, 0, 150, 150, 0.3));
-	scene["F"].push_back(make_rect("F", 0, 0, 10, 10, 0.9));
+	scene["F"].push_back(Instance::Create("F", 0, 0, 150, 10, 0.9));
+	scene["F"].push_back(Instance::Create("F", 0, 0, 10, 150, 0.9));
+	scene["F"].push_back(Instance::Create("F", 0, 0, 150, 150, 0.3));
+	scene["F"].push_back(Instance::Create("F", 0, 0, 10, 10, 0.9));
 
 	Image img{200, 200};
 
@@ -320,9 +280,6 @@ RULE FILTER F:
 
 /**
  * @brief 测试 7：逻辑 NOT
- *
- * 规则：NOT self.conf < 0.3
- * 预期：conf=0.2 被过滤，0.5 和 0.8 保留。
  */
 static void test07_logical_not() {
 	const char* src = R"(
@@ -333,9 +290,9 @@ RULE FILTER G:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["G"].push_back(make_sq("G", 0, 0, 10, 0.2));
-	scene["G"].push_back(make_sq("G", 0, 0, 10, 0.5));
-	scene["G"].push_back(make_sq("G", 0, 0, 10, 0.8));
+	scene["G"].push_back(Instance::Create("G", 0, 0, 10, 10, 0.2));
+	scene["G"].push_back(Instance::Create("G", 0, 0, 10, 10, 0.5));
+	scene["G"].push_back(Instance::Create("G", 0, 0, 10, 10, 0.8));
 
 	Image img{200, 200};
 
@@ -348,10 +305,7 @@ RULE FILTER G:
 }
 
 /**
- * @brief 测试 8：图像属性 image.width / image.height
- *
- * 规则：self.x1 + self.w <= image.width AND self.y1 + self.h <= image.height
- * 预期：仅 (10,10,20,20) 完全在图像内。
+ * @brief 测试 8：图像属性
  */
 static void test08_image_properties() {
 	const char* src = R"(
@@ -363,9 +317,9 @@ RULE FILTER H:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["H"].push_back(make_rect("H", 10, 10, 20, 20));   // 30≤200, 30≤100 ✓
-	scene["H"].push_back(make_rect("H", 180, 10, 30, 20));  // 210≤200 ✗
-	scene["H"].push_back(make_rect("H", 10, 80, 20, 30));   // 30≤200, 110≤100 ✗
+	scene["H"].push_back(Instance::Create("H", 10, 10, 20, 20));
+	scene["H"].push_back(Instance::Create("H", 180, 10, 30, 20));
+	scene["H"].push_back(Instance::Create("H", 10, 80, 20, 30));
 
 	Image img{200, 100};
 
@@ -379,9 +333,6 @@ RULE FILTER H:
 
 /**
  * @brief 测试 9：派生属性 cx, cy, x2, aspect
- *
- * 规则：self.cx > 50 AND self.cy > 50 AND self.x2 < 200 AND self.aspect >= 1.0
- * 预期：AA3 保留。
  */
 static void test09_derived_properties() {
 	const char* src = R"(
@@ -395,9 +346,9 @@ RULE FILTER AA:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["AA"].push_back(make_rect("AA", 0, 0, 100, 100));    // cx=50, cy=50 ✗
-	scene["AA"].push_back(make_rect("AA", 41, 0, 20, 20));     // cx=51, cy=10 ✗ (y)
-	scene["AA"].push_back(make_rect("AA", 41, 41, 20, 20));    // cx=51, cy=51 ✓
+	scene["AA"].push_back(Instance::Create("AA", 0, 0, 100, 100));
+	scene["AA"].push_back(Instance::Create("AA", 41, 0, 20, 20));
+	scene["AA"].push_back(Instance::Create("AA", 41, 41, 20, 20));
 
 	Image img{200, 200};
 
@@ -411,34 +362,28 @@ RULE FILTER AA:
 
 /**
  * @brief 测试 10：多类别 + GLOBAL + 类别规则组合
- *
- * 规则：
- *   GLOBAL：self.conf > 0.5
- *   Person：self.w > 20
- *   Vehicle：self.w > 100
- * 预期：Person=1, Vehicle=1, Animal=1
  */
 static void test10_multi_class_combined() {
 	const char* src = R"(
 RULE FILTER GLOBAL:
 	self.conf > 0.5
 
-RULE FILTER Person:
+RULE FILTER PERSON:
 	self.w > 20
 
-RULE FILTER Vehicle:
+RULE FILTER VEHICLE:
 	self.w > 100
 )";
 	Parser p; std::vector<Rule> rules;
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["Person"].push_back(make_rect("Person", 0, 0, 30, 30, 0.9));
-	scene["Person"].push_back(make_rect("Person", 0, 0, 15, 15, 0.9));
-	scene["Person"].push_back(make_rect("Person", 0, 0, 30, 30, 0.3));
-	scene["Vehicle"].push_back(make_rect("Vehicle", 0, 0, 150, 50, 0.9));
-	scene["Vehicle"].push_back(make_rect("Vehicle", 0, 0, 80, 50, 0.9));
-	scene["Animal"].push_back(make_rect("Animal", 0, 0, 10, 10, 0.9));
+	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 30, 30, 0.9));
+	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 15, 15, 0.9));
+	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 30, 30, 0.3));
+	scene["VEHICLE"].push_back(Instance::Create("VEHICLE", 0, 0, 150, 50, 0.9));
+	scene["VEHICLE"].push_back(Instance::Create("VEHICLE", 0, 0, 80, 50, 0.9));
+	scene["ANIMAL"].push_back(Instance::Create("ANIMAL", 0, 0, 10, 10, 0.9));
 
 	Image img{200, 200};
 
@@ -446,24 +391,20 @@ RULE FILTER Vehicle:
 	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
-	bool ok = check_count(res, "Person", 1)
-		   && check_count(res, "Vehicle", 1)
-		   && check_count(res, "Animal", 1);
+	bool ok = check_count(res, "PERSON", 1)
+		   && check_count(res, "VEHICLE", 1)
+		   && check_count(res, "ANIMAL", 1);
 	report("多类别 + GLOBAL + 类别规则组合", ok);
 	if (!ok) {
-		std::cout << "    期望: Person=1, Vehicle=1, Animal=1" << std::endl;
-		std::cout << "    实际: Person=" << (res.kept.contains("Person") ? (int)res.kept.at("Person").size() : 0)
-				  << ", Vehicle=" << (res.kept.contains("Vehicle") ? (int)res.kept.at("Vehicle").size() : 0)
-				  << ", Animal=" << (res.kept.contains("Animal") ? (int)res.kept.at("Animal").size() : 0) << std::endl;
+		std::cout << "    期望: PERSON=1, VEHICLE=1, ANIMAL=1" << std::endl;
+		std::cout << "    实际: PERSON=" << (res.kept.contains("PERSON") ? (int)res.kept.at("PERSON").size() : 0)
+				  << ", VEHICLE=" << (res.kept.contains("VEHICLE") ? (int)res.kept.at("VEHICLE").size() : 0)
+				  << ", ANIMAL=" << (res.kept.contains("ANIMAL") ? (int)res.kept.at("ANIMAL").size() : 0) << std::endl;
 	}
 }
 
 /**
- * @brief 测试 11：解码器复用 —— 编译一次，多个场景执行
- *
- * 规则：self.w > 40
- * 场景1：Z1 保留；场景2：Z2 保留；场景3：Z3 保留
- * 预期：场景1 Z=1；场景2 Z=1；场景3 Z=1
+ * @brief 测试 11：解码器复用
  */
 static void test11_program_reuse() {
 	const char* src = R"(
@@ -473,29 +414,25 @@ RULE FILTER Z:
 	Parser p; std::vector<Rule> rules;
 	assert(p.parse(src, rules));
 
-	// 编译一次
 	SceneRuleCompiler compiler;
 	CompiledProgram program = compiler.compile(rules);
 
 	Image img{200, 200};
 
-	// 场景1
 	Scene scene1;
-	scene1["Z"].push_back(make_rect("Z", 0, 0, 60, 60));   // 60 > 40 ✓
-	scene1["Z"].push_back(make_rect("Z", 0, 0, 30, 30));   // 30 > 40 ✗
+	scene1["Z"].push_back(Instance::Create("Z", 0, 0, 60, 60));
+	scene1["Z"].push_back(Instance::Create("Z", 0, 0, 30, 30));
 	EvalResult res1 = program.evaluate(scene1, img);
 	bool ok1 = check_count(res1, "Z", 1);
 
-	// 场景2
 	Scene scene2;
-	scene2["Z"].push_back(make_rect("Z", 0, 0, 80, 80));   // 80 > 40 ✓
-	scene2["Z"].push_back(make_rect("Z", 0, 0, 20, 20));   // 20 > 40 ✗
+	scene2["Z"].push_back(Instance::Create("Z", 0, 0, 80, 80));
+	scene2["Z"].push_back(Instance::Create("Z", 0, 0, 20, 20));
 	EvalResult res2 = program.evaluate(scene2, img);
 	bool ok2 = check_count(res2, "Z", 1);
 
-	// 场景3
 	Scene scene3;
-	scene3["Z"].push_back(make_rect("Z", 0, 0, 50, 10));   // 50 > 40 ✓
+	scene3["Z"].push_back(Instance::Create("Z", 0, 0, 50, 10));
 	EvalResult res3 = program.evaluate(scene3, img);
 	bool ok3 = check_count(res3, "Z", 1);
 
@@ -510,10 +447,6 @@ RULE FILTER Z:
 
 /**
  * @brief 测试 12：CompiledProgram 移动语义
- *
- * 验证 CompiledProgram 支持移动构造，移动后目标对象可正常使用。
- * 规则：GLOBAL self.conf > 0.5
- * 预期：移动后 program2 得到与 program1 相同的结果。
  */
 static void test12_program_move() {
 	const char* src = R"(
@@ -524,16 +457,14 @@ RULE FILTER GLOBAL:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["A"].push_back(make_sq("A", 0, 0, 10, 0.9));
-	scene["A"].push_back(make_sq("A", 0, 0, 10, 0.6));
-	scene["A"].push_back(make_sq("A", 0, 0, 10, 0.3));
+	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.9));
+	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.6));
+	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.3));
 
 	Image img{200, 200};
 
 	SceneRuleCompiler compiler;
 	CompiledProgram program1 = compiler.compile(rules);
-
-	// 移动 program
 	CompiledProgram program2 = std::move(program1);
 
 	EvalResult res = program2.evaluate(scene, img);
@@ -544,13 +475,10 @@ RULE FILTER GLOBAL:
 
 /**
  * @brief 测试 13：属性算子 —— 基本属性计算
- *
- * 规则：RULE ATTR Person: risk = self.conf * 2.0, size = self.w * self.h
- * 预期：每个实例的 props 中包含计算后的 RISK 和 SIZE 值。
  */
 static void test13_attr_compute_basic() {
 	const char* src = R"(
-RULE ATTR Person:
+RULE ATTR PERSON:
 	risk = self.conf * 2.0
 	size = self.w * self.h
 )";
@@ -558,8 +486,8 @@ RULE ATTR Person:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["Person"].push_back(make_rect("Person", 0, 0, 20, 30, 0.9));
-	scene["Person"].push_back(make_rect("Person", 0, 0, 10, 50, 0.5));
+	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 20, 30, 0.9));
+	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 10, 50, 0.5));
 
 	Image img{200, 200};
 
@@ -567,19 +495,16 @@ RULE ATTR Person:
 	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
-	// 验证属性值
 	bool ok = true;
-	auto it = res.kept.find("Person");
+	auto it = res.kept.find("PERSON");
 	if (it == res.kept.end() || it->second.size() != 2) {
 		ok = false;
 	} else {
-		double risk0 = it->second[0].props.at(std::string{"RISK"});
-		double size0 = it->second[0].props.at(std::string{"SIZE"});
-		double risk1 = it->second[1].props.at(std::string{"RISK"});
-		double size1 = it->second[1].props.at(std::string{"SIZE"});
+		double risk0 = it->second[0].props.at("RISK");
+		double size0 = it->second[0].props.at("SIZE");
+		double risk1 = it->second[1].props.at("RISK");
+		double size1 = it->second[1].props.at("SIZE");
 
-		// Person[0]: conf=0.9, w=20, h=30 → risk=1.8, size=600
-		// Person[1]: conf=0.5, w=10, h=50 → risk=1.0, size=500
 		if (std::abs(risk0 - 1.8) > 0.001 || std::abs(size0 - 600.0) > 0.001) ok = false;
 		if (std::abs(risk1 - 1.0) > 0.001 || std::abs(size1 - 500.0) > 0.001) ok = false;
 	}
@@ -600,28 +525,22 @@ RULE ATTR Person:
 
 /**
  * @brief 测试 14：属性算子 + 过滤算子组合（含除法）
- *
- * 规则：先 RULE ATTR 计算 density，再 RULE FILTER 用 density 过滤
- * 预期：只有 density < 0.5 的实例保留。
  */
 static void test14_attr_then_filter() {
 	const char* src = R"(
-RULE ATTR Person:
+RULE ATTR PERSON:
 	density = self.conf / (self.w * self.h)
 
-RULE FILTER Person:
+RULE FILTER PERSON:
 	self.density < 0.5
 )";
 	Parser p; std::vector<Rule> rules;
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	// Person[0]: conf=0.9, w=20, h=30 → density=0.9/600=0.0015 < 0.5 ✓
-	// Person[1]: conf=0.5, w=10, h=10 → density=0.5/100=0.005  < 0.5 ✓
-	// Person[2]: conf=0.9, w=1, h=1   → density=0.9/1=0.9     > 0.5 ✗
-	scene["Person"].push_back(make_rect("Person", 0, 0, 20, 30, 0.9));
-	scene["Person"].push_back(make_rect("Person", 0, 0, 10, 10, 0.5));
-	scene["Person"].push_back(make_rect("Person", 0, 0, 1, 1, 0.9));
+	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 20, 30, 0.9));
+	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 10, 10, 0.5));
+	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 1, 1, 0.9));
 
 	Image img{200, 200};
 
@@ -629,19 +548,16 @@ RULE FILTER Person:
 	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
-	bool ok = check_count(res, "Person", 2);
+	bool ok = check_count(res, "PERSON", 2);
 	report("属性算子 + 过滤算子组合 (density = conf / (w * h))", ok);
 	if (!ok) {
-		int cnt = res.kept.contains("Person") ? (int)res.kept.at("Person").size() : 0;
-		std::cout << "    期望: Person=2, 实际: Person=" << cnt << std::endl;
+		int cnt = res.kept.contains("PERSON") ? (int)res.kept.at("PERSON").size() : 0;
+		std::cout << "    期望: PERSON=2, 实际: PERSON=" << cnt << std::endl;
 	}
 }
 
 /**
  * @brief 测试 15：大小写不敏感验证
- *
- * 验证同一规则以不同大小写书写均能正确工作。
- * 规则使用大写 SELF/W/CONF/AND 等关键字和属性名。
  */
 static void test15_case_insensitive() {
 	const char* src = R"(
@@ -649,14 +565,13 @@ RULE FILTER GLOBAL:
 	SELF.CONF > 0.5
 	SELF.W > 10
 )";
-
 	Parser p; std::vector<Rule> rules;
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["X"].push_back(make_rect("X", 0, 0, 20, 20, 0.9));   // ✓
-	scene["X"].push_back(make_rect("X", 0, 0, 5, 5, 0.9));     // w=5 ✗
-	scene["X"].push_back(make_rect("X", 0, 0, 20, 20, 0.3));   // conf=0.3 ✗
+	scene["X"].push_back(Instance::Create("X", 0, 0, 20, 20, 0.9));
+	scene["X"].push_back(Instance::Create("X", 0, 0, 5, 5, 0.9));
+	scene["X"].push_back(Instance::Create("X", 0, 0, 20, 20, 0.3));
 
 	Image img{200, 200};
 
@@ -670,9 +585,6 @@ RULE FILTER GLOBAL:
 
 /**
  * @brief 测试 16：GLOBAL 属性算子
- *
- * 规则：RULE ATTR GLOBAL: area_calc = self.w * self.h
- * 预期：所有类别所有实例的 props 中均包含 AREA_CALC。
  */
 static void test16_attr_global() {
 	const char* src = R"(
@@ -683,8 +595,8 @@ RULE ATTR GLOBAL:
 	assert(p.parse(src, rules));
 
 	Scene scene;
-	scene["Cat"].push_back(make_rect("Cat", 0, 0, 10, 20));
-	scene["Dog"].push_back(make_rect("Dog", 0, 0, 30, 40));
+	scene["CAT"].push_back(Instance::Create("CAT", 0, 0, 10, 20));
+	scene["DOG"].push_back(Instance::Create("DOG", 0, 0, 30, 40));
 
 	Image img{200, 200};
 
@@ -693,8 +605,8 @@ RULE ATTR GLOBAL:
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = true;
-	auto it_cat = res.kept.find("Cat");
-	auto it_dog = res.kept.find("Dog");
+	auto it_cat = res.kept.find("CAT");
+	auto it_dog = res.kept.find("DOG");
 	if (it_cat == res.kept.end() || it_cat->second.empty()) ok = false;
 	else if (std::abs(it_cat->second[0].props.at("AREA_CALC") - 200.0) > 0.001) ok = false;
 
@@ -710,7 +622,6 @@ RULE ATTR GLOBAL:
 
 /**
  * @brief 编译型评估器测试入口。
- * 依次执行所有测试用例，统计并输出通过/失败结果。
  * @return 0 表示全部通过，1 表示存在失败。
  */
 int main() {
@@ -718,9 +629,8 @@ int main() {
 	std::cout << "  PostAnvil SceneRuleCompiler 编译型规则编译器测试" << std::endl;
 	std::cout << "========================================" << std::endl;
 	std::cout << std::endl;
-	
-	try
-	{
+
+	try {
 		// ---------- 基础过滤 ----------
 		std::cout << "--- 基础过滤 ---" << std::endl;
 		test01_global_confidence_filter();
@@ -769,9 +679,8 @@ int main() {
 		test15_case_insensitive();
 		test16_attr_global();
 		std::cout << std::endl;
-	}
-	catch (const std::exception& e) {
-		std::cout << "[ERROR] 解析错误: " << e.what() << std::endl;
+	} catch (const std::exception& e) {
+		std::cout << "[ERROR] " << e.what() << std::endl;
 	}
 
 	// ---------- 结果统计 ----------

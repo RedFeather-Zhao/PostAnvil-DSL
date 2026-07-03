@@ -110,9 +110,9 @@ public:
 		std::istringstream ss(src);
 		std::string line;
 		while (std::getline(ss, line)) {
-			//for (auto& ch : line) {
-			//	ch = (char)std::toupper(static_cast<unsigned char>(ch));
-			//}
+			for (auto& ch : line) {
+				ch = (char)std::toupper(static_cast<unsigned char>(ch));
+			}
 			raw_lines.push_back(line);
 		}
 
