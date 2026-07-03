@@ -24,10 +24,7 @@
     <ClInclude Include="PostAnvil\antlr4\PostAnvilListener.h" />
     <ClInclude Include="PostAnvil\antlr4\PostAnvilParser.h" />
     <ClInclude Include="PostAnvil\include\PostAnvil.h" />
-    <ClInclude Include="PostAnvil\include\postanvil\ast.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\context.hpp" />
-    <ClInclude Include="PostAnvil\include\postanvil\lexer.hpp" />
-    <ClInclude Include="PostAnvil\include\postanvil\parser.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\compiler.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -93,11 +90,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>D:\UserBin\antlr-vs2022-runtime\include;D:\UserProject\vsstudio\PostAnvil DSL\PostAnvil DSL\PostAnvil\include;$(IncludePath)</IncludePath>
+    <IncludePath>D:\UserProject\vsstudio\PostAnvil DSL\PostAnvil DSL\PostAnvil\antlr4;D:\UserBin\antlr-vs2022-runtime\include;D:\UserProject\vsstudio\PostAnvil DSL\PostAnvil DSL\PostAnvil\include;$(IncludePath)</IncludePath>
     <LibraryPath>D:\UserBin\antlr-vs2022-runtime\x64\lib\Debug Static;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>D:\UserBin\antlr-vs2022-runtime\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>D:\UserProject\vsstudio\PostAnvil DSL\PostAnvil DSL\PostAnvil\antlr4;D:\UserBin\antlr-vs2022-runtime\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
     <LibraryPath>D:\UserBin\antlr-vs2022-runtime\x64\lib\Release Static;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -138,7 +135,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);ANTLR4CPP_STATIC</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
@@ -157,7 +154,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;ANTLR4CPP_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);ANTLR4CPP_STATIC</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>

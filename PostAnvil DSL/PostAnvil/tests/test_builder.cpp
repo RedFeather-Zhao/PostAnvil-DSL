@@ -1,6 +1,6 @@
 ﻿/**
  * @file test_builder.cpp
- * @brief SceneRuleCompiler 编译型场景规则编译器独立测试。
+ * @brief PostAnvil ANTLR4 迁移测试 —— 基于 PostAnvilCompiler 的编译型规则编译器测试。
  *
  * 测试覆盖范围：
  * - 基础编译：GLOBAL 规则 → CompiledProgram → 执行
@@ -10,8 +10,9 @@
  * - 数值运算：算术 + 比较 + 逻辑
  * - 属性访问：self.* / image.*（大小写不敏感）
  *
- * 内部统一使用大写：Parser 将源文本转大写，Instance::Create 将 cls 转大写，
- * Scene key 也用大写，find() 直接精确匹配。
+ * 迁移变更：
+ * - 所有规则使用 RULEEND 关键字结束
+ * - 使用 PostAnvilCompiler::compile() 替代旧的 Parser::parse() + SceneRuleCompiler::compile()
  *
  * @author RedFeather-Zhao
  * @date   June 2026
@@ -82,9 +83,10 @@ static void test01_global_confidence_filter() {
 	const char* src = R"(
 RULE FILTER GLOBAL:
 	self.conf > 0.5
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.9));
@@ -94,8 +96,6 @@ RULE FILTER GLOBAL:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "A", 2);
@@ -118,9 +118,10 @@ RULE FILTER GLOBAL:
 	self.w > 10
 	self.h > 10
 	self.area > 200
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["B"].push_back(Instance::Create("B", 0, 0, 20, 30));  // area=600
@@ -130,8 +131,6 @@ RULE FILTER GLOBAL:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "B", 2);
@@ -150,9 +149,10 @@ RULE FILTER C:
 	self.x1 >= 50
 	self.x1 <= 100
 	self.x1 != 75
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["C"].push_back(Instance::Create("C", 10, 0, 10, 10));
@@ -163,8 +163,6 @@ RULE FILTER C:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "C", 2);
@@ -179,9 +177,10 @@ static void test04_arithmetic_and_unary_minus() {
 RULE FILTER D:
 	self.x1 + self.w > 100
 	-self.y1 > -100
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["D"].push_back(Instance::Create("D", 10, 50, 20, 10));
@@ -190,8 +189,6 @@ RULE FILTER D:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "D", 1);
@@ -205,9 +202,10 @@ static void test05_multiplication() {
 	const char* src = R"(
 RULE FILTER E:
 	self.w * self.h > 300
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["E"].push_back(Instance::Create("E", 0, 0, 20, 30));  // 600
@@ -217,8 +215,6 @@ RULE FILTER E:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "E", 1);
@@ -232,9 +228,10 @@ static void test05b_division() {
 	const char* src = R"(
 RULE FILTER E2:
 	self.x1 / self.w < 2
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["E2"].push_back(Instance::Create("E2", 10, 0, 20, 10));
@@ -243,8 +240,6 @@ RULE FILTER E2:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "E2", 2);
@@ -258,9 +253,10 @@ static void test06_logical_or_with_parens() {
 	const char* src = R"(
 RULE FILTER F:
 	(self.w > 100 OR self.h > 100) AND self.conf > 0.5
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["F"].push_back(Instance::Create("F", 0, 0, 150, 10, 0.9));
@@ -270,8 +266,6 @@ RULE FILTER F:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "F", 2);
@@ -285,9 +279,10 @@ static void test07_logical_not() {
 	const char* src = R"(
 RULE FILTER G:
 	NOT self.conf < 0.3
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["G"].push_back(Instance::Create("G", 0, 0, 10, 10, 0.2));
@@ -296,8 +291,6 @@ RULE FILTER G:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "G", 2);
@@ -312,9 +305,10 @@ static void test08_image_properties() {
 RULE FILTER H:
 	self.x1 + self.w <= image.w
 	self.y1 + self.h <= image.h
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["H"].push_back(Instance::Create("H", 10, 10, 20, 20));
@@ -323,8 +317,6 @@ RULE FILTER H:
 
 	Image img{200, 100};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "H", 1);
@@ -341,9 +333,10 @@ RULE FILTER AA:
 	self.cy > 50
 	self.x2 < 200
 	self.aspect >= 1.0
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["AA"].push_back(Instance::Create("AA", 0, 0, 100, 100));
@@ -352,8 +345,6 @@ RULE FILTER AA:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "AA", 1);
@@ -367,15 +358,18 @@ static void test10_multi_class_combined() {
 	const char* src = R"(
 RULE FILTER GLOBAL:
 	self.conf > 0.5
+RULEEND
 
 RULE FILTER PERSON:
 	self.w > 20
+RULEEND
 
 RULE FILTER VEHICLE:
 	self.w > 100
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 30, 30, 0.9));
@@ -387,8 +381,6 @@ RULE FILTER VEHICLE:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "PERSON", 1)
@@ -410,12 +402,10 @@ static void test11_program_reuse() {
 	const char* src = R"(
 RULE FILTER Z:
 	self.w > 40
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
-
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Image img{200, 200};
 
@@ -452,9 +442,10 @@ static void test12_program_move() {
 	const char* src = R"(
 RULE FILTER GLOBAL:
 	self.conf > 0.5
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program1 = compiler.compile(src);
 
 	Scene scene;
 	scene["A"].push_back(Instance::Create("A", 0, 0, 10, 10, 0.9));
@@ -463,8 +454,6 @@ RULE FILTER GLOBAL:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program1 = compiler.compile(rules);
 	CompiledProgram program2 = std::move(program1);
 
 	EvalResult res = program2.evaluate(scene, img);
@@ -481,9 +470,10 @@ static void test13_attr_compute_basic() {
 RULE ATTR PERSON:
 	risk = self.conf * 2.0
 	size = self.w * self.h
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 20, 30, 0.9));
@@ -491,8 +481,6 @@ RULE ATTR PERSON:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = true;
@@ -530,12 +518,14 @@ static void test14_attr_then_filter() {
 	const char* src = R"(
 RULE ATTR PERSON:
 	density = self.conf / (self.w * self.h)
+RULEEND
 
 RULE FILTER PERSON:
 	self.density < 0.5
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["PERSON"].push_back(Instance::Create("PERSON", 0, 0, 20, 30, 0.9));
@@ -544,8 +534,6 @@ RULE FILTER PERSON:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "PERSON", 2);
@@ -564,9 +552,10 @@ static void test15_case_insensitive() {
 RULE FILTER GLOBAL:
 	SELF.CONF > 0.5
 	SELF.W > 10
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["X"].push_back(Instance::Create("X", 0, 0, 20, 20, 0.9));
@@ -575,8 +564,6 @@ RULE FILTER GLOBAL:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = check_count(res, "X", 1);
@@ -590,9 +577,10 @@ static void test16_attr_global() {
 	const char* src = R"(
 RULE ATTR GLOBAL:
 	area_calc = self.w * self.h
+RULEEND
 )";
-	Parser p; std::vector<Rule> rules;
-	assert(p.parse(src, rules));
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
 
 	Scene scene;
 	scene["CAT"].push_back(Instance::Create("CAT", 0, 0, 10, 20));
@@ -600,8 +588,6 @@ RULE ATTR GLOBAL:
 
 	Image img{200, 200};
 
-	SceneRuleCompiler compiler;
-	CompiledProgram program = compiler.compile(rules);
 	EvalResult res = program.evaluate(scene, img);
 
 	bool ok = true;
@@ -621,12 +607,12 @@ RULE ATTR GLOBAL:
 // ============================================================
 
 /**
- * @brief 编译型评估器测试入口。
+ * @brief PostAnvil ANTLR4 迁移测试入口。
  * @return 0 表示全部通过，1 表示存在失败。
  */
 int main() {
 	std::cout << "========================================" << std::endl;
-	std::cout << "  PostAnvil SceneRuleCompiler 编译型规则编译器测试" << std::endl;
+	std::cout << "  PostAnvil ANTLR4 迁移 —— 编译型规则编译器测试" << std::endl;
 	std::cout << "========================================" << std::endl;
 	std::cout << std::endl;
 
@@ -681,6 +667,7 @@ int main() {
 		std::cout << std::endl;
 	} catch (const std::exception& e) {
 		std::cout << "[ERROR] " << e.what() << std::endl;
+		TEST_FAIL_COUNT(1);
 	}
 
 	// ---------- 结果统计 ----------

@@ -30,16 +30,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="PostAnvil\include\postanvil\ast.hpp">
-      <Filter>头文件\core</Filter>
-    </ClInclude>
     <ClInclude Include="PostAnvil\include\postanvil\context.hpp">
-      <Filter>头文件\core</Filter>
-    </ClInclude>
-    <ClInclude Include="PostAnvil\include\postanvil\lexer.hpp">
-      <Filter>头文件\core</Filter>
-    </ClInclude>
-    <ClInclude Include="PostAnvil\include\postanvil\parser.hpp">
       <Filter>头文件\core</Filter>
     </ClInclude>
     <ClInclude Include="PostAnvil\include\postanvil\compiler.hpp">
