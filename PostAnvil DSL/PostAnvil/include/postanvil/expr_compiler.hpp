@@ -11,7 +11,6 @@
  */
 
 #pragma once
-#include "antlr4-runtime.h"
 #include "PostAnvilParser.h"
 #include <functional>
 #include <string>
@@ -33,6 +32,9 @@ namespace postanvil {
  */
 class TreeExprCompiler {
 public:
+	static const inline char* OBJECT_SELF = "SELF";
+	static const inline char* OBJECT_IMAGE = "IMAGE";
+
 	TreeExprCompiler() = default;
 
 	/**
@@ -42,7 +44,7 @@ public:
 	 */
 	NumFunc compile(::PostAnvilParser::ExprContext* ctx) {
 		if (!ctx || !ctx->or_expr()) {
-			return [](const Instance&, const Scene&, const Image&) { return 0.0; };
+			return [](const Instance&, const Scene&) { return 0.0; };
 		}
 		return compileOr(ctx->or_expr());
 	}
@@ -61,8 +63,8 @@ private:
 		for (size_t i = 0; i < or_count; i++) {
 			auto right = compileAnd(and_exprs[i + 1]);
 			left = [l = std::move(left), r = std::move(right)]
-				(const Instance& self, const Scene& scene, const Image& img) -> double {
-				return ((l(self, scene, img) != 0.0) || (r(self, scene, img) != 0.0)) ? 1.0 : 0.0;
+				(const Instance& self, const Scene& scene) -> double {
+				return ((l(self, scene) != 0.0) || (r(self, scene) != 0.0)) ? 1.0 : 0.0;
 			};
 		}
 		return left;
@@ -79,8 +81,8 @@ private:
 		for (size_t i = 0; i < and_count; i++) {
 			auto right = compileNot(not_exprs[i + 1]);
 			left = [l = std::move(left), r = std::move(right)]
-				(const Instance& self, const Scene& scene, const Image& img) -> double {
-				return ((l(self, scene, img) != 0.0) && (r(self, scene, img) != 0.0)) ? 1.0 : 0.0;
+				(const Instance& self, const Scene& scene) -> double {
+				return ((l(self, scene) != 0.0) && (r(self, scene) != 0.0)) ? 1.0 : 0.0;
 			};
 		}
 		return left;
@@ -93,8 +95,8 @@ private:
 		if (ctx->NOT()) {
 			auto rhs = compileNot(ctx->not_expr());
 			return [r = std::move(rhs)]
-				(const Instance& self, const Scene& scene, const Image& img) -> double {
-				return r(self, scene, img) == 0.0 ? 1.0 : 0.0;
+				(const Instance& self, const Scene& scene) -> double {
+				return r(self, scene) == 0.0 ? 1.0 : 0.0;
 			};
 		}
 		return compileCmp(ctx->cmp_expr());
@@ -111,9 +113,9 @@ private:
 			std::string op = getCompOp(ctx->comp_op());
 			auto right = compileAdd(add_exprs[1]);
 			return [l = std::move(left), r = std::move(right), op = std::move(op)]
-				(const Instance& self, const Scene& scene, const Image& img) -> double {
-				double lv = l(self, scene, img);
-				double rv = r(self, scene, img);
+				(const Instance& self, const Scene& scene) {
+				double lv = l(self, scene);
+				double rv = r(self, scene);
 				if (op == ">")   return lv >  rv ? 1.0 : 0.0;
 				if (op == "<")   return lv <  rv ? 1.0 : 0.0;
 				if (op == ">=")  return lv >= rv ? 1.0 : 0.0;
@@ -138,9 +140,9 @@ private:
 			std::string op = getAddOp(add_ops[i]);
 			auto right = compileMul(mul_exprs[i + 1]);
 			left = [l = std::move(left), r = std::move(right), op = std::move(op)]
-				(const Instance& self, const Scene& scene, const Image& img) -> double {
-				double lv = l(self, scene, img);
-				double rv = r(self, scene, img);
+				(const Instance& self, const Scene& scene) {
+				double lv = l(self, scene);
+				double rv = r(self, scene);
 				if (op == "+") return lv + rv;
 				if (op == "-") return lv - rv;
 				return 0.0;
@@ -161,9 +163,9 @@ private:
 			std::string op = getMulOp(mul_ops[i]);
 			auto right = compileUnary(unary_exprs[i + 1]);
 			left = [l = std::move(left), r = std::move(right), op = std::move(op)]
-				(const Instance& self, const Scene& scene, const Image& img) -> double {
-				double lv = l(self, scene, img);
-				double rv = r(self, scene, img);
+				(const Instance& self, const Scene& scene) {
+				double lv = l(self, scene);
+				double rv = r(self, scene);
 				if (op == "*") return lv * rv;
 				if (op == "/") return rv != 0.0 ? lv / rv : 0.0;
 				return 0.0;
@@ -179,8 +181,8 @@ private:
 		if (ctx->MINUS()) {
 			auto rhs = compileUnary(ctx->unary_expr());
 			return [r = std::move(rhs)]
-				(const Instance& self, const Scene& scene, const Image& img) -> double {
-				return -r(self, scene, img);
+				(const Instance& self, const Scene& scene) -> double {
+				return -r(self, scene);
 			};
 		}
 		return compilePrimary(ctx->primary());
@@ -193,7 +195,7 @@ private:
 		// 数字字面量
 		if (ctx->NUMBER()) {
 			double v = std::stod(ctx->NUMBER()->getText());
-			return [v](const Instance&, const Scene&, const Image&) { return v; };
+			return [v](const Instance&, const Scene&) { return v; };
 		}
 
 		// 属性访问
@@ -206,7 +208,7 @@ private:
 			return compile(ctx->expr());
 		}
 
-		return [](const Instance&, const Scene&, const Image&) { return 0.0; };
+		return [](const Instance&, const Scene&) { return 0.0; };
 	}
 
 	/**
@@ -220,7 +222,7 @@ private:
 		size_t prop_start_idx = 0;
 
 		if (ctx->SELF()) {
-			object = "SELF";
+			object = OBJECT_SELF;
 			// 第一个 IDENTIFIER 是属性名
 		} else {
 			object = ctx->IDENTIFIER(0)->getText();
@@ -230,7 +232,7 @@ private:
 		// 转大写
 		to_upper_inplace(object);
 
-		// 获取属性名（取最后一个 IDENTIFIER，支持链式访问）
+		// 获取属性名（取最后一个 IDENTIFIER，预留链式访问）
 		auto identifiers = ctx->IDENTIFIER();
 		std::string prop;
 		if (identifiers.size() > prop_start_idx) {
@@ -238,12 +240,12 @@ private:
 			to_upper_inplace(prop);
 		}
 
-		return [object, prop](const Instance& self, const Scene&, const Image& img) -> double {
-			if (object == "SELF") {
-				return get_instance_prop(self, prop);
+		return [object, prop](const Instance& self, const Scene& scene) -> double {
+			if (object == OBJECT_SELF) {
+				return get_instance_prop(self, scene, prop);
 			}
-			if (object == "IMAGE") {
-				return get_image_prop(img, prop);
+			if (object == OBJECT_IMAGE) {
+				return get_image_prop(scene.image, prop);
 			}
 			return 0.0;
 		};

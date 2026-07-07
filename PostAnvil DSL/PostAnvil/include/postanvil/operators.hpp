@@ -27,13 +27,17 @@ struct EvalResult {
 	Scene kept;		//< 评估保留的场景，保留按类别组织的实例映射
 
 public:
-	explicit EvalResult(Scene scene = {})
+	explicit EvalResult(const Scene& scene)
+		: kept(scene)
+	{
+	}
+
+	explicit EvalResult(Scene&& scene)
 		: kept(std::move(scene))
 	{
 	}
 
 	EvalResult(EvalResult&&) noexcept = default;
-
 	EvalResult& operator=(EvalResult&&) noexcept = default;
 };
 
@@ -44,15 +48,13 @@ public:
  * 读取并修改上下文，实现管道式的数据变换。
  *
  * 当前包含：
- * - scene：可变场景（算子逐步变换，如过滤、新增类别等）
- * - image：图像元信息（只读）
+ * - scene：场景（算子逐步变换，图像元数据，如过滤、新增类别等）
  */
 struct EvaluationContext {
-	const static inline std::string GLOBAL_TARGET = "GLOBAL";	//< 全局目标类别名
+	const static inline char* GLOBAL_TARGET = "GLOBAL";	//< 全局目标类别名
 
-	Scene scene;		//< 可变场景，算子可修改
-	const Image& image;	//< 图像信息，算子可读取但不可修改
-
+	Scene scene;		//< 场景
+	
 	// TODO 更多上下文字段计划在未来扩展，如：
 	// std::unordered_map<std::string, double> global_vars; //< 全局变量
 	// 帧缓存：用于跨算子或跨帧传递信息，如多帧一致性过滤
@@ -65,8 +67,8 @@ struct EvaluationContext {
 	 * @param s   - 初始输入场景
 	 * @param img - 图像信息
 	 */
-	EvaluationContext(const Scene& s, const Image& img)
-		: scene(s), image(img)
+	explicit EvaluationContext(const Scene& s)
+		: scene(s)
 	{
 	}
 
@@ -75,9 +77,7 @@ struct EvaluationContext {
 	 * @return 包含当前场景的评估结果
 	 */
 	EvalResult to_result() const {
-		EvalResult res;
-		res.kept = scene;
-		return res;
+		return EvalResult(scene);
 	}
 };
 
@@ -151,7 +151,7 @@ public:
 		// 单实例合法性校验：所有条件均满足则返回 true
 		auto is_valid = [&](const auto& inst) {
 			return std::ranges::all_of(conditions, [&](const auto& cond) {
-				return cond(inst, ctx.scene, ctx.image);
+				return cond(inst, ctx.scene);
 			});
 		};
 
@@ -163,14 +163,14 @@ public:
 		};
 
 		if (target == EvaluationContext::GLOBAL_TARGET) {
-			for (auto& [name, instances] : ctx.scene) {
+			for (auto& [name, instances] : ctx.scene.objects) {
 				filterInstances(instances);
 			}
 			return;
 		}
 
-		auto it = ctx.scene.find(target);
-		if (it != ctx.scene.end()) {
+		auto it = ctx.scene.objects.find(target);
+		if (it != ctx.scene.objects.end()) {
 			filterInstances(it->second);
 		}
 	}
@@ -219,20 +219,20 @@ struct AttributeOperator : SceneOperator {
 		auto compute_attrs = [&](Instances& instances) {
 			for (auto& inst : instances) {
 				for (const auto& def : attr_defs) {
-					inst.props[def.name] = def.expression(inst, ctx.scene, ctx.image);
+					inst.set_prop(def.name, def.expression(inst, ctx.scene));
 				}
 			}
 		};
 
 		if (target == EvaluationContext::GLOBAL_TARGET) {
-			for (auto& [name, instances] : ctx.scene) {
+			for (auto& [name, instances] : ctx.scene.objects) {
 				compute_attrs(instances);
 			}
 			return;
 		}
 
-		auto it = ctx.scene.find(target);
-		if (it != ctx.scene.end()) {
+		auto it = ctx.scene.objects.find(target);
+		if (it != ctx.scene.objects.end()) {
 			compute_attrs(it->second);
 		}
 	}

@@ -50,11 +50,10 @@ public:
 	 * 3. 将最终上下文转换为 EvalResult 返回
 	 *
 	 * @param scene 输入场景数据
-	 * @param image 图像尺寸信息
 	 * @return 评估结果
 	 */
-	EvalResult evaluate(const Scene& scene, const Image& image) const {
-		EvaluationContext ctx(scene, image);
+	EvalResult evaluate(const Scene& scene) const {
+		EvaluationContext ctx(scene);
 
 		for (const auto& op : operators) {
 			op->apply(ctx);

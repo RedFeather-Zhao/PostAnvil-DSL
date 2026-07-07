@@ -58,7 +58,8 @@ struct PostAnvilErrorListener : public antlr4::BaseErrorListener {
 
 	void syntaxError(antlr4::Recognizer* /*recognizer*/, antlr4::Token* /*offendingSymbol*/,
 	                 size_t line, size_t charPositionInLine,
-	                 const std::string& msg, std::exception_ptr /*e*/) override {
+	                 const std::string& msg, std::exception_ptr /*e*/) override
+	{
 		errors.emplace_back(static_cast<int>(line), static_cast<int>(charPositionInLine), msg);
 	}
 
@@ -129,8 +130,11 @@ public:
 
 		// 检查语法错误
 		if (error_listener.hasErrors()) {
-			const auto& err = error_listener.errors[0];
-			throw CompileError(err.message, err.line, err.col);
+			std::string err_msg;
+			for (const auto& err : error_listener.errors) {
+				err_msg += std::format("line {} col {}: {}\n", err.line, err.col, err.message);
+			}
+			throw CompileError(err_msg);
 		}
 
 		// 使用 Listener 遍历 ParseTree，构建算子管道
@@ -179,8 +183,8 @@ public:
 
 		auto numFunc = m_expr_compiler.compile(ctx->expr());
 		m_current_filter->conditions.emplace_back(
-			[numFunc](const Instance& self, const Scene& scene, const Image& img) {
-				return numFunc(self, scene, img) != 0.0;
+			[numFunc](const Instance& self, const Scene& scene) {
+				return numFunc(self, scene) != 0.0;
 			}
 		);
 	}
