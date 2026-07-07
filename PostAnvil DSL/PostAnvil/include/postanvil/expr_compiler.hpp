@@ -6,15 +6,21 @@
  *         支持的表达式层级：expr → or/and/not/cmp/add/mul/unary → primary
  *         不使用中间 AST，直接从 ParseTree 编译为闭包。
  * @author RedFeather-Zhao
- * @date   June 2026
+ * @date   July 2026
  * @copyright Copyright (c) 2026 RedFeather-Zhao, All Rights Reserved.
  */
 
 #pragma once
+
 #include "PostAnvilParser.h"
 #include <functional>
 #include <string>
 #include <cmath>
+#include <unordered_map>
+#include <algorithm>
+
+#include "utils.hpp"
+#include "type.hpp"
 
 namespace postanvil {
 
@@ -33,12 +39,17 @@ namespace postanvil {
 class TreeExprCompiler {
 public:
 	static const inline char* OBJECT_SELF = "SELF";
-	static const inline char* OBJECT_IMAGE = "IMAGE";
+	static const inline char* OBJECT_IMAGE = "IMG";
+
+	/**
+	 * @brief 函数注册表指针，由编译器在编译前设置
+	 */
+	std::unordered_map<std::string, CompiledFunc>* functions = nullptr;
 
 	TreeExprCompiler() = default;
 
 	/**
-	 * @brief 编译表达式入口
+	 * @brief 编译表达式入口（ExprContext）
 	 * @param ctx - ANTLR4 表达式 ParseTree 节点
 	 * @return NumFunc - 编译后的数值计算函数
 	 */
@@ -47,6 +58,18 @@ public:
 			return [](const Instance&, const Scene&) { return 0.0; };
 		}
 		return compileOr(ctx->or_expr());
+	}
+
+	/**
+	 * @brief 编译或表达式入口（Or_exprContext）
+	 * @param ctx - ANTLR4 or_expr ParseTree 节点
+	 * @return NumFunc - 编译后的数值计算函数
+	 */
+	NumFunc compile(::PostAnvilParser::Or_exprContext* ctx) {
+		if (!ctx) {
+			return [](const Instance&, const Scene&) { return 0.0; };
+		}
+		return compileOr(ctx);
 	}
 
 private:
@@ -189,7 +212,7 @@ private:
 	}
 
 	/**
-	 * @brief 编译基本表达式：NUMBER | attribute | '(' expr ')'
+	 * @brief 编译基本表达式：NUMBER | STRING | BOOL_LIT | func_call | attribute | sortExpr | '(' expr ')'
 	 */
 	NumFunc compilePrimary(::PostAnvilParser::PrimaryContext* ctx) {
 		// 数字字面量
@@ -198,9 +221,32 @@ private:
 			return [v](const Instance&, const Scene&) { return v; };
 		}
 
+		// 字符串字面量（返回 0.0，在数值上下文中无意义）
+		if (ctx->STRING()) {
+			return [](const Instance&, const Scene&) { return 0.0; };
+		}
+
+		// 布尔字面量：TRUE = 1.0, FALSE = 0.0
+		if (ctx->BOOL_LIT()) {
+			std::string text = ctx->BOOL_LIT()->getText();
+			utils::to_upper_inplace(text);
+			double v = (text == "TRUE") ? 1.0 : 0.0;
+			return [v](const Instance&, const Scene&) { return v; };
+		}
+
+		// 函数调用（Phase 4 完整实现）
+		if (ctx->func_call()) {
+			return compileFuncCall(ctx->func_call());
+		}
+
 		// 属性访问
 		if (ctx->attribute()) {
 			return compileAttribute(ctx->attribute());
+		}
+
+		// 排序原语（Phase 4 完整实现）
+		if (ctx->sortExpr()) {
+			return compileSortExpr(ctx->sortExpr());
 		}
 
 		// 括号表达式
@@ -212,40 +258,144 @@ private:
 	}
 
 	/**
-	 * @brief 编译属性访问表达式：(SELF | IDENTIFIER) ('.' IDENTIFIER)*
+	 * @brief 编译属性访问表达式
 	 *
-	 * 支持 self.x1, self.conf, image.w, image.h 等属性访问。
-	 * 对象名和属性名在编译时转为大写，确保与内部存储一致。
+	 * 支持三种形式：
+	 * - InstanceAttr:  SELF '.' IDENTIFIER     → self.x1, self.conf
+	 * - ClassAttr:     STRING '.' IDENTIFIER   → "person".count
+	 * - VarInstanceAttr: IDENTIFIER '.' IDENTIFIER → 循环变量.属性 (Phase 4)
 	 */
 	NumFunc compileAttribute(::PostAnvilParser::AttributeContext* ctx) {
-		std::string object;
-		size_t prop_start_idx = 0;
-
-		if (ctx->SELF()) {
-			object = OBJECT_SELF;
-			// 第一个 IDENTIFIER 是属性名
-		} else {
-			object = ctx->IDENTIFIER(0)->getText();
-			prop_start_idx = 1;
-		}
-
-		// 转大写
-		to_upper_inplace(object);
-
-		// 获取属性名（取最后一个 IDENTIFIER，预留链式访问）
-		auto identifiers = ctx->IDENTIFIER();
-		std::string prop;
-		if (identifiers.size() > prop_start_idx) {
-			prop = identifiers[identifiers.size() - 1]->getText();
-			to_upper_inplace(prop);
-		}
-
-		return [object, prop](const Instance& self, const Scene& scene) -> double {
-			if (object == OBJECT_SELF) {
+		// InstanceAttr: SELF '.' IDENTIFIER
+		if (auto* inst = dynamic_cast<::PostAnvilParser::InstanceAttrContext*>(ctx)) {
+			std::string prop = inst->IDENTIFIER()->getText();
+			utils::to_upper_inplace(prop);
+			return [prop](const Instance& self, const Scene& scene) -> double {
 				return get_instance_prop(self, scene, prop);
+			};
+		}
+
+		// ClassAttr: STRING '.' IDENTIFIER
+		if (auto* cls = dynamic_cast<::PostAnvilParser::ClassAttrContext*>(ctx)) {
+			std::string cls_name = utils::strip_quotes(cls->STRING()->getText());
+			utils::to_upper_inplace(cls_name);
+			std::string prop = cls->IDENTIFIER()->getText();
+			utils::to_upper_inplace(prop);
+
+			return [cls_name, prop](const Instance&, const Scene& scene) -> double {
+				return get_class_prop(scene, cls_name, prop);
+			};
+		}
+
+		// VarInstanceAttr: IDENTIFIER '.' IDENTIFIER
+		// 支持 img.w/img.h 和循环变量属性（Phase 4）
+		if (auto* var = dynamic_cast<::PostAnvilParser::VarInstanceAttrContext*>(ctx)) {
+			auto identifiers = var->IDENTIFIER();
+			if (identifiers.size() >= 2) {
+				std::string object = identifiers[0]->getText();
+				utils::to_upper_inplace(object);
+				std::string prop = identifiers[1]->getText();
+				utils::to_upper_inplace(prop);
+
+				// img.w / img.h 图像属性
+				if (object == OBJECT_IMAGE) {
+					return [prop](const Instance&, const Scene& scene) -> double {
+						return get_image_prop(scene.image, prop);
+					};
+				}
+
+				// 循环变量属性（Phase 4 实现）
+				// 当前返回 0.0 作为占位
 			}
-			if (object == OBJECT_IMAGE) {
-				return get_image_prop(scene.image, prop);
+			return [](const Instance&, const Scene&) { return 0.0; };
+		}
+
+		return [](const Instance&, const Scene&) { return 0.0; };
+	}
+
+	/**
+	 * @brief 编译函数调用表达式
+	 */
+	NumFunc compileFuncCall(::PostAnvilParser::Func_callContext* ctx) {
+		std::string name = ctx->IDENTIFIER()->getText();
+		utils::to_upper_inplace(name);
+
+		// 编译参数
+		std::vector<NumFunc> args;
+		for (auto* arg : ctx->expr()) {
+			args.push_back(compile(arg));
+		}
+
+		return [name, args, this](const Instance& self, const Scene& scene) -> double {
+			if (!functions) {
+				throw RuntimeError("Function registry not available when calling '" + name + "'");
+			}
+			auto it = functions->find(name);
+			if (it == functions->end()) {
+				throw RuntimeError("Function '" + name + "' not found");
+			}
+
+			// 计算参数值
+			std::vector<double> arg_vals;
+			for (auto& arg : args) {
+				arg_vals.push_back(arg(self, scene));
+			}
+
+			// 创建临时 EvaluationContext 调用函数
+			Scene temp_scene(scene.image);
+			EvaluationContext temp_ctx(temp_scene);
+			temp_ctx.functions = *functions;
+			return it->second(arg_vals, temp_ctx);
+		};
+	}
+
+	/**
+	 * @brief 编译排序原语表达式
+	 *
+	 * SORT(class_expr, sort_key, rank)
+	 * - rank > 0: 降序第 N 名（1-based）
+	 * - rank < 0: 升序第 |N| 名
+	 */
+	NumFunc compileSortExpr(::PostAnvilParser::SortExprContext* ctx) {
+		// 解析类别名
+		std::string cls_name;
+		auto* class_ctx = ctx->class_expr();
+		if (class_ctx) {
+			if (class_ctx->STRING()) {
+				cls_name = utils::strip_quotes(class_ctx->STRING()->getText());
+			} else if (class_ctx->IDENTIFIER()) {
+				cls_name = class_ctx->IDENTIFIER()->getText();
+			}
+			utils::to_upper_inplace(cls_name);
+		}
+
+		auto key_expr = compile(ctx->expr(0));  // 排序键
+		auto rank_expr = compile(ctx->expr(1)); // 名次
+
+		return [cls_name, key_expr, rank_expr](const Instance& self, const Scene& scene) -> double {
+			double rank_val = rank_expr(self, scene);
+			int rank = static_cast<int>(rank_val);
+
+			auto it = scene.objects.find(cls_name);
+			if (it == scene.objects.end() || it->second.empty()) return 0.0;
+
+			// 收集所有键值
+			std::vector<double> keys;
+			for (const auto& inst : it->second) {
+				keys.push_back(key_expr(inst, scene));
+			}
+
+			int idx = std::abs(rank) - 1;
+			if (rank < 0) {
+				// 负排名 = 升序
+				std::sort(keys.begin(), keys.end());
+			} else {
+				// 正排名 = 降序
+				std::sort(keys.begin(), keys.end(), std::greater<double>());
+			}
+
+			if (idx >= 0 && idx < static_cast<int>(keys.size())) {
+				return keys[idx];
 			}
 			return 0.0;
 		};

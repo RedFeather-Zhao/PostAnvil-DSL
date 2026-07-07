@@ -28,11 +28,11 @@
     <Filter Include="antlr4">
       <UniqueIdentifier>{f2c80e81-538a-4438-9b14-0ce505de131c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="头文件\config">
+      <UniqueIdentifier>{82ab4318-0cdd-47d6-9134-a47c92cf43bb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="PostAnvil\include\postanvil\context.hpp">
-      <Filter>头文件\core</Filter>
-    </ClInclude>
     <ClInclude Include="PostAnvil\include\postanvil\compiler.hpp">
       <Filter>头文件\core</Filter>
     </ClInclude>
@@ -51,9 +51,6 @@
     <ClInclude Include="PostAnvil\antlr4\PostAnvilParser.h">
       <Filter>antlr4</Filter>
     </ClInclude>
-    <ClInclude Include="PostAnvil\include\postanvil\common.hpp">
-      <Filter>头文件\core</Filter>
-    </ClInclude>
     <ClInclude Include="PostAnvil\include\postanvil\expr_compiler.hpp">
       <Filter>头文件\core</Filter>
     </ClInclude>
@@ -62,6 +59,24 @@
     </ClInclude>
     <ClInclude Include="PostAnvil\include\postanvil\program.hpp">
       <Filter>头文件\core</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\error.hpp">
+      <Filter>头文件\config</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\detail.hpp">
+      <Filter>头文件\config</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\instance.hpp">
+      <Filter>头文件\core</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\scene.hpp">
+      <Filter>头文件\core</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\utils.hpp">
+      <Filter>头文件\config</Filter>
+    </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\type.hpp">
+      <Filter>头文件\config</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -82,7 +97,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="docs\PostAnvil_DSL_用户说明文档.md">
+    <None Include="docs\PostAnvil DSL 用户说明文档 V0.3.md">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="docs\PostAnvil.g4">
       <Filter>资源文件</Filter>
     </None>
   </ItemGroup>

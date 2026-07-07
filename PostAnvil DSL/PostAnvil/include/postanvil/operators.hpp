@@ -11,14 +11,24 @@
  */
 
 #pragma once
-#include "postanvil/common.hpp"
+
 #include <vector>
 #include <memory>
 #include <algorithm>
 
+#include "type.hpp"
+
+
 namespace postanvil {
 
 // ========================== Eval Struct ============================
+
+/**
+ * @brief 编译后的函数体类型
+ *
+ * 接收参数值列表和评估上下文，返回计算结果。
+ */
+using CompiledFunc = std::function<double(const std::vector<double>& args, struct EvaluationContext& ctx)>;
 
 /**
  * @brief 评估结果，包含每个类别中保留的实例列表
@@ -54,7 +64,20 @@ struct EvaluationContext {
 	const static inline char* GLOBAL_TARGET = "GLOBAL";	//< 全局目标类别名
 
 	Scene scene;		//< 场景
-	
+
+	/**
+	 * @brief 类级别属性存储：key = "类别名.属性名", value = 属性值
+	 *
+	 * 用于存储 "class".xxx 形式的类级别属性，
+	 * 如 "person".count、"car".avg_conf 等。
+	 */
+	detail::str_map<std::string, double> class_props;
+
+	/**
+	 * @brief 函数注册表：函数名 → 编译后的函数体
+	 */
+	std::unordered_map<std::string, CompiledFunc> functions;
+
 	// TODO 更多上下文字段计划在未来扩展，如：
 	// std::unordered_map<std::string, double> global_vars; //< 全局变量
 	// 帧缓存：用于跨算子或跨帧传递信息，如多帧一致性过滤
@@ -90,6 +113,9 @@ enum class OperatorKind {
 	OP_BASE,           //< 基类（抽象）
 	OP_FILTER,         //< 过滤算子：按条件保留/丢弃实例
 	OP_ATTRIBUTE,      //< 属性算子：为实例添加计算字段
+	OP_GROUP,          //< 分组算子：从源类别创建新类别
+	OP_APPEND,         //< 追加算子：向目标类别追加实例
+	OP_FUNC,           //< 函数算子：自定义函数
 };
 
 /**
@@ -181,6 +207,7 @@ public:
  *
  * 对目标类别的每个实例，计算并存储自定义属性值。
  * 计算后的属性存储在 Instance::props 中，后续过滤算子可通过属性访问引用。
+ * 也支持类级别属性（"class".xxx = expr），写入 EvaluationContext::class_props。
  *
  * 使用示例（DSL）：
  * @code
@@ -201,6 +228,8 @@ struct AttributeOperator : SceneOperator {
 	};
 
 	std::vector<AttrDef> attr_defs;		//< 属性定义列表
+	bool is_class_attr = false;			//< 是否为类级别属性
+	std::string class_name;				//< 类级别属性所属的类别名
 
 	AttributeOperator() : SceneOperator(OperatorKind::OP_ATTRIBUTE)
 	{
@@ -210,12 +239,23 @@ struct AttributeOperator : SceneOperator {
 	 * @brief 执行属性计算变换
 	 *
 	 * 遍历目标类别的所有实例，为每个实例计算并存储属性值。
+	 * 若 is_class_attr 为 true，则将属性写入 EvaluationContext::class_props。
 	 * 若 target == GLOBAL_TARGET，则对所有类别生效。
 	 *
 	 * @param ctx 评估上下文
 	 */
 	void apply(EvaluationContext& ctx) const override
 	{
+		// 类级别属性：计算一次，写入 class_props
+		if (is_class_attr) {
+			Instance dummy("__dummy", 0, 0, 0, 0, 0);
+			for (const auto& def : attr_defs) {
+				std::string key = class_name + "." + def.name;
+				ctx.class_props[key] = def.expression(dummy, ctx.scene);
+			}
+			return;
+		}
+
 		auto compute_attrs = [&](Instances& instances) {
 			for (auto& inst : instances) {
 				for (const auto& def : attr_defs) {
@@ -235,6 +275,96 @@ struct AttributeOperator : SceneOperator {
 		if (it != ctx.scene.objects.end()) {
 			compute_attrs(it->second);
 		}
+	}
+};
+
+/**
+ * @brief 分组算子 —— 从源类别创建新类别
+ *
+ * 从源类别中筛选满足条件的实例，组成全新的类别。
+ * 源类别实例不受影响。
+ *
+ * 使用示例（DSL）：
+ * @code
+ *   RULE GROUP "large_car" FROM "car":
+ *       self.area > 5000
+ *   RULEEND
+ * @endcode
+ */
+struct GroupOperator : SceneOperator {
+	std::string new_class;              //< 新类别名
+	std::string source_class;           //< 源类别名
+	std::vector<FilterFunc> conditions; //< 筛选条件
+
+	GroupOperator() : SceneOperator(OperatorKind::OP_GROUP) {}
+
+	void apply(EvaluationContext& ctx) const override {
+		auto it = ctx.scene.objects.find(source_class);
+		if (it == ctx.scene.objects.end()) return;
+
+		Instances selected;
+		for (const auto& inst : it->second) {
+			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
+				return cond(inst, ctx.scene);
+			});
+			if (all_pass) {
+				selected.push_back(inst);
+			}
+		}
+		ctx.scene.objects[new_class] = std::move(selected);
+	}
+};
+
+/**
+ * @brief 追加算子 —— 向目标类别追加实例
+ *
+ * 从源类别中筛选满足条件的实例，追加到目标类别中。
+ * 若目标类别不存在则自动创建。
+ *
+ * 使用示例（DSL）：
+ * @code
+ *   RULE APPEND "vip" FROM "person":
+ *       self.conf > 0.95
+ *   RULEEND
+ * @endcode
+ */
+struct AppendOperator : SceneOperator {
+	std::string dest_class;             //< 目标类别名
+	std::string source_class;           //< 源类别名
+	std::vector<FilterFunc> conditions; //< 筛选条件
+
+	AppendOperator() : SceneOperator(OperatorKind::OP_APPEND) {}
+
+	void apply(EvaluationContext& ctx) const override {
+		auto it = ctx.scene.objects.find(source_class);
+		if (it == ctx.scene.objects.end()) return;
+
+		for (const auto& inst : it->second) {
+			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
+				return cond(inst, ctx.scene);
+			});
+			if (all_pass) {
+				ctx.scene.objects[dest_class].push_back(inst);
+			}
+		}
+	}
+};
+
+/**
+ * @brief 函数算子 —— 自定义函数
+ *
+ * 函数在编译时注册到函数注册表中，执行时不直接作为算子运行。
+ * 函数调用通过表达式中的 func_call 触发。
+ */
+struct FuncOperator : SceneOperator {
+	std::string name;                          //< 函数名（大写）
+	std::vector<std::string> param_names;      //< 参数名列表（大写）
+	CompiledFunc body;                         //< 编译后的函数体
+
+	FuncOperator() : SceneOperator(OperatorKind::OP_FUNC) {}
+
+	void apply(EvaluationContext& /*ctx*/) const override {
+		// 函数在注册表中，不通过 apply 执行
 	}
 };
 

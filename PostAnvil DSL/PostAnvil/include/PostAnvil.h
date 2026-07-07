@@ -11,8 +11,14 @@
  */
 #pragma once
 
-#include "postanvil/context.hpp"
-#include "postanvil/common.hpp"
+#include "postanvil/detail.hpp"
+#include "postanvil/utils.hpp"
+#include "postanvil/error.hpp"
+#include "postanvil/type.hpp"
+
+#include "postanvil/instance.hpp"
+#include "postanvil/scene.hpp"
+
 #include "postanvil/operators.hpp"
 #include "postanvil/program.hpp"
 #include "postanvil/expr_compiler.hpp"

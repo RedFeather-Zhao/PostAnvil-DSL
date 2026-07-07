@@ -5,14 +5,15 @@
  *         一系列算子（SceneOperator），按序对输入场景执行变换。
  *         它可以安全地移动、存储，并反复对不同的场景数据执行相同评估。
  * @author RedFeather-Zhao
- * @date   June 2026
+ * @date   July 2026
  * @copyright Copyright (c) 2026 RedFeather-Zhao, All Rights Reserved.
  */
 
 #pragma once
-#include "postanvil/operators.hpp"
+#include "operators.hpp"
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 namespace postanvil {
 
@@ -30,7 +31,7 @@ namespace postanvil {
  * @code
  *   PostAnvilCompiler compiler;
  *   CompiledProgram program = compiler.compile(source);
- *   EvalResult result = program.evaluate(scene, image);
+ *   EvalResult result = program.evaluate(scene);
  * @endcode
  */
 class CompiledProgram {
@@ -46,14 +47,16 @@ public:
 	 *
 	 * 执行流程：
 	 * 1. 拷贝输入场景，构造 EvaluationContext
-	 * 2. 按序执行每个算子的 apply() 方法
-	 * 3. 将最终上下文转换为 EvalResult 返回
+	 * 2. 将函数注册表传入上下文
+	 * 3. 按序执行每个算子的 apply() 方法
+	 * 4. 将最终上下文转换为 EvalResult 返回
 	 *
 	 * @param scene 输入场景数据
 	 * @return 评估结果
 	 */
 	EvalResult evaluate(const Scene& scene) const {
 		EvaluationContext ctx(scene);
+		ctx.functions = functions;  // 传递函数注册表
 
 		for (const auto& op : operators) {
 			op->apply(ctx);
@@ -66,6 +69,11 @@ public:
 	 * @brief 算子序列，按顺序执行以变换场景
 	 */
 	std::vector<std::unique_ptr<SceneOperator>> operators;
+
+	/**
+	 * @brief 函数注册表：函数名 → 编译后的函数体
+	 */
+	std::unordered_map<std::string, CompiledFunc> functions;
 };
 
 } // namespace postanvil
