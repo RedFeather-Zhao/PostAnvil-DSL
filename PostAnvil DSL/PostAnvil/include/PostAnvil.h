@@ -1,7 +1,7 @@
 ﻿/**
  * @file PostAnvil.h
- * @brief PostAnvil 统一包含头。此头文件对外暴露 PostAnvil 库的主要接口，
- *        方便用户仅包含一个头文件即可使用 ANTLR4 解析器、编译器与上下文类型。
+ * @brief PostAnvil 统一包含头此头文件对外暴露 PostAnvil 库的主要接口，
+ *        方便用户仅包含一个头文件即可使用 ANTLR4 解析器、编译器与上下文类型
  *
  * 使用方法：
  * @code

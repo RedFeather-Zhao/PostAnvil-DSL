@@ -1,9 +1,7 @@
 ﻿/**
  * @file   program.hpp
- * @brief  PostAnvil 编译后的程序 —— CompiledProgram
- * @detail CompiledProgram 是 PostAnvilCompiler 的编译产物，内部持有
- *         一系列算子（SceneOperator），按序对输入场景执行变换。
- *         它可以安全地移动、存储，并反复对不同的场景数据执行相同评估。
+ * @brief  PostAnvil 编译结果，管理算子管道并执行评估
+ *
  * @author RedFeather-Zhao
  * @date   July 2026
  * @copyright Copyright (c) 2026 RedFeather-Zhao, All Rights Reserved.
@@ -14,49 +12,31 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <tuple>
 
 namespace postanvil {
 
-// ========================== Program ===========================
-
 /**
- * @brief 编译后的场景规则程序（CompiledProgram）
- *
- * CompiledProgram 是 PostAnvilCompiler 的编译产物，内部持有
- * 一系列算子（SceneOperator），按序对输入场景执行变换。
- *
- * 它可以安全地移动、存储，并反复对不同的场景数据执行相同评估。
- *
- * 使用方式：
- * @code
- *   PostAnvilCompiler compiler;
- *   CompiledProgram program = compiler.compile(source);
- *   EvalResult result = program.evaluate(scene);
- * @endcode
+ * @brief 编译后的程序，包含算子管道和函数表
+ * @details 由编译器生成，可反复应用于不同场景
+ *          支持导入变量预设和导出值获取
  */
 class CompiledProgram {
 public:
 	CompiledProgram() = default;
-	CompiledProgram(const CompiledProgram&)				= delete;
-	CompiledProgram(CompiledProgram&&)					= default;
-	CompiledProgram& operator=(const CompiledProgram&)	= delete;
-	CompiledProgram& operator=(CompiledProgram&&)		= default;
+	CompiledProgram(const CompiledProgram&) = delete;
+	CompiledProgram(CompiledProgram&&) = default;
+	CompiledProgram& operator=(const CompiledProgram&) = delete;
+	CompiledProgram& operator=(CompiledProgram&&) = default;
 
 	/**
-	 * @brief 对场景执行所有算子，返回最终结果
-	 *
-	 * 执行流程：
-	 * 1. 拷贝输入场景，构造 EvaluationContext
-	 * 2. 将函数注册表传入上下文
-	 * 3. 按序执行每个算子的 apply() 方法
-	 * 4. 将最终上下文转换为 EvalResult 返回
-	 *
-	 * @param scene 输入场景数据
-	 * @return 评估结果
+	 * @brief 对输入场景执行编译后的程序
+	 * @param scene 输入场景
+	 * @return EvalResult 评估结果，包含变换后的场景
 	 */
 	EvalResult evaluate(const Scene& scene) const {
 		EvaluationContext ctx(scene);
-		ctx.functions = functions;  // 传递函数注册表
+		ctx.functions = functions;
 
 		for (const auto& op : operators) {
 			op->apply(ctx);
@@ -66,14 +46,36 @@ public:
 	}
 
 	/**
-	 * @brief 算子序列，按顺序执行以变换场景
+	 * @brief 从评估结果中获取导出的值
+	 * @param host_name 宿主端变量名
+	 * @param result 评估结果
+	 * @return Val 导出的值
+	 * @throws RuntimeError 导出值不存在时抛出
 	 */
-	std::vector<std::unique_ptr<SceneOperator>> operators;
+	Val get_exported(const std::string& host_name, const EvalResult& result) const {
+		std::string key = "__export__" + host_name;
+		if (auto it = result.kept.variables.find(key); it != result.kept.variables.end()) {
+			return it->second;
+		}
+		throw RuntimeError("Exported value '" + host_name + "' not found");
+	}
 
 	/**
-	 * @brief 函数注册表：函数名 → 编译后的函数体
+	 * @brief 为场景预设导入变量
+	 * @param scene 待修改的场景
+	 * @param local_name 本地变量名
+	 * @param value 导入值
 	 */
-	std::unordered_map<std::string, CompiledFunc> functions;
+	void set_import(Scene& scene, const std::string& local_name, Val const& value) const {
+		scene.variables[local_name] = value;
+	}
+
+	std::vector<std::unique_ptr<SceneOperator>> operators; // 算子执行序列
+	std::unordered_map<std::string, CompiledFunc> functions; // 函数注册表
+
+	std::vector<std::tuple<std::string, std::string, Type>> imports; // 导入声明：宿主名、本地名、类型
+	std::vector<std::tuple<ValFunc, std::string>> exports;           // 导出声明：表达式、宿主名
 };
 
 } // namespace postanvil
+

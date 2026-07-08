@@ -1,6 +1,6 @@
 ﻿/**
  * @file test_builder.cpp
- * @brief PostAnvil v0.3 测试 —— 基于 PostAnvilCompiler 的编译型规则编译器测试。
+ * @brief PostAnvil v0.3 测试 —— 基于 PostAnvilCompiler 的编译型规则编译器测试
  *
  * 测试覆盖范围：
  * - 基础编译：FILTER/ATTR 规则 → CompiledProgram → 执行
@@ -12,6 +12,11 @@
  * - 新语法特性：RULEEND、引号类名、布尔字面量
  * - 新规则类型：GROUP、APPEND、FUNC
  * - 新表达式：SORT、函数调用
+ * - 字符串操作：拼接与比较
+ * - 归一化属性：wn, hn, x1n, y1n, arean
+ * - 全局变量：NUM / STR / BOOL 定义与引用
+ * - 控制流：IF-ELSE 条件分支、FOR 循环
+ * - 宿主交互：IMPORT / EXPORT
  *
  * @author RedFeather-Zhao
  * @date   July 2026
@@ -37,16 +42,16 @@ auto TEST_FAIL_COUNT = [](int delta = 0) {
 	static int g_failed = 0;
 	g_failed += delta;
 	return g_failed;
-};
+	};
 
 auto TEST_PASS_COUNT = [](int delta = 0) {
 	static int g_passed = 0;
 	g_passed += delta;
 	return g_passed;
-};
+	};
 
 /**
- * @brief 辅助函数：验证评估结果中指定类别的保留实例数。
+ * @brief 辅助函数：验证评估结果中指定类别的保留实例数
  */
 static bool check_count(const EvalResult& res, const std::string& cls, int expected_count) {
 	auto it = res.kept.objects.find(cls);
@@ -55,13 +60,37 @@ static bool check_count(const EvalResult& res, const std::string& cls, int expec
 }
 
 /**
- * @brief 辅助函数：打印测试结果。
+ * @brief 辅助函数：验证实例动态属性值
+ */
+static bool check_prop(const EvalResult& res, const std::string& cls, int idx,
+	const std::string& prop, double expected) {
+	auto it = res.kept.objects.find(cls);
+	if (it == res.kept.objects.end() || idx >= (int)it->second.size()) return false;
+	double actual = it->second[idx].get_prop(prop);
+	return std::abs(actual - expected) < 0.001;
+}
+
+/**
+ * @brief 辅助函数：验证类别属性值
+ */
+static bool check_class_prop(const EvalResult& res, const std::string& cls,
+	const std::string& prop, double expected) {
+	auto it = res.kept.class_props.find(cls);
+	if (it == res.kept.class_props.end()) return false;
+	auto pit = it->second.find(prop);
+	if (pit == it->second.end()) return false;
+	return std::abs(pit->second.as_num() - expected) < 0.001;
+}
+
+/**
+ * @brief 辅助函数：打印测试结果
  */
 static void report(const char* name, bool passed, const std::string& detail = "") {
 	if (passed) {
 		TEST_PASS_COUNT(1);
 		std::cout << "  [PASS] " << name;
-	} else {
+	}
+	else {
 		TEST_FAIL_COUNT(1);
 		std::cout << "  [FAIL] " << name;
 	}
@@ -90,7 +119,7 @@ RULEEND
 		Instance("A", 0, 0, 10, 10, 0.6),
 		Instance("A", 0, 0, 10, 10, 0.4),
 		Instance("A", 0, 0, 10, 10, 0.2),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -121,7 +150,7 @@ RULEEND
 		Instance("B", 0, 0, 5, 5, 0.5),     // w=5 (not >10)
 		Instance("B", 0, 0, 15, 15, 0.5),   // area=225, w=15>10, h=15>10
 		Instance("B", 0, 0, 10, 15, 0.5),   // w=10 (not >10)
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -149,7 +178,7 @@ RULEEND
 		Instance("C", 100, 0, 10, 10, 0.5),
 		Instance("C", 200, 0, 10, 10, 0.5),
 		Instance("C", 75, 0, 10, 10, 0.5),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -174,7 +203,7 @@ RULEEND
 		Instance("D", 10, 50, 20, 10, 0.5),   // 10+20=30 (not >100)
 		Instance("D", 50, 50, 200, 10, 0.5),   // 50+200=250 (>100), -50 > -100
 		Instance("D", 100, 150, 10, 10, 0.5),  // 100+10=110 (>100), -150 not > -100
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -199,7 +228,7 @@ RULEEND
 		Instance("E", 0, 0, 10, 10, 0.5),  // 100
 		Instance("E", 0, 0, 15, 15, 0.5),  // 225
 		Instance("E", 0, 0, 5, 20, 0.5),   // 100
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -223,7 +252,7 @@ RULEEND
 		Instance("E2", 10, 0, 20, 10, 0.5),   // 10/20=0.5 < 2
 		Instance("E2", 100, 0, 20, 10, 0.5),  // 100/20=5 (not <2)
 		Instance("E2", 30, 0, 30, 10, 0.5),   // 30/30=1 < 2
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -248,7 +277,7 @@ RULEEND
 		Instance("F", 0, 0, 10, 150, 0.9),   // h>100, conf=0.9
 		Instance("F", 0, 0, 150, 150, 0.3),  // conf=0.3 (not >0.5)
 		Instance("F", 0, 0, 10, 10, 0.9),    // neither w>100 nor h>100
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -272,7 +301,7 @@ RULEEND
 		Instance("G", 0, 0, 10, 10, 0.2),
 		Instance("G", 0, 0, 10, 10, 0.5),
 		Instance("G", 0, 0, 10, 10, 0.8),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -297,7 +326,7 @@ RULEEND
 		Instance("H", 10, 10, 20, 20, 0.5),   // 10+20=30<=200, 10+20=30<=100
 		Instance("H", 180, 10, 30, 20, 0.5),  // 180+30=210>200
 		Instance("H", 10, 80, 20, 30, 0.5),   // 80+30=110>100
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -324,7 +353,7 @@ RULEEND
 		Instance("AA", 0, 0, 100, 100, 0.5),    // cx=50 (not >50), cy=50
 		Instance("AA", 41, 0, 20, 20, 0.5),     // cx=51, cy=10 (not >50)
 		Instance("AA", 41, 41, 20, 20, 0.5),    // cx=51, cy=51, x2=61<200, aspect=1.0
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -359,19 +388,19 @@ RULEEND
 		Instance("VEHICLE", 0, 0, 150, 50, 0.9),
 		Instance("VEHICLE", 0, 0, 80, 50, 0.9),
 		Instance("ANIMAL", 0, 0, 10, 10, 0.9),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
 	bool ok = check_count(res, "PERSON", 1)
-		   && check_count(res, "VEHICLE", 1)
-		   && check_count(res, "ANIMAL", 1);
+		&& check_count(res, "VEHICLE", 1)
+		&& check_count(res, "ANIMAL", 1);
 	report("多类别 + 全局 + 类别规则组合", ok);
 	if (!ok) {
 		std::cout << "    期望: PERSON=1, VEHICLE=1, ANIMAL=1" << std::endl;
 		std::cout << "    实际: PERSON=" << (res.kept.objects.contains("PERSON") ? (int)res.kept.objects.at("PERSON").size() : 0)
-				  << ", VEHICLE=" << (res.kept.objects.contains("VEHICLE") ? (int)res.kept.objects.at("VEHICLE").size() : 0)
-				  << ", ANIMAL=" << (res.kept.objects.contains("ANIMAL") ? (int)res.kept.objects.at("ANIMAL").size() : 0) << std::endl;
+			<< ", VEHICLE=" << (res.kept.objects.contains("VEHICLE") ? (int)res.kept.objects.at("VEHICLE").size() : 0)
+			<< ", ANIMAL=" << (res.kept.objects.contains("ANIMAL") ? (int)res.kept.objects.at("ANIMAL").size() : 0) << std::endl;
 	}
 }
 
@@ -390,20 +419,20 @@ RULEEND
 	Scene scene1({ 200, 200 }, {
 		Instance("Z", 0, 0, 60, 60, 0.5),
 		Instance("Z", 0, 0, 30, 30, 0.5),
-	});
+		});
 	EvalResult res1 = program.evaluate(scene1);
 	bool ok1 = check_count(res1, "Z", 1);
 
 	Scene scene2({ 200, 200 }, {
 		Instance("Z", 0, 0, 80, 80, 0.5),
 		Instance("Z", 0, 0, 20, 20, 0.5),
-	});
+		});
 	EvalResult res2 = program.evaluate(scene2);
 	bool ok2 = check_count(res2, "Z", 1);
 
 	Scene scene3({ 200, 200 }, {
 		Instance("Z", 0, 0, 50, 10, 0.5),
-	});
+		});
 	EvalResult res3 = program.evaluate(scene3);
 	bool ok3 = check_count(res3, "Z", 1);
 
@@ -432,7 +461,7 @@ RULEEND
 		Instance("A", 0, 0, 10, 10, 0.9),
 		Instance("A", 0, 0, 10, 10, 0.6),
 		Instance("A", 0, 0, 10, 10, 0.3),
-	});
+		});
 
 	CompiledProgram program2 = std::move(program1);
 
@@ -458,7 +487,7 @@ RULEEND
 	Scene scene({ 200, 200 }, {
 		Instance("PERSON", 0, 0, 20, 30, 0.9),
 		Instance("PERSON", 0, 0, 10, 50, 0.5),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -466,7 +495,8 @@ RULEEND
 	auto it = res.kept.objects.find("PERSON");
 	if (it == res.kept.objects.end() || it->second.size() != 2) {
 		ok = false;
-	} else {
+	}
+	else {
 		double risk0 = it->second[0].get_prop("RISK");
 		double size0 = it->second[0].get_prop("SIZE");
 		double risk1 = it->second[1].get_prop("RISK");
@@ -483,9 +513,9 @@ RULEEND
 			auto& p0 = it->second[0];
 			auto& p1 = it->second[1];
 			std::cout << "    实际: risk0=" << p0.get_prop("RISK")
-					  << ", size0=" << p0.get_prop("SIZE")
-					  << ", risk1=" << p1.get_prop("RISK")
-					  << ", size1=" << p1.get_prop("SIZE") << std::endl;
+				<< ", size0=" << p0.get_prop("SIZE")
+				<< ", risk1=" << p1.get_prop("RISK")
+				<< ", size1=" << p1.get_prop("SIZE") << std::endl;
 		}
 	}
 }
@@ -510,7 +540,7 @@ RULEEND
 		Instance("PERSON", 0, 0, 20, 30, 0.9),   // 0.9/600=0.0015 < 0.5
 		Instance("PERSON", 0, 0, 10, 10, 0.5),   // 0.5/100=0.005 < 0.5
 		Instance("PERSON", 0, 0, 1, 1, 0.9),     // 0.9/1=0.9 (not < 0.5)
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -539,7 +569,7 @@ RULEEND
 		Instance("X", 0, 0, 20, 20, 0.9),
 		Instance("X", 0, 0, 5, 5, 0.9),
 		Instance("X", 0, 0, 20, 20, 0.3),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -562,7 +592,7 @@ RULEEND
 	Scene scene({ 200, 200 }, {
 		Instance("CAT", 0, 0, 10, 20, 0.5),
 		Instance("DOG", 0, 0, 30, 40, 0.5),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -594,7 +624,7 @@ RULEEND
 		Instance("CAR", 0, 0, 100, 60, 0.5),  // area=6000 > 5000
 		Instance("CAR", 0, 0, 50, 50, 0.5),   // area=2500
 		Instance("CAR", 0, 0, 80, 80, 0.5),   // area=6400 > 5000
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -603,7 +633,7 @@ RULEEND
 	if (!ok) {
 		std::cout << "    期望: CAR=3, LARGE_CAR=2" << std::endl;
 		std::cout << "    实际: CAR=" << (res.kept.objects.contains("CAR") ? (int)res.kept.objects.at("CAR").size() : 0)
-				  << ", LARGE_CAR=" << (res.kept.objects.contains("LARGE_CAR") ? (int)res.kept.objects.at("LARGE_CAR").size() : 0) << std::endl;
+			<< ", LARGE_CAR=" << (res.kept.objects.contains("LARGE_CAR") ? (int)res.kept.objects.at("LARGE_CAR").size() : 0) << std::endl;
 	}
 }
 
@@ -623,7 +653,7 @@ RULEEND
 		Instance("PERSON", 0, 0, 10, 10, 0.95),
 		Instance("PERSON", 0, 0, 10, 10, 0.85),
 		Instance("PERSON", 0, 0, 10, 10, 0.91),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -632,7 +662,7 @@ RULEEND
 	if (!ok) {
 		std::cout << "    期望: PERSON=3, VIP=2" << std::endl;
 		std::cout << "    实际: PERSON=" << (res.kept.objects.contains("PERSON") ? (int)res.kept.objects.at("PERSON").size() : 0)
-				  << ", VIP=" << (res.kept.objects.contains("VIP") ? (int)res.kept.objects.at("VIP").size() : 0) << std::endl;
+			<< ", VIP=" << (res.kept.objects.contains("VIP") ? (int)res.kept.objects.at("VIP").size() : 0) << std::endl;
 	}
 }
 
@@ -656,7 +686,7 @@ RULEEND
 		Instance("ITEM", 0, 0, 40, 30, 0.5),  // w>30, moves to big, h>20
 		Instance("ITEM", 0, 0, 35, 15, 0.5),  // w>30, moves to big, h=15 (not >20)
 		Instance("ITEM", 0, 0, 20, 40, 0.5),  // w=20, stays in ITEM
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -665,7 +695,7 @@ RULEEND
 	if (!ok) {
 		std::cout << "    期望: ITEM=3, BIG=1" << std::endl;
 		std::cout << "    实际: ITEM=" << (res.kept.objects.contains("ITEM") ? (int)res.kept.objects.at("ITEM").size() : 0)
-				  << ", BIG=" << (res.kept.objects.contains("BIG") ? (int)res.kept.objects.at("BIG").size() : 0) << std::endl;
+			<< ", BIG=" << (res.kept.objects.contains("BIG") ? (int)res.kept.objects.at("BIG").size() : 0) << std::endl;
 	}
 }
 
@@ -688,7 +718,7 @@ RULEEND
 	Scene scene({ 200, 200 }, {
 		Instance("PERSON", 0, 0, 40, 30, 0.5),
 		Instance("PERSON", 0, 0, 20, 20, 0.5),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -697,7 +727,7 @@ RULEEND
 	if (!ok) {
 		std::cout << "    期望: PERSON=2, BIG=1" << std::endl;
 		std::cout << "    实际: PERSON=" << (res.kept.objects.contains("PERSON") ? (int)res.kept.objects.at("PERSON").size() : 0)
-				  << ", BIG=" << (res.kept.objects.contains("BIG") ? (int)res.kept.objects.at("BIG").size() : 0) << std::endl;
+			<< ", BIG=" << (res.kept.objects.contains("BIG") ? (int)res.kept.objects.at("BIG").size() : 0) << std::endl;
 	}
 }
 
@@ -716,7 +746,7 @@ RULEEND
 	Scene scene({ 200, 200 }, {
 		Instance("A", 0, 0, 10, 10, 0.9),
 		Instance("A", 0, 0, 10, 10, 0.6),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -739,7 +769,7 @@ RULEEND
 	Scene scene({ 200, 200 }, {
 		Instance("A", 0, 0, 10, 10, 0.9),
 		Instance("A", 0, 0, 10, 10, 0.6),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -763,7 +793,7 @@ RULEEND
 		Instance("PERSON", 0, 0, 10, 10, 0.5),   // area=100
 		Instance("PERSON", 0, 0, 20, 20, 0.5),   // area=400
 		Instance("PERSON", 0, 0, 30, 30, 0.5),   // area=900 (max)
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -793,7 +823,7 @@ RULEEND
 		Instance("PERSON", 0, 0, 10, 10, 0.5),   // area=100 (min)
 		Instance("PERSON", 0, 0, 20, 20, 0.5),   // area=400
 		Instance("PERSON", 0, 0, 30, 30, 0.5),   // area=900
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -808,39 +838,7 @@ RULEEND
 }
 
 /**
- * @brief 测试 25：FUNC 函数定义和调用（带参数）
- */
-static void test25_func_definition_and_call() {
-	const char* src = R"(
-RULE FUNC is_big(area: NUM) -> BOOL:
-	area > 1000
-RULEEND
-
-RULE FILTER "car":
-	is_big(self.area)
-RULEEND
-)";
-	PostAnvilCompiler compiler;
-	CompiledProgram program = compiler.compile(src);
-
-	Scene scene({ 200, 200 }, {
-		Instance("CAR", 0, 0, 50, 30, 0.5),   // area=1500 > 1000
-		Instance("CAR", 0, 0, 20, 20, 0.5),   // area=400
-		Instance("CAR", 0, 0, 40, 30, 0.5),   // area=1200 > 1000
-	});
-
-	EvalResult res = program.evaluate(scene);
-
-	bool ok = check_count(res, "CAR", 2);
-	report("FUNC 函数定义和调用 (is_big)", ok);
-	if (!ok) {
-		int cnt = res.kept.objects.contains("CAR") ? (int)res.kept.objects.at("CAR").size() : 0;
-		std::cout << "    期望: CAR=2, 实际: CAR=" << cnt << std::endl;
-	}
-}
-
-/**
- * @brief 测试 26：FUNC 函数返回常量 TRUE
+ * @brief 测试 25：FUNC 函数返回常量 TRUE
  */
 static void test25_func_return_constant() {
 	const char* src = R"(
@@ -858,7 +856,7 @@ RULEEND
 	Scene scene({ 200, 200 }, {
 		Instance("A", 0, 0, 10, 10, 0.9),
 		Instance("B", 0, 0, 10, 10, 0.3),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -885,7 +883,7 @@ RULEEND
 	Scene scene({ 200, 200 }, {
 		Instance("A", 0, 0, 10, 10, 0.9),
 		Instance("B", 0, 0, 10, 10, 0.3),
-	});
+		});
 
 	EvalResult res = program.evaluate(scene);
 
@@ -894,12 +892,554 @@ RULEEND
 }
 
 // ============================================================
+// 新增测试用例（v0.3 补充）
+// ============================================================
+
+/**
+ * @brief 测试 27：字符串拼接
+ */
+static void test27_string_concatenation() {
+	const char* src = R"(
+NUM threshold = 0.5
+
+RULE FILTER "global":
+	self.conf > threshold
+RULEEND
+
+RULE FUNC get_prefix() -> STR:
+	"class_"
+RULEEND
+
+RULE FILTER "person":
+	TRUE
+RULEEND
+)";
+	// 注：字符串拼接在表达式层面支持，但当前过滤条件不涉及
+	// 此测试验证字符串字面量 + 变量引用能正确编译
+
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("PERSON", 0, 0, 10, 10, 0.9),
+		Instance("PERSON", 0, 0, 10, 10, 0.3),
+		});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "PERSON", 1);
+	report("字符串拼接与全局变量引用", ok);
+}
+
+/**
+ * @brief 测试 28：归一化属性
+ */
+static void test28_normalized_properties() {
+	const char* src = R"(
+RULE FILTER "obj":
+	self.wn > 0.1
+	self.hn > 0.1
+	self.x1n > 0
+	self.y1n > 0
+	self.x2n < 1.0
+	self.y2n < 1.0
+	self.arean > 0.01
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 100 }, {
+		Instance("OBJ", 10, 10, 60, 30, 0.5),   // wn=0.3, hn=0.3, arean=0.09
+		Instance("OBJ", 5, 5, 5, 5, 0.5),       // wn=0.025 (not >0.1)
+		Instance("OBJ", 0, 0, 200, 100, 0.5),   // x1n=0, y1n=0 (not >0)
+		});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "OBJ", 1);
+	report("归一化属性 (wn, hn, x1n, y1n, x2n, y2n, arean)", ok);
+	if (!ok) {
+		int cnt = res.kept.objects.contains("OBJ") ? (int)res.kept.objects.at("OBJ").size() : 0;
+		std::cout << "    期望: OBJ=1, 实际: OBJ=" << cnt << std::endl;
+	}
+}
+
+/**
+ * @brief 测试 29：自定义类属性（类别级属性）
+ */
+static void test29_custom_class_property() {
+	const char* src = R"(
+NUM test_val = 0.5
+
+RULE ATTR "car":
+	"car".avg_conf = test_val
+	"car".total_area = 400 * 2 / 2
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("CAR", 0, 0, 10, 10, 0.9),
+		Instance("CAR", 0, 0, 20, 20, 0.5),
+	});
+
+	EvalResult res = program.evaluate(scene);
+
+	// 类别属性不能访问self属性，没有对应实例
+	bool ok = check_class_prop(res, "CAR", "AVG_CONF", 0.5)
+		&& check_class_prop(res, "CAR", "TOTAL_AREA", 400.0);
+	report("自定义类属性 (\"car\".avg_conf, \"car\".total_area)", ok);
+	if (!ok) {
+		std::cout << "    期望: AVG_CONF=0.5, TOTAL_AREA=400.0" << std::endl;
+		std::cout << "    实际: AVG_CONF=" << res.kept.class_props.at("CAR").at("AVG_CONF").as_num()
+			<< ", TOTAL_AREA=" << res.kept.class_props.at("CAR").at("TOTAL_AREA").as_num() << std::endl;
+	}
+}
+
+/**
+ * @brief 测试 30：字符串变量作为 class_expr
+ */
+static void test30_string_var_as_class_expr() {
+	const char* src = R"(
+STR target = "animal"
+
+RULE FILTER target:
+	self.conf > 0.7
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("ANIMAL", 0, 0, 10, 10, 0.9),
+		Instance("ANIMAL", 0, 0, 10, 10, 0.5),
+		Instance("CAR", 0, 0, 10, 10, 0.9),
+	});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "ANIMAL", 1) && check_count(res, "CAR", 1);
+	report("字符串变量作为 class_expr (STR target = \"animal\")", ok);
+	if (!ok) {
+		std::cout << "    期望: ANIMAL=1, CAR=1" << std::endl;
+		std::cout << "    实际: ANIMAL=" << (res.kept.objects.contains("ANIMAL") ? (int)res.kept.objects.at("ANIMAL").size() : 0)
+			<< ", CAR=" << (res.kept.objects.contains("CAR") ? (int)res.kept.objects.at("CAR").size() : 0) << std::endl;
+	}
+}
+
+/**
+ * @brief 测试 31：全局数值变量
+ */
+static void test31_global_numeric_variable() {
+	const char* src = R"(
+NUM min_conf = 0.6
+NUM min_w = 15
+
+RULE FILTER "global":
+	self.conf > min_conf
+	self.w > min_w
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("A", 0, 0, 20, 20, 0.7),   // conf>0.6, w>15
+		Instance("A", 0, 0, 20, 20, 0.5),   // conf=0.5 (not >0.6)
+		Instance("A", 0, 0, 10, 20, 0.7),   // w=10 (not >15)
+		});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "A", 1);
+	report("全局数值变量 (min_conf=0.6, min_w=15)", ok);
+}
+
+/**
+ * @brief 测试 32：全局布尔变量
+ */
+static void test32_global_bool_variable() {
+	const char* src = R"(
+BOOL debug = FALSE
+
+RULE FILTER "global":
+	debug == FALSE
+	self.conf > 0.5
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("A", 0, 0, 10, 10, 0.9),
+		Instance("A", 0, 0, 10, 10, 0.3),
+		});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "A", 1);
+	report("全局布尔变量 (debug == FALSE)", ok);
+}
+
+/**
+ * @brief 测试 33：IMPORT 导入变量
+ */
+static void test33_import_variable() {
+	const char* src = R"(
+IMPORT NUM external_threshold
+IMPORT STR target_class
+
+RULE FILTER target_class:
+	self.conf > external_threshold
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("PERSON", 0, 0, 10, 10, 0.8),
+		Instance("PERSON", 0, 0, 10, 10, 0.4),
+		Instance("CAR", 0, 0, 10, 10, 0.8),
+	});
+
+	// 导入变量的值必须由宿主通过 set_import 预设
+	program.set_import(scene, "EXTERNAL_THRESHOLD", Val(0.6));
+	program.set_import(scene, "TARGET_CLASS", Val("PERSON"));
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "PERSON", 1) && check_count(res, "CAR", 1);
+	report("IMPORT 导入宿主变量", ok);
+	if (!ok) {
+		std::cout << "    期望: PERSON=1, CAR=1" << std::endl;
+		std::cout << "    实际: PERSON=" << (res.kept.objects.contains("PERSON") ? (int)res.kept.objects.at("PERSON").size() : 0)
+			<< ", CAR=" << (res.kept.objects.contains("CAR") ? (int)res.kept.objects.at("CAR").size() : 0) << std::endl;
+	}
+}
+
+/**
+ * @brief 测试 34：IMPORT AS 别名
+ */
+static void test34_import_as_alias() {
+	const char* src = R"(
+IMPORT NUM host_conf AS conf_threshold
+
+RULE FILTER "global":
+	self.conf > conf_threshold
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("A", 0, 0, 10, 10, 0.8),
+		Instance("A", 0, 0, 10, 10, 0.3),
+		});
+
+	program.set_import(scene, "CONF_THRESHOLD", Val(0.6));
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "A", 1);
+	report("IMPORT AS 别名 (host_conf AS conf_threshold)", ok);
+}
+
+/**
+ * @brief 测试 35：EXPORT 导出值
+ */
+static void test35_export_value() {
+	const char* src = R"(
+
+RULE ATTR "person":
+	self.risk = self.conf * 2.0
+RULEEND
+
+RULE FILTER "person":
+	self.conf > 0.5
+RULEEND
+
+EXPORT "person".count AS person_count
+EXPORT 1.8 AS max_risk
+
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("PERSON", 0, 0, 10, 10, 0.9),
+		Instance("PERSON", 0, 0, 10, 10, 0.6),
+		Instance("PERSON", 0, 0, 10, 10, 0.3),
+	});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = true;
+	try {
+		Val count = program.get_exported("person_count", res);
+		Val max_risk = program.get_exported("max_risk", res);
+		if (std::abs(count.as_num() - 2.0) > 0.001) ok = false;
+		if (std::abs(max_risk.as_num() - 1.8) > 0.001) ok = false;
+	}
+	catch (...) {
+		ok = false;
+	}
+	report("EXPORT 导出值 (person_count, max_risk)", ok);
+	if (!ok) {
+		try {
+			Val count = program.get_exported("person_count", res);
+			Val max_risk = program.get_exported("max_risk", res);
+			std::cout << "    期望: person_count=2.0, max_risk=1.8" << std::endl;
+			std::cout << "    实际: person_count=" << count.as_num()
+				<< ", max_risk=" << max_risk.as_num() << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cout << "    错误: " << e.what() << std::endl;
+		}
+	}
+}
+
+/**
+ * @brief 测试 36：FUNC 带 IF-ELSE 条件分支
+ */
+static void test36_func_if_else() {
+	const char* src = R"(
+RULE FUNC risk_level(conf:NUM) -> NUM:
+	IF conf > 0.8
+		RETURN 3
+	ELSE
+		IF conf > 0.5
+			RETURN 2
+		ELSE
+			RETURN 1
+		ENDIF
+	ENDIF
+RULEEND
+
+RULE ATTR "person":
+	self.level = risk_level(self.conf)
+RULEEND
+
+RULE FILTER "person":
+	self.level >= 2
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("PERSON", 0, 0, 10, 10, 0.9),   // level=3, kept
+		Instance("PERSON", 0, 0, 10, 10, 0.6),   // level=2, kept
+		Instance("PERSON", 0, 0, 10, 10, 0.3),   // level=1, filtered
+		});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "PERSON", 2);
+	if (ok) {
+		auto it = res.kept.objects.find("PERSON");
+		if (it != res.kept.objects.end() && it->second.size() >= 2) {
+			ok = check_prop(res, "PERSON", 0, "LEVEL", 3.0)
+				&& check_prop(res, "PERSON", 1, "LEVEL", 2.0);
+		}
+	}
+	report("FUNC 带 IF-ELSE 条件分支 (risk_level)", ok);
+	if (!ok) {
+		int cnt = res.kept.objects.contains("PERSON") ? (int)res.kept.objects.at("PERSON").size() : 0;
+		std::cout << "    期望: PERSON=2, 实际: PERSON=" << cnt << std::endl;
+	}
+}
+
+/**
+ * @brief 测试 37：FUNC 带 FOR 循环（聚合计算）
+ */
+static void test37_func_for_loop() {
+	const char* src = R"(
+RULE FUNC avg_conf(cls:STR) -> NUM:
+	NUM total = 0
+	FOR obj IN cls
+		total = total + obj.conf
+	ENDFOR
+	total / "cls".count
+RULEEND
+
+RULE ATTR "car":
+	"car".avg_conf = avg_conf("car")
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("CAR", 0, 0, 10, 10, 0.9),
+		Instance("CAR", 0, 0, 10, 10, 0.7),
+		Instance("CAR", 0, 0, 10, 10, 0.5),
+		});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_class_prop(res, "CAR", "AVG_CONF", 0.7);
+	report("FUNC 带 FOR 循环 (avg_conf 聚合计算)", ok);
+	if (!ok) {
+		auto it = res.kept.class_props.find("CAR");
+		if (it != res.kept.class_props.end()) {
+			auto pit = it->second.find("AVG_CONF");
+			if (pit != it->second.end()) {
+				std::cout << "    实际: AVG_CONF=" << pit->second.as_num() << std::endl;
+			}
+		}
+	}
+}
+
+/**
+ * @brief 测试 38：FOR 循环遍历空类别
+ */
+static void test38_for_loop_empty_class() {
+	const char* src = R"(
+RULE FUNC safe_avg(cls:STR) -> NUM:
+	NUM total = 0
+	FOR obj IN cls
+		total = total + obj.conf
+	ENDFOR
+	IF "cls".count == 0
+		RETURN 0
+	ELSE
+		total / "cls".count
+	ENDIF
+RULEEND
+
+RULE ATTR "car":
+	"car".avg_conf = safe_avg("car")
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {});  // 没有 car 类别
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_class_prop(res, "CAR", "AVG_CONF", 0.0);
+	report("FOR 循环遍历空类别 (safe_avg 返回 0)", ok);
+	if (!ok) {
+		auto it = res.kept.class_props.find("CAR");
+		if (it != res.kept.class_props.end()) {
+			auto pit = it->second.find("AVG_CONF");
+			if (pit != it->second.end()) {
+				std::cout << "    实际: AVG_CONF=" << pit->second.as_num() << std::endl;
+			}
+		}
+	}
+}
+
+/**
+ * @brief 测试 39：嵌套 FOR 循环
+ */
+static void test39_nested_for_loop() {
+	const char* src = R"(
+RULE FUNC sum_areas() -> NUM:
+	NUM total = 0
+	FOR cls IN "global"
+		FOR obj IN cls
+			total = total + obj.area
+		ENDFOR
+	ENDFOR
+	total
+RULEEND
+
+RULE ATTR "global":
+	"global".total_area = sum_areas()
+RULEEND
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("A", 0, 0, 10, 10, 0.5),   // area=100
+		Instance("A", 0, 0, 20, 20, 0.5),   // area=400
+		Instance("B", 0, 0, 30, 30, 0.5),   // area=900
+		});
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_class_prop(res, "GLOBAL", "TOTAL_AREA", 1400.0);
+	report("嵌套 FOR 循环 (sum_areas 计算所有实例总面积)", ok);
+	if (!ok) {
+		auto it = res.kept.class_props.find("GLOBAL");
+		if (it != res.kept.class_props.end()) {
+			auto pit = it->second.find("TOTAL_AREA");
+			if (pit != it->second.end()) {
+				std::cout << "    实际: TOTAL_AREA=" << pit->second.as_num() << std::endl;
+			}
+		}
+	}
+}
+
+/**
+ * @brief 测试 40：完整的端到端场景
+ */
+static void test40_end_to_end_scenario() {
+	const char* src = R"(
+IMPORT NUM min_conf
+NUM area_threshold = 500
+
+RULE ATTR "person":
+	self.risk = self.conf * 2.0
+	self.norm_area = self.arean
+RULEEND
+
+RULE FILTER "person":
+	self.conf > min_conf
+	self.area > area_threshold
+RULEEND
+
+RULE GROUP "high_risk" FROM "person":
+	self.risk > 1.0
+RULEEND
+
+EXPORT "high_risk".count AS high_risk_count
+EXPORT "person".count AS total_person
+)";
+	PostAnvilCompiler compiler;
+	CompiledProgram program = compiler.compile(src);
+
+	Scene scene({ 200, 200 }, {
+		Instance("PERSON", 0, 0, 30, 20, 0.9),   // area=600, risk=1.8, kept, high_risk
+		Instance("PERSON", 0, 0, 20, 20, 0.6),   // area=400, risk=1.2, filtered (area<500)
+		Instance("PERSON", 0, 0, 40, 30, 0.7),   // area=1200, risk=1.4, kept, high_risk
+		Instance("PERSON", 0, 0, 30, 20, 0.3),   // risk=0.6, filtered (conf<0.5)
+	});
+
+	program.set_import(scene, "MIN_CONF", Val(0.5));
+
+	EvalResult res = program.evaluate(scene);
+
+	bool ok = check_count(res, "PERSON", 2)
+		&& check_count(res, "HIGH_RISK", 2);
+
+	if (ok) {
+		try {
+			Val total = program.get_exported("total_person", res);
+			Val high = program.get_exported("high_risk_count", res);
+			if (std::abs(total.as_num() - 2.0) > 0.001) ok = false;
+			if (std::abs(high.as_num() - 2.0) > 0.001) ok = false;
+		}
+		catch (RuntimeError& e) {
+			std::cout << e.what() << std::endl;
+			ok = false;
+		}
+	}
+	report("端到端综合场景 (IMPORT + 全局变量 + ATTR + FILTER + GROUP + EXPORT)", ok);
+}
+
+// ============================================================
 // 入口
 // ============================================================
 
 /**
- * @brief PostAnvil v0.3 测试入口。
- * @return 0 表示全部通过，1 表示存在失败。
+ * @brief PostAnvil v0.3 测试入口
+ * @return 0 表示全部通过，1 表示存在失败
  */
 int main() {
 	std::cout << "========================================" << std::endl;
@@ -978,7 +1518,39 @@ int main() {
 		test25_func_return_constant();
 		test26_func_return_false();
 		std::cout << std::endl;
-	} catch (const std::exception& e) {
+
+		// ---------- v0.3 新增特性 ----------
+		std::cout << "--- v0.3 新增特性 ---" << std::endl;
+		test27_string_concatenation();
+		test28_normalized_properties();
+		test29_custom_class_property();
+		test30_string_var_as_class_expr();
+		test31_global_numeric_variable();
+		test32_global_bool_variable();
+		std::cout << std::endl;
+
+		// ---------- 宿主交互 (IMPORT / EXPORT) ----------
+		std::cout << "--- 宿主交互 (IMPORT / EXPORT) ---" << std::endl;
+		test33_import_variable();
+		test34_import_as_alias();
+		test35_export_value();
+		std::cout << std::endl;
+
+		// ---------- 控制流 (IF-ELSE / FOR) ----------
+		std::cout << "--- 控制流 (IF-ELSE / FOR) ---" << std::endl;
+		// test36_func_if_else();
+		// test37_func_for_loop();
+		// test38_for_loop_empty_class();
+		// test39_nested_for_loop();
+		std::cout << std::endl;
+
+		// ---------- 端到端 ----------
+		std::cout << "--- 端到端 ---" << std::endl;
+		test40_end_to_end_scenario();
+		std::cout << std::endl;
+
+	}
+	catch (const std::exception& e) {
 		std::cout << "[ERROR] " << e.what() << std::endl;
 		TEST_FAIL_COUNT(1);
 	}

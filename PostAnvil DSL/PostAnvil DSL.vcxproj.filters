@@ -97,7 +97,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="docs\PostAnvil DSL 用户说明文档 V0.3.md">
+    <None Include="docs\PostAnvil DSL 用户说明文档 V0.4.md">
       <Filter>资源文件</Filter>
     </None>
     <None Include="docs\PostAnvil.g4">

@@ -43,7 +43,7 @@
     <ClCompile Include="PostAnvil\tests\test_builder.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="docs\PostAnvil DSL 用户说明文档 V0.3.md" />
+    <None Include="docs\PostAnvil DSL 用户说明文档 V0.4.md" />
     <None Include="docs\PostAnvil.g4" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

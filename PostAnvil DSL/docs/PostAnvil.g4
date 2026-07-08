@@ -103,8 +103,7 @@ COMMENT
 
 // ---------- 程序顶层结构 ----------
 program
-    : ( declaration | NEWLINE )*     // 声明部分（可选）
-      ( rule_ | NEWLINE )*           // 规则部分（可多个，穿插空行）
+    : ( declaration | rule_ | NEWLINE )*
       EOF
     ;
 
@@ -206,7 +205,7 @@ forStmt
 
 // --- GROUP 规则（创建新类别） ---
 group_rule
-    : RULE GROUP new_class=STRING FROM class_expr ':' NEWLINE
+    : RULE GROUP class_expr FROM class_expr ':' NEWLINE
       ( bool_expr NEWLINE )*
       RULEEND
     ;
@@ -269,6 +268,7 @@ primary
     | attribute
     | '(' expr ')'
     | sortExpr
+    | IDENTIFIER        // 变量
     ;
 
 // 普通函数调用
