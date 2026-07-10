@@ -20,13 +20,13 @@ namespace postanvil {
  * @details 封装单个检测框的坐标、尺寸、置信度及类别信息
  *          提供内置衍生属性（如中心点、面积、归一化坐标）
  *          支持运行时动态扩展自定义属性
- *          类别名在构造时自动转为大写（大小写不敏感）
+ *          类别名在构造时自动转为大写
  */
 class Instance {
 public:
 	/**
 	 * @brief 构造检测实例
-	 * @param class_name 类别名称（内部自动转为大写）
+	 * @param class_name 类别名称
 	 * @param x 边界框左上角 x 坐标
 	 * @param y 边界框左上角 y 坐标
 	 * @param width 边界框宽度
@@ -42,21 +42,21 @@ public:
 		}
 	}
 
-	// ========================= 内置可变属性 ============================
+	// ========================= 内置动态属性 ============================
 
-	double w()          const { return m_w; }
-	double h()          const { return m_h; }
-	double x1()         const { return m_x1; }
-	double y1()         const { return m_y1; }
-	double conf()       const { return m_conf; }
-	const std::string& cls() const { return m_cls; }
+	double w()					const { return m_w; }
+	double h()					const { return m_h; }
+	double x1()					const { return m_x1; }
+	double y1()					const { return m_y1; }
+	double conf()				const { return m_conf; }
+	const std::string& cls()	const { return m_cls; }
 
-	void set_w(double width) { m_w = width; }
-	void set_h(double height) { m_h = height; }
-	void set_x1(double x) { m_x1 = x; }
-	void set_y1(double y) { m_y1 = y; }
-	void set_conf(double confidence) { m_conf = confidence; }
-	void set_cls(std::string_view class_name) { m_cls = class_name; }
+	void set_w(double width)					{ m_w = width; }
+	void set_h(double height)					{ m_h = height; }
+	void set_x1(double x)						{ m_x1 = x; }
+	void set_y1(double y)						{ m_y1 = y; }
+	void set_conf(double confidence)			{ m_conf = confidence; }
+	void set_cls(std::string_view class_name)	{ m_cls = class_name; }
 
 	// ========================= 内置衍生属性 ============================
 
@@ -80,15 +80,23 @@ public:
 	// ======================== 实例动态属性 ============================
 
 	/**
-	 * @brief 设置动态属性（数值型）
-	 * @param name 属性名（大小写不敏感，内部统一转大写处理）
+	 * @brief 设置动态属性
+	 * @param name 属性名
 	 * @param value 属性值
 	 * @throws RuntimeError 在 Debug 模式下若与内置属性名冲突则抛出
 	 */
-	void set_prop(const std::string& name, double value) {
+	void set_prop(const std::string& name, Val value) {
+
+		if (name == "W")		set_w(value.as_num());
+		if (name == "H")		set_h(value.as_num());
+		if (name == "X1")		set_x1(value.as_num());
+		if (name == "Y1")		set_y1(value.as_num());
+		if (name == "CONF")		set_conf(value.as_num());
+		if (name == "CLS")		set_cls(value.as_str());
+
 #ifdef _DEBUG
 		if (_props.contains(name)) {
-			throw RuntimeError("Property '" + name + "' conflicts with built-in property!");
+			throw RuntimeError("Property '" + name + "' conflicts with const built-in property!");
 		}
 #endif
 		this->m_props[name] = value;
@@ -100,7 +108,7 @@ public:
 	 * @return double 属性值
 	 * @throws RuntimeError 属性不存在时抛出
 	 */
-	double get_prop(const std::string& name) const {
+	Val get_prop(const std::string& name) const {
 		if (auto it = this->m_props.find(name); it != this->m_props.end()) {
 			return it->second;
 		}
@@ -120,7 +128,7 @@ public:
 	}
 
 private:
-	std::string m_cls;      // 类别名（大写）
+	std::string m_cls;      // 类别名
 	double m_x1 = 0;        // 左上角 x 坐标
 	double m_y1 = 0;        // 左上角 y 坐标
 	double m_w = 0;         // 宽度
@@ -128,9 +136,9 @@ private:
 	double m_conf = 0.0;    // 置信度
 
 	/**
-	 * @brief 动态属性存储表（键为属性名，值为数值）
+	 * @brief 动态属性存储表，键为属性名，值为数值
 	 */
-	detail::str_map<std::string, double> m_props;
+	detail::str_map<std::string, Val> m_props;
 
 #ifdef _DEBUG
 	/**

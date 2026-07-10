@@ -135,7 +135,6 @@ private: // Listener 回调实现
 			Type type = parseType(item->type());
 
 			m_global_types[localName] = type;
-			m_program.imports.emplace_back(hostName, localName, type);
 
 			auto op = std::make_unique<ImportOperator>();
 			op->host_name = hostName;
@@ -155,7 +154,6 @@ private: // Listener 回调实现
 			auto op = std::make_unique<ExportOperator>();
 			op->host_name = hostName;
 			op->expression = std::move(typed.func);
-			m_program.exports.emplace_back(typed.func, hostName);
 			m_program.operators.emplace_back(std::move(op));
 		}
 	}
@@ -194,7 +192,7 @@ private: // Listener 回调实现
 	void enterFilter_rule(::PostAnvilParser::Filter_ruleContext* ctx) override {
 		m_current_kind = RuleKind::FILTER;
 		m_current_filter = std::make_unique<FilterOperator>();
-		m_current_filter->target = resolve_class_expr(ctx->class_expr());
+		m_current_filter->target = m_expr_compiler.compileClassExpr(ctx->class_expr());
 	}
 
 	void exitFilter_rule(::PostAnvilParser::Filter_ruleContext* /*ctx*/) override {
@@ -208,7 +206,7 @@ private: // Listener 回调实现
 	void enterAttr_rule(::PostAnvilParser::Attr_ruleContext* ctx) override {
 		m_current_kind = RuleKind::ATTR;
 		m_current_attr = std::make_unique<AttributeOperator>();
-		m_current_attr->target = resolve_class_expr(ctx->class_expr());
+		m_current_attr->target = m_expr_compiler.compileClassExpr(ctx->class_expr());
 	}
 
 	void exitAttr_rule(::PostAnvilParser::Attr_ruleContext* /*ctx*/) override {
@@ -247,9 +245,6 @@ private: // Listener 回调实现
 		utils::to_upper_inplace(attr_name);
 
 		auto typed = m_expr_compiler.compile(ctx->expr());
-		if (typed.type != Type::T_NUM) {
-			throw CompileError("Attribute value must be NUM, got " + std::string(type_name(typed.type)));
-		}
 
 		m_current_attr->attr_defs.emplace_back(
 			std::move(attr_name),
@@ -264,7 +259,7 @@ private: // Listener 回调实现
 	 * @details FILTER、GROUP、APPEND 规则中的条件行统一由此处处理
 	 */
 	void enterBool_expr(::PostAnvilParser::Bool_exprContext* ctx) override {
-		auto filterFunc = m_expr_compiler.compileAsFilter(ctx->or_expr());
+		auto filterFunc = m_expr_compiler.compileAsBool(ctx->or_expr());
 
 		if (m_current_filter) {
 			m_current_filter->conditions.emplace_back(filterFunc);
@@ -284,8 +279,8 @@ private: // Listener 回调实现
 		m_current_group = std::make_unique<GroupOperator>();
 		auto class_exprs = ctx->class_expr();
 		if (class_exprs.size() >= 2) {
-			m_current_group->new_class = resolve_class_expr(class_exprs[0]);
-			m_current_group->source_class = resolve_class_expr(class_exprs[1]);
+			m_current_group->new_class = m_expr_compiler.compileClassExpr(class_exprs[0]);
+			m_current_group->source_class = m_expr_compiler.compileClassExpr(class_exprs[1]);
 		}
 	}
 
@@ -302,8 +297,8 @@ private: // Listener 回调实现
 		m_current_append = std::make_unique<AppendOperator>();
 		auto class_exprs = ctx->class_expr();
 		if (class_exprs.size() >= 2) {
-			m_current_append->dest_class = resolve_class_expr(class_exprs[0]);
-			m_current_append->source_class = resolve_class_expr(class_exprs[1]);
+			m_current_append->dest_class = m_expr_compiler.compileClassExpr(class_exprs[0]);
+			m_current_append->source_class = m_expr_compiler.compileClassExpr(class_exprs[1]);
 		}
 	}
 
@@ -371,45 +366,6 @@ private: // Listener 回调实现
 
 	// ======================== Helpers ============================
 
-	/**
-	 * @brief 解析 class_expr 为实际的类别名字符串
-	 * @param ctx class_expr 语法节点
-	 * @return 类别名（大写）
-	 * @throws CompileError 表达式无效或变量类型不匹配时抛出
-	 * @details 支持两种形式：
-	 *          1. 字符串字面量："person"
-	 *          2. 字符串变量：cls_name（必须为编译期常量）
-	 */
-	TargetFunc resolve_class_expr(::PostAnvilParser::Class_exprContext* ctx) const {
-		if (!ctx) {
-			throw CompileError("class_expr is null");
-		}
-
-		if (ctx->STRING()) {			
-			std::string s = utils::strip_quotes(ctx->STRING()->getText());
-			utils::to_upper_inplace(s);
-			// return s 
-			return [s](const Scene&) {
-				return s;
-			};
-		}
-
-		if (ctx->IDENTIFIER()) {
-			std::string varName = ctx->IDENTIFIER()->getText();
-			utils::to_upper_inplace(varName);
-
-			return [varName](const Scene& scene) {
-				if (auto it = scene.variables.find(varName); it == scene.variables.end()) {
-					throw RuntimeError("Target variable '" + varName +
-						"' not found in scene (used as class_expr)");
-				}
-				auto str = scene.variables.at(varName).as_str();
-				utils::to_upper_inplace(str);
-				return str;
-			};
-		}
-		throw CompileError("Invalid class_expr: expected STRING or IDENTIFIER");
-	}
 
 	/**
 	 * @brief 解析类型节点为 Type 枚举

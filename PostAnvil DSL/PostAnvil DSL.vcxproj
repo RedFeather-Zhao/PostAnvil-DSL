@@ -34,13 +34,17 @@
     <ClInclude Include="PostAnvil\include\postanvil\scene.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\type.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\utils.hpp" />
+    <ClInclude Include="PostAnvil\tests\test_common.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PostAnvil\antlr4\PostAnvilBaseListener.cpp" />
     <ClCompile Include="PostAnvil\antlr4\PostAnvilLexer.cpp" />
     <ClCompile Include="PostAnvil\antlr4\PostAnvilListener.cpp" />
     <ClCompile Include="PostAnvil\antlr4\PostAnvilParser.cpp" />
-    <ClCompile Include="PostAnvil\tests\test_builder.cpp" />
+    <ClCompile Include="PostAnvil\tests\main_test.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_attr.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_basic.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_common.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\PostAnvil DSL 用户说明文档 V0.4.md" />

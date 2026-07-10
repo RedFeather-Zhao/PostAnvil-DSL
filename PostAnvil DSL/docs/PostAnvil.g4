@@ -283,7 +283,7 @@ sortExpr
 
 // 属性访问
 attribute
-    : SELF '.' IDENTIFIER           # InstanceAttr      // self.xxx
+    : SELF '.' IDENTIFIER           # InstanceAttr       // self.xxx
     | STRING '.' IDENTIFIER         # ClassAttr          // "class".xxx
     | IDENTIFIER '.' IDENTIFIER     # VarInstanceAttr    // 循环变量.xxx (仅在 FOR 内)
     ;

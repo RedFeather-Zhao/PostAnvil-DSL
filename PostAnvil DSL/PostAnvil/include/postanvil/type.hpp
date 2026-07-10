@@ -13,6 +13,7 @@
 #include <variant>
 #include <string>
 #include <stdexcept>
+#include <compare>
 
 #include "error.hpp"
 
@@ -25,11 +26,38 @@ struct Scene;
  * @brief 编译期类型枚举，表示 DSL 支持的数据类型
  * @note T_ 前缀用于避免与 Windows SDK 宏 STR、BOOL 冲突
  */
-enum class Type {
-	T_NUM,
-	T_STR,
-	T_BOOL,
+enum class Type: uint32_t {
+	T_ERROR		= 0b0000'0000'0000'0000,
+	T_ANY		= 0b1111'1111'1111'1111,
+
+	// 注意，以下类型并不兼容
+
+	T_NUM		= 0b0000'0000'0000'0001,
+	T_STR		= 0b0000'0000'0000'0010,
+	T_BOOL		= 0b0000'0000'0000'0100,
 };
+
+// 按位与
+/**
+ * @brief 类型按位与运算，用于解决类型判断问题的复杂逻辑
+ * 如
+ * 1.仅支持 NUM 和 ANY 的场景，两操作数类型未知
+ * type = op1 & op2
+ * 若均为 ANY，则 type = ANY
+ * 若均为 NUM，则 type = NUM
+ * 若其中一个为ANY，则 type = 另一个操作数类型
+ * 若不同类型且均不为 ANY，type = T_ERROR
+ * 
+ * 2.T_ERROR 对任意类型运算均报错
+ * 
+ * @return 指定类型 | T_ANY | T_ERROR
+ */
+constexpr Type operator&(Type lhs, Type rhs) {
+	return static_cast<Type>(
+		static_cast<std::underlying_type_t<Type>>(lhs) &
+		static_cast<std::underlying_type_t<Type>>(rhs)
+	);
+}
 
 /**
  * @brief 获取类型枚举对应的名称字符串
@@ -39,11 +67,13 @@ enum class Type {
 inline const char* type_name(Type t) {
 	switch (t) {
 		using enum postanvil::Type;
-	case T_NUM:  return "NUM";
-	case T_STR:  return "STR";
-	case T_BOOL: return "BOOL";
+	case T_NUM:		return "NUM";
+	case T_STR:		return "STR";
+	case T_BOOL:	return "BOOL";
+	case T_ANY:		return "ANY";
+	case T_ERROR:	return "ERROR";
+	default:		return "UNKNOW";
 	}
-	return "UNKNOWN";
 }
 
 /**
@@ -69,6 +99,84 @@ struct Val {
 	Val(const std::string& v) : data(v) {}
 	Val(const char* v) : data(std::string(v)) {}
 	Val(bool v) : data(v) {}
+
+	std::partial_ordering operator<=>(const Val& other) const {
+		if (type() != other.type()) {
+			throw RuntimeError("Cannot compare values of different types: " +
+				std::string(type_name(type())) + " vs " +
+				std::string(type_name(other.type())));
+		}
+
+		switch (type()) {
+		using enum postanvil::Type;
+		case T_NUM: {
+			constexpr double eps = 1e-6;
+			double a = as_num();
+			double b = other.as_num();
+			double diff = a - b;
+			if (std::abs(diff) < eps)
+				return std::partial_ordering::equivalent;
+			if (diff < 0)
+				return std::partial_ordering::less;
+			return std::partial_ordering::greater;
+		}
+		case T_BOOL: return as_bool() <=> other.as_bool();
+		case T_STR:  return as_str() <=> other.as_str();
+		default:	 throw RuntimeError("");
+		}
+	}
+
+	bool operator==(const Val& other) const {
+		return (*this <=> other) == 0;
+	}
+
+	friend Val operator+(const Val& lhs, const Val& rhs) {
+		if (lhs.type() != rhs.type()) {
+			throw RuntimeError("Cannot add values of different types");
+		}
+		if (lhs.type() == Type::T_BOOL || rhs.type() == Type::T_BOOL) {
+			throw RuntimeError("Cannot add values of boolean type");
+		}
+
+		return std::visit(
+			[](const auto& a, const auto& b) -> Val {
+				using A = std::decay_t<decltype(a)>;
+				using B = std::decay_t<decltype(b)>;
+				if constexpr (std::is_same_v<A, double> && std::is_same_v<B, double>) {
+					return a + b;
+				}
+				else if constexpr (std::is_same_v<A, std::string> && std::is_same_v<B, std::string>) {
+					return a + b;
+				}
+				else {
+					throw RuntimeError("Unsupported addition types");
+				}
+			},
+			lhs.data, rhs.data
+		);
+	}
+
+	friend Val operator-(const Val& lhs, const Val& rhs) {
+		if (lhs.type() != rhs.type() || lhs.type() != Type::T_NUM) {
+			throw RuntimeError("Subtraction requires NUM operands of the same type");
+		}
+		return lhs.as_num() - rhs.as_num();
+	}
+
+	friend Val operator*(const Val& lhs, const Val& rhs) {
+		if (lhs.type() != rhs.type() || lhs.type() != Type::T_NUM) {
+			throw RuntimeError("Multiplication requires NUM operands of the same type");
+		}
+		return lhs.as_num() * rhs.as_num();
+	}
+
+	friend Val operator/(const Val& lhs, const Val& rhs) {
+		if (lhs.type() != rhs.type() || lhs.type() != Type::T_NUM) {
+			throw RuntimeError("Division requires NUM operands of the same type");
+		}
+		double b = rhs.as_num();
+		return b != 0.0 ? lhs.as_num() / b : 0.0;
+	}
 
 	/**
 	 * @brief 获取当前值的数据类型
@@ -132,7 +240,5 @@ struct TypedExpr {
 using NumFunc		= std::function<double		(const Instance&, const Scene& scene)>;
 using BoolFunc		= std::function<bool		(const Instance&, const Scene& scene)>;
 using StrFunc		= std::function<std::string	(const Instance&, const Scene& scene)>;
-
-using TargetFunc	= std::function<std::string	(const Scene& scene)>;
 
 } // namespace postanvil
