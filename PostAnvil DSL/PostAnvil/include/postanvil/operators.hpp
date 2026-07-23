@@ -28,15 +28,20 @@ namespace postanvil {
  * @param ctx 评估上下文
  * @return double 计算结果
  */
-using CompiledFunc = std::function<double(
-	const std::vector<double>& args,
-	struct EvaluationContext& ctx
+using CompiledFunc = std::function<Val(
+	const std::vector<Val>& args,
+	const Instance& self,
+	EvaluationContext& ctx
 )>;
 
 
 /**
  * @brief 评估上下文，承载算子管道执行过程中的可变状态
- * @details 算子通过 apply 方法读取并修改上下文，实现管道式的数据变换
+ * 包含：
+ *	1.场景信息，包含图片元数据、按类别分组的检测实例、全局变量信息
+ *	2.前后帧场景信息，预留帧间一致性配置
+ *  3.局部变量与函数参数栈空间，仅当前函数体可见栈顶变量
+ *  4. 
  */
 struct EvaluationContext {
 	const static inline char* GLOBAL_TARGET = "GLOBAL";
@@ -46,22 +51,88 @@ struct EvaluationContext {
 	 * @param s 初始场景
 	 */
 	explicit EvaluationContext(const Scene& s)
-		: scene(s)
+		: scene(s), is_returned(false)
 	{
 	}
 
 	Scene to_result() const {
-		// TODO: 后续添加更多上下文处理
 		return scene;
 	}
 
+	void push_scope() {
+		local_stack.emplace_back();
+	}
+
+	void pop_scope() {
+		local_stack.pop_back();
+	}
+
+	/**
+	 * @brief 获取当前作用域局部/全局变量
+	 * 
+	 * @param name	- 变量名
+	 * @return Val	- 变量值
+	 */
+	Val get_var(const std::string& name) const {
+		// 从最近的局部作用域向上查找
+		for (auto it = local_stack.rbegin(); it != local_stack.rend(); ++it) {
+			if (auto found = it->find(name); found != it->end()) {
+				return found->second;
+			}
+		}
+
+		// 未找到则查找全局变量
+		auto it = scene.variables.find(name);
+		if (it == scene.variables.end()) {
+			throw RuntimeError("Undefined variable '" + name + "'");
+		}
+		return it->second;
+	}
+
+	/**
+	 * @brief 设置当前作用域局部/全局变量
+	 * 
+	 * @param name	- 变量名
+	 * @param val	- 变量值
+	 */
+	void set_var(const std::string& name, const Val& val) {
+		// 从内向外查找，若找到则更新；否则在最近的作用域中创建
+		for (auto it = local_stack.rbegin(); it != local_stack.rend(); ++it) {
+			if (auto found = it->find(name); found != it->end()) {
+				found->second = val;
+				return;
+			}
+		}
+		// 局部作用域存在时，在当前最内层创建
+		if (!local_stack.empty()) {
+			local_stack.back()[name] = val;
+			return;
+		}
+		// 无局部作用域（顶层），视为全局变量
+		scene.variables[name] = val;
+	}
+
+	/**
+	 * @brief 执行返回调用，保存缓存结果
+	 */
+	void do_return(Val&& val) {
+		is_returned = true;
+		return_value = std::move(val);
+	}
 public:
 
-	Scene scene;											 // 当前场景，被算子逐步变换
-	std::unordered_map<std::string, CompiledFunc> functions; // 函数注册表
+	Scene scene;									// 当前场景，被算子逐步变换
 
-	// TODO: 未来扩展字段，帧缓存用于跨帧信息传递
-	std::queue<Scene> frame_cache;
+	detail::str_map<CompiledFunc> functions;		// 函数注册表
+
+	std::vector<detail::str_map<Val>> local_stack;	// 栈空间，存储局部变量
+	detail::str_map<const Instance*> loop_vars;		// 循环变量名，用于 for 语句遍历实例
+
+	std::queue<Scene> frame_cache;					// 临近帧缓存
+
+	const Instance* curr_inst	= nullptr;			// 当前实例对象
+	bool is_returned			= true;				// 当前函数返回
+	Val return_value;								// 函数返回缓存
 };
 
 // ========================= Operator ============================
@@ -81,12 +152,28 @@ enum class OperatorKind {
 	OP_EXPORT,    // 导出算子
 };
 
+static const char* operation_kind_to_string(OperatorKind kind) {
+	switch (kind) {
+	using enum postanvil::OperatorKind;
+	case OP_BASE:		return "BASE";
+	case OP_FILTER:		return "FILTER";
+	case OP_ATTRIBUTE:	return "ATTRIBUTE";
+	case OP_GROUP:		return "GROUP";
+	case OP_APPEND:		return "APPEND";
+	case OP_FUNC:		return "FUNC";
+	case OP_VARDEF:		return "VARDEF";
+	case OP_IMPORT:		return "IMPORT";
+	case OP_EXPORT:		return "EXPORT";
+	default:			return "UNKNOWN";
+	}
+}
+
 /**
  * @brief 场景算子的抽象基类
  */
 struct SceneOperator {
 	OperatorKind kind = OperatorKind::OP_BASE;
-	StrFunc target;		// 运行时解析目标类别名，若返回 GLOBAL 则应用于所有类别
+	StrFunc target;		// 运行时解析目标类别名，若返回 "GLOBAL" 则应用于所有类别
 
 public:
 	explicit SceneOperator(OperatorKind kind_ = OperatorKind::OP_BASE) : kind(kind_)
@@ -99,6 +186,7 @@ public:
 	 * @param ctx 评估上下文，将被就地修改
 	 */
 	virtual void apply(EvaluationContext& ctx) const = 0;
+
 };
 
 // ====================== FilterOperator ========================
@@ -115,7 +203,7 @@ struct FilterOperator : SceneOperator {
 	{
 		auto is_valid = [&](const auto& inst) {
 			return std::ranges::all_of(conditions, [&](const auto& cond) {
-				return cond(inst, ctx.scene);
+				return cond(inst, ctx);
 			});
 		};
 
@@ -125,7 +213,7 @@ struct FilterOperator : SceneOperator {
 			});
 		};
 
-		auto target_name = target(Scene::make_dummy(), ctx.scene);
+		auto target_name = target(Scene::make_dummy(), ctx);
 
 		if (target_name == EvaluationContext::GLOBAL_TARGET) {
 			for (auto& [name, instances] : ctx.scene.objects) {
@@ -163,22 +251,25 @@ struct AttributeOperator : SceneOperator {
 
 	void apply(EvaluationContext& ctx) const override
 	{
+		auto target_name = target(Scene::make_dummy(), ctx);
+
 		auto compute_attrs = [&](Instances& instances) {
-			for (auto& inst : instances) {
-				for (const auto& def : attr_defs) {
-					if (def.is_class_attr) {
-						ctx.scene.class_props[def.class_name][def.name]
-							= def.expression(Scene::make_dummy(), ctx.scene);
-					}
-					else {
-						Val val = def.expression(inst, ctx.scene);
+			// 逐语句计算
+			for (const auto& def : attr_defs) {
+				if (def.is_class_attr == true) {
+					// 类属性赋值
+					Val val = def.expression(Scene::make_dummy(), ctx);
+					ctx.scene.class_props[def.class_name][def.name] = val;
+				}
+				else {
+					// 实例属性
+					for (auto& inst : instances) {
+						Val val = def.expression(inst, ctx);
 						inst.set_prop(def.name, val);
 					}
 				}
 			}
 		};
-
-		auto target_name = target(Scene::make_dummy(), ctx.scene);
 
 		if (target_name == EvaluationContext::GLOBAL_TARGET) {
 			for (auto& [name, instances] : ctx.scene.objects) {
@@ -187,10 +278,8 @@ struct AttributeOperator : SceneOperator {
 			return;
 		}
 
-		auto it = ctx.scene.objects.find(target_name);
-		if (it != ctx.scene.objects.end()) {
-			compute_attrs(it->second);
-		}
+		// 类别不存在则创建
+		compute_attrs(ctx.scene.objects[target_name]);
 	}
 };
 
@@ -207,8 +296,8 @@ struct GroupOperator : SceneOperator {
 	GroupOperator() : SceneOperator(OperatorKind::OP_GROUP) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		auto source_cls = source_class(Scene::make_dummy(), ctx.scene);
-		auto new_cls = new_class(Scene::make_dummy(), ctx.scene);
+		auto source_cls = source_class(Scene::make_dummy(), ctx);
+		auto new_cls = new_class(Scene::make_dummy(), ctx);
 
 		auto it = ctx.scene.objects.find(source_cls);
 		if (it == ctx.scene.objects.end()) {
@@ -218,7 +307,7 @@ struct GroupOperator : SceneOperator {
 		Instances selected;
 		for (const auto& inst : it->second) {
 			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
-				return cond(inst, ctx.scene);
+				return cond(inst, ctx);
 			});
 			if (all_pass) {
 				selected.emplace_back(inst);
@@ -234,15 +323,15 @@ struct GroupOperator : SceneOperator {
  * @brief 追加算子，将源类别中满足条件的实例追加到目标类别
  */
 struct AppendOperator : SceneOperator {
-	StrFunc dest_class;              // 目标类别名
-	StrFunc source_class;            // 源类别名
-	std::vector<BoolFunc> conditions;    // 追加条件
+	StrFunc dest_class;						// 目标类别名
+	StrFunc source_class;					// 源类别名
+	std::vector<BoolFunc> conditions;		// 追加条件
 
 	AppendOperator() : SceneOperator(OperatorKind::OP_APPEND) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		auto dest_cls = dest_class(Scene::make_dummy(), ctx.scene);
-		auto source_cls = source_class(Scene::make_dummy(), ctx.scene);
+		auto dest_cls = dest_class(Scene::make_dummy(), ctx);
+		auto source_cls = source_class(Scene::make_dummy(), ctx);
 
 		auto it = ctx.scene.objects.find(source_cls);
 		if (it == ctx.scene.objects.end()) {
@@ -251,7 +340,7 @@ struct AppendOperator : SceneOperator {
 
 		for (const auto& inst : it->second) {
 			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
-				return cond(inst, ctx.scene);
+				return cond(inst, ctx);
 			});
 			if (all_pass) {
 				ctx.scene.objects[dest_cls].emplace_back(inst);
@@ -292,7 +381,7 @@ struct VarDefOperator : SceneOperator {
 	VarDefOperator() : SceneOperator(OperatorKind::OP_VARDEF) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		Val val = initializer(Scene::make_dummy(), ctx.scene);
+		Val val = initializer(Scene::make_dummy(), ctx);
 		ctx.scene.variables[var_name] = val;
 	}
 };
@@ -332,7 +421,7 @@ struct ExportOperator : SceneOperator {
 	ExportOperator() : SceneOperator(OperatorKind::OP_EXPORT) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		Val result = expression(Scene::make_dummy(), ctx.scene);
+		Val result = expression(Scene::make_dummy(), ctx);
 		ctx.scene.variables["__export__" + host_name] = result;
 	}
 };

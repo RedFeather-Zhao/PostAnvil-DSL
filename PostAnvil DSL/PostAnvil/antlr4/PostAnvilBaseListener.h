@@ -19,6 +19,9 @@ public:
   virtual void enterProgram(PostAnvilParser::ProgramContext * /*ctx*/) override { }
   virtual void exitProgram(PostAnvilParser::ProgramContext * /*ctx*/) override { }
 
+  virtual void enterNewlines(PostAnvilParser::NewlinesContext * /*ctx*/) override { }
+  virtual void exitNewlines(PostAnvilParser::NewlinesContext * /*ctx*/) override { }
+
   virtual void enterDeclaration(PostAnvilParser::DeclarationContext * /*ctx*/) override { }
   virtual void exitDeclaration(PostAnvilParser::DeclarationContext * /*ctx*/) override { }
 

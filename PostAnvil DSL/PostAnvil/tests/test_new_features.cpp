@@ -3,8 +3,7 @@
 std::vector<TestCase> get_new_features_tests() {
     std::vector<TestCase> tests;
 
-    tests.push_back({
-        "字符串拼接与全局变量引用",
+    tests.emplace_back("字符串拼接与全局变量引用",
         R"(
             NUM threshold = 0.5
 
@@ -33,11 +32,9 @@ std::vector<TestCase> get_new_features_tests() {
                 err = "期望 PERSON=1, 实际 PERSON=" + std::to_string(cnt);
             }
             return ok;
-        }
         });
 
-    tests.push_back({
-        "归一化属性 (wn, hn, x1n, y1n, x2n, y2n, arean)",
+    tests.emplace_back("归一化属性 (wn, hn, x1n, y1n, x2n, y2n, arean)",
         R"(
             RULE FILTER "obj":
                 self.wn > 0.1
@@ -63,11 +60,9 @@ std::vector<TestCase> get_new_features_tests() {
                 err = "期望 OBJ=1, 实际 OBJ=" + std::to_string(cnt);
             }
             return ok;
-        }
         });
 
-    tests.push_back({
-        "自定义类属性 (\"car\".avg_conf, \"car\".total_area)",
+    tests.emplace_back("自定义类属性 (\"car\".avg_conf, \"car\".total_area)",
         R"(
             NUM test_val = 0.5
 
@@ -87,11 +82,9 @@ std::vector<TestCase> get_new_features_tests() {
                 check_class_prop(res, "CAR", "TOTAL_AREA", 400.0);
             if (!ok) err = "类别属性值不匹配";
             return ok;
-        }
         });
 
-    tests.push_back({
-        "字符串变量作为 class_expr (STR target = \"animal\")",
+    tests.emplace_back("字符串变量作为 class_expr (STR target = \"animal\")",
         R"(
             STR target = "animal"
 
@@ -114,11 +107,9 @@ std::vector<TestCase> get_new_features_tests() {
                 err = "期望 ANIMAL=1, CAR=1，实际 ANIMAL=" + std::to_string(a) + ", CAR=" + std::to_string(c);
             }
             return ok;
-        }
         });
 
-    tests.push_back({
-        "全局数值变量 (min_conf=0.6, min_w=15)",
+    tests.emplace_back("全局数值变量 (min_conf=0.6, min_w=15)",
         R"(
             NUM min_conf = 0.6
             NUM min_w = 15
@@ -142,7 +133,6 @@ std::vector<TestCase> get_new_features_tests() {
                 err = "期望 A=1, 实际 A=" + std::to_string(cnt);
             }
             return ok;
-        }
         });
 
     tests.push_back({

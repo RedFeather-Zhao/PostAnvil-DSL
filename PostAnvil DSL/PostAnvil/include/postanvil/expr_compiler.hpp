@@ -22,7 +22,21 @@
 
 namespace postanvil {
 
-	// ====================== TreeExprCompiler =========================
+// ====================== TreeExprCompiler =========================
+
+
+[[noreturn]]
+static void handle_compile_error(const std::string& msg, const ::antlr4::ParserRuleContext* ctx = nullptr) {
+	if (!ctx) {
+		throw CompileError(msg);
+	}
+	auto start = ctx->getStart();
+	throw CompileError(msg,
+		static_cast<int>(start->getLine()),
+		static_cast<int>(start->getCharPositionInLine())
+	);
+}
+
 
 /**
  * @brief 表达式编译器
@@ -31,35 +45,53 @@ namespace postanvil {
  *          支持的表达式层级：expr → or/and/not/cmp/add/mul/unary → primary
  */
 class TreeExprCompiler {
-public:
-	static const inline char* OBJECT_SELF = "SELF";
-	static const inline char* OBJECT_IMAGE = "IMG";
-
 	/**
 	 * @brief 函数注册表指针，由外部编译器设置
 	 * @details 用于编译函数调用时查找已定义的函数体
 	 */
-	std::unordered_map<std::string, CompiledFunc>* functions = nullptr;
+	detail::str_map<CompiledFunc>* functions = nullptr;
 
 	/**
 	 * @brief 全局变量类型表指针，由外部编译器设置
 	 * @details 用于编译 IDENTIFIER 表达式时确定变量的声明类型
 	 */
-	std::unordered_map<std::string, Type>* global_types = nullptr;
+	detail::str_map<Type>* global_types = nullptr;
+
+	/**
+	 * @brief 局部变量类型表
+	 * @details 用于编译函数和循环变量时的局部变量类型
+	 */
+	std::vector<detail::str_map<Type>> local_type_stack;
+
+public:
+	static const inline char* OBJECT_SELF = "SELF";
+	static const inline char* OBJECT_IMAGE = "IMG";
 
 	TreeExprCompiler() = default;
 
-	[[noreturn]]
-	static void handle_compile_error(const std::string& msg, const ::antlr4::ParserRuleContext* ctx = nullptr) {
-		if (!ctx) {
-			throw CompileError(msg);
-		}
-		auto start = ctx->getStart();
-		throw CompileError(msg,
-			static_cast<int>(start->getLine()),
-			static_cast<int>(start->getCharPositionInLine())
-		);
+	void set_functions(detail::str_map<CompiledFunc>* functions) {
+		this->functions = functions;
 	}
+
+	void set_global_types(detail::str_map<Type>* global_types) {
+		this->global_types = global_types;
+	}
+
+	void push_local_scope() {
+		local_type_stack.emplace_back();
+	}
+
+	void pop_local_scope() {
+		local_type_stack.pop_back();
+	}
+
+	void setLocalType(const std::string& name, Type t) {
+		if (!local_type_stack.empty()) {
+			local_type_stack.back()[name] = t;
+		}
+	}
+
+public: // public method:
 
 	/**
 	 * @brief 编译表达式为闭包的入口方法
@@ -88,8 +120,8 @@ public:
 			handle_compile_error(err, ctx);
 		}
 		const auto& func = typed.func;
-		return [func](const Instance& self, const Scene& scene) {
-			return func(self, scene).as_bool();
+		return [func](const Instance& self, EvaluationContext& ctx) {
+			return func(self, ctx).as_bool();
 		};
 	}
 
@@ -106,8 +138,8 @@ public:
 			handle_compile_error(err, ctx);
 		}
 		const auto& func = typed.func;
-		return [func](const Instance& self, const Scene& scene) {
-			return func(self, scene).as_num();
+		return [func](const Instance& self, EvaluationContext& ctx) {
+			return func(self, ctx).as_num();
 		};
 	}
 
@@ -123,29 +155,24 @@ public:
 	StrFunc compileClassExpr(::PostAnvilParser::Class_exprContext* ctx) {
 		// 字符串字面量
 		if (ctx->STRING()) {
-			std::string s = utils::strip_quotes(ctx->STRING()->getText());
-			utils::to_upper_inplace(s);
-			return [s = std::move(s)](const Instance&, const Scene&) {
+			std::string s = utils::strip_quotes(utils::get_upper_text(ctx->STRING()));
+			return [s = std::move(s)](const Instance&, EvaluationContext&) {
 				return s;
 			};
 		}
 
 		// 字符串变量
 		if (ctx->IDENTIFIER()) {
-			std::string var = ctx->IDENTIFIER()->getText();
-			utils::to_upper_inplace(var);
+			std::string var = utils::get_upper_text(ctx->IDENTIFIER());
 
-			return [var = std::move(var)](const Instance&, const Scene& scene) {
-				if (auto it = scene.variables.find(var); it == scene.variables.end()) {
-					throw RuntimeError("Target variable '" + var +
-						"' not found in scene (used as class_expr)");
-				}
-				auto str = scene.variables.at(var).as_str();
+			return [var = std::move(var)](const Instance&, EvaluationContext& ctx) {
+				Val val = ctx.get_var(var);
+				auto str = val.as_str();
 				utils::to_upper_inplace(str);
 				return str;
 			};
 		}
-		throw CompileError("Invalid class_expr: expected STRING or IDENTIFIER");
+		handle_compile_error("Invalid class_expr: expected STRING or IDENTIFIER", ctx);
 	}
 
 private:
@@ -183,8 +210,8 @@ private:
 			}
 			left = {
 				[l = std::move(left.func), r = std::move(right.func)]
-				(const Instance& self, const Scene& scene) -> Val {
-					return l(self, scene).as_bool() || r(self, scene).as_bool();
+				(const Instance& self, EvaluationContext& ctx) -> Val {
+					return l(self, ctx).as_bool() || r(self, ctx).as_bool();
 				},
 				Type::T_BOOL
 			};
@@ -224,8 +251,8 @@ private:
 				handle_compile_error(err, ctx);
 			}
 			left = { [l = std::move(left.func), r = std::move(right.func)]
-				(const Instance& self, const Scene& scene) -> Val {
-					return l(self, scene).as_bool() && r(self, scene).as_bool();
+				(const Instance& self, EvaluationContext& ctx) -> Val {
+					return l(self, ctx).as_bool() && r(self, ctx).as_bool();
 				},
 				Type::T_BOOL
 			};
@@ -253,8 +280,8 @@ private:
 			handle_compile_error(err, ctx);
 		}
 		return { [r = std::move(rhs.func)]
-			(const Instance& self, const Scene& scene) -> Val {
-				return !r(self, scene).as_bool();
+			(const Instance& self, EvaluationContext& ctx) -> Val {
+				return !r(self, ctx).as_bool();
 			},
 			Type::T_BOOL
 		};
@@ -296,9 +323,9 @@ private:
 		}
 
 		return { [l = std::move(left.func), r = std::move(right.func), op = std::move(op)]
-			(const Instance& self, const Scene& scene) -> Val {
-				auto lval = l(self, scene);
-				auto rval = r(self, scene);
+			(const Instance& self, EvaluationContext& ctx) -> Val {
+				auto lval = l(self, ctx);
+				auto rval = r(self, ctx);
 				if (op == ">")  return lval >  rval;
 				if (op == "<")  return lval <  rval;
 				if (op == ">=") return lval >= rval;
@@ -354,9 +381,9 @@ private:
 
 			left = {
 				[l = std::move(left.func), r = std::move(right.func), o = std::move(op)]
-				(const Instance& self, const Scene& scene) {
-					Val lv = l(self, scene);
-					Val rv = r(self, scene);
+				(const Instance& self, EvaluationContext& ctx) {
+					Val lv = l(self, ctx);
+					Val rv = r(self, ctx);
 					if (o == "+") return lv + rv;
 					if (o == "-") return lv - rv;
 					throw RuntimeError(std::format("Unknown operation: {}", o));
@@ -405,9 +432,9 @@ private:
 
 			left = {
 				[l = std::move(left.func), r = std::move(right.func), o = std::move(op)]
-				(const Instance& self, const Scene& scene) {
-					Val lv = l(self, scene);
-					Val rv = r(self, scene);
+				(const Instance& self, EvaluationContext& ctx) {
+					Val lv = l(self, ctx);
+					Val rv = r(self, ctx);
 					if (o == "*") return lv * rv;
 					if (o == "/") return lv / rv;
 					throw RuntimeError(std::format("Unknown operation: {}", o));
@@ -440,8 +467,8 @@ private:
 
 			return {
 				[r = std::move(rhs.func)]
-				(const Instance& self, const Scene& scene) -> Val {
-					return -(r(self, scene).as_num());
+				(const Instance& self, EvaluationContext& ctx) -> Val {
+					return -(r(self, ctx).as_num());
 				},
 				Type::T_NUM
 			};
@@ -458,68 +485,27 @@ private:
 	 * @return TypedExpr	- 表达式解析闭包
 	 */
 	TypedExpr compilePrimary(::PostAnvilParser::PrimaryContext* ctx) {
-		// 数字字面量闭包
+		// NUMBER
 		if (ctx->NUMBER()) {
-			double v = std::stod(ctx->NUMBER()->getText());
-			return {
-				[v](const Instance&, const Scene&) {
-					return Val(v);
-				},
-				Type::T_NUM
-			};
+			return compileNumber(ctx->NUMBER());
 		}
 
-		// 字串字面量闭包
+		// STRING
 		if (ctx->STRING()) {
-			std::string s = utils::strip_quotes(ctx->STRING()->getText());
-			return {
-				[s = std::move(s)](const Instance&, const Scene&) {
-					return Val(s);
-				},
-				Type::T_STR
-			};
+			return compileString(ctx->STRING());
 		}
 
-		// 布尔字面量闭包
+		// BOOL_LIT
 		if (ctx->BOOL_LIT()) {
-			std::string text = ctx->BOOL_LIT()->getText();
-			utils::to_upper_inplace(text);
-			bool v = (text == "TRUE");
-			return {
-				[v](const Instance&, const Scene&) {
-					return Val(v);
-				},
-				Type::T_BOOL
-			};
+			return compileBoolean(ctx->BOOL_LIT());
 		}
 
-		// 标识符-变量闭包
+		//  IDENTIFIER 局部/全局变量
 		if (ctx->IDENTIFIER()) {
-			std::string var = ctx->IDENTIFIER()->getText();
-			utils::to_upper_inplace(var);
-
-			// 若是声明过全局变量或者导入全局变量，指定类型，否则为 ANY
-			Type var_type = Type::T_ANY;
-			if (global_types) {
-				auto it = global_types->find(var);
-				if (it != global_types->end()) {
-					var_type = it->second;
-				}
-			}
-
-			return {
-				[var](const Instance&, const Scene& scene) -> Val {
-					auto it = scene.variables.find(var);
-					if (it == scene.variables.end()) {
-						throw RuntimeError("Undefined variable '" + var + "'");
-					}
-					return it->second;
-				},
-				var_type
-			};
+			return compileVariable(ctx->IDENTIFIER());
 		}
 
-		// 函数调用闭包
+		// func_call 函数调用闭包
 		if (ctx->func_call()) {
 			return compileFuncCall(ctx->func_call());
 		}
@@ -544,68 +530,161 @@ private:
 	}
 
 	/**
+	 * @brief 编译数字终结符，返回数字常量闭包
+	 * 
+	 * @param node			- 终结节点
+	 * @return TypedExpr	- T_NUM 类型的闭包
+	 */
+	TypedExpr compileNumber(antlr4::tree::TerminalNode* node) {
+		double v = std::stod(node->getText());
+		return {
+			[v](const Instance&, EvaluationContext&) {
+				return Val(v);
+			},
+			Type::T_NUM
+		};
+	}
+
+	/**
+	 * @brief 编译字串字面量终结符，返回字串字面量闭包
+	 * 
+	 * @param node			- 终结节点
+	 * @return TypedExpr	- T_STR 类型的闭包
+	 */
+	TypedExpr compileString(antlr4::tree::TerminalNode* node) {
+		std::string s = utils::strip_quotes(node->getText());
+		return {
+			[s = std::move(s)](const Instance&, EvaluationContext&) {
+				return Val(s);
+			},
+			Type::T_STR
+		};
+	}
+
+	/**
+	 * @brief 编译布尔终结符，返回布尔闭包
+	 *
+	 * @param node			- 终结节点
+	 * @return TypedExpr	- T_STR 类型的闭包
+	 */
+	TypedExpr compileBoolean(antlr4::tree::TerminalNode* node) {
+		std::string text = utils::get_upper_text(node);
+		bool v = (text == "TRUE");
+		return {
+			[v](const Instance&, EvaluationContext&) {
+				return Val(v);
+			},
+			Type::T_BOOL
+		};
+	}
+
+	/**
+	 * @brief 编译变量终结符，返回变量对应类型闭包
+	 * 
+	 * @param node			- 终结节点
+	 * @return	TypedExpr	- T_STR 类型的闭包
+	 */
+	TypedExpr compileVariable(antlr4::tree::TerminalNode* node) {
+		std::string var = utils::get_upper_text(node);
+		Type var_type = Type::T_ANY;
+
+		if (!global_types) {
+			auto it = global_types->find(var);
+			if (it != global_types->end()) {
+				var_type = it->second;
+			}
+		}
+
+		// TODO: 缺当前局部变量的类型判定
+
+		return {
+			[var](const Instance&, EvaluationContext& ctx) -> Val {
+				// 使用 get_var 查找局部/全局
+				return ctx.get_var(var);
+			},
+			var_type
+		};
+	}
+
+	/**
 	 * @brief 编译属性访问表达式，属性均为动态可变类型，故闭包返回 ANY ，支持以下形式
-	 *			1. self.prop	: 实例的属性访问，T_ANY
-	 *			2. class.prop	: 类别的属性访问，T_ANY
-	 *			3. var.prop		: 变量的属性访问，T_ANY
+	 *			1. self.prop	: 实例的属性访问，T_ANY，InstanceAttr
+	 *			2. class.prop	: 类别的属性访问，T_ANY，ClassAttr
+	 *			3. var.prop		: 变量的属性访问，T_ANY，VarInstanceAttr
+	 *							对于 var 为预定义对象的情况，解析其属性
+	 *							对于 var 为循环实例的情况，将其解析为实例，即 1 的情况
+	 *							对于 var 为字串类型的情况，将其解析为类别，即 2 的情况
 	 * 
 	 * @param ctx			- AttributeContext 节点
 	 * @return TypedExpr	- T_ANY 类型的闭包
 	 */
 	TypedExpr compileAttribute(::PostAnvilParser::AttributeContext* ctx) {
-		// 1. self.prop
+		// 1. self.prop		: SELF '.' IDENTIFIER
 		if (auto* inst = dynamic_cast<::PostAnvilParser::InstanceAttrContext*>(ctx)) {
-			auto prop = inst->IDENTIFIER()->getText();
-			utils::to_upper_inplace(prop);
+			auto prop = utils::get_upper_text(inst->IDENTIFIER());
 			return {
-				[prop](const Instance& self, const Scene& scene) -> Val {
-					return scene.get_inst_prop(self, prop);
+				[prop](const Instance& self, EvaluationContext& ctx) -> Val {
+					return ctx.scene.get_inst_prop(self, prop);
 				},
 				Type::T_ANY
 			};
 		}
 
-		// 2. class.prop
+		// 2. class.prop	: STRING '.' IDENTIFIER
 		if (auto* cls = dynamic_cast<::PostAnvilParser::ClassAttrContext*>(ctx)) {
-			auto cls_name = utils::strip_quotes(cls->STRING()->getText());
-			auto prop = cls->IDENTIFIER()->getText();
-			utils::to_upper_inplace(cls_name);
-			utils::to_upper_inplace(prop);
-
+			auto cls_name = utils::strip_quotes(utils::get_upper_text(cls->STRING()));
+			auto prop = utils::get_upper_text(cls->IDENTIFIER());
 			return {
-				[cls_name, prop](const Instance&, const Scene& scene) -> Val {
-					return scene.get_cls_prop(cls_name, prop);
+				[cls_name, prop](const Instance&, EvaluationContext& ctx) -> Val {
+					return ctx.scene.get_cls_prop(cls_name, prop);
 				},
 				Type::T_ANY
 			};
 		}
 
-		// 3. var.prop
+		// 3. var.prop		: IDENTIFIER '.' IDENTIFIER
 		if (auto* var = dynamic_cast<::PostAnvilParser::VarInstanceAttrContext*>(ctx)) {
 			auto identifiers = var->IDENTIFIER();
 			if (identifiers.size() < 2) {
-				throw CompileError("Invalid VarInstanceAttr syntax, missing identifier");
+				handle_compile_error("Invalid VarInstanceAttr syntax, missing identifier", ctx);
 			}
 
-			auto object = identifiers[0]->getText();
-			auto prop = identifiers[1]->getText();
-			utils::to_upper_inplace(object);
-			utils::to_upper_inplace(prop);
-
+			auto object = utils::get_upper_text(identifiers[0]);
+			auto prop = utils::get_upper_text(identifiers[1]);
+			
+			// 1. img.prop	: 预定义图像对象属性
 			if (object == OBJECT_IMAGE) {
 				return {
-					[prop](const Instance&, const Scene& scene) -> Val {
-						return scene.get_img_prop(prop);
+					[prop](const Instance&, EvaluationContext& ctx) -> Val {
+						return ctx.scene.get_img_prop(prop);
 					},
 					Type::T_ANY
 				};
 			}
-			// 除 img.prop 外其他变量属性暂未实现
-			throw CompileError("Unimplemented var.prop expression (only img.prop supported)");
+
+			// 2. loop_var.prop: 循环实例的属性
+			// TODO: 应改为编译期检查
+
+			return {
+				[object, prop](const Instance&, EvaluationContext& ctx) -> Val {
+					// 循环实例
+					auto loop_it = ctx.loop_vars.find(object);
+					if (loop_it != ctx.loop_vars.end()) {
+						return ctx.scene.get_inst_prop(*loop_it->second, prop);
+					}
+
+					// 类别变量-字串类型
+					Val cls_val = ctx.get_var(object);
+					std::string cls_name = cls_val.as_str();
+					utils::to_upper_inplace(cls_name);
+					return ctx.scene.get_cls_prop(cls_name, prop);
+				},
+				Type::T_ANY
+			};
 		}
 
 		// 无法识别的属性访问节点类型
-		throw CompileError("Unknown AttributeContext node type");
+		handle_compile_error("Unknown AttributeContext node type", ctx);
 	}
 
 	/**
@@ -615,7 +694,34 @@ private:
 	 * @return TypedExpr	- 函数声明返回值类型的闭包，若未声明则为 T_ANY
 	 */
 	TypedExpr compileFuncCall(::PostAnvilParser::Func_callContext* ctx) {
-		handle_compile_error("Unimplemented function call", ctx);
+		std::string func_name = utils::get_upper_text(ctx->IDENTIFIER());
+
+		// 编译参数列表
+		std::vector<TypedExpr> arg_exprs;
+		for (auto* expr_ctx : ctx->expr()) {
+			arg_exprs.emplace_back(compile(expr_ctx));
+		}
+
+		return {
+			[func_name, arg_exprs = std::move(arg_exprs)]
+			(const Instance& self, EvaluationContext& ctx) -> Val {
+				auto it = ctx.functions.find(func_name);
+				if (it == ctx.functions.end()) {
+					throw RuntimeError("Undefined function '" + func_name + "'");
+				}
+				const auto& compiled_func = it->second;
+
+				// 求值参数
+				std::vector<Val> args;
+				args.reserve(arg_exprs.size());
+				for (auto& arg_expr : arg_exprs) {
+					args.emplace_back(arg_expr.func(self, ctx));
+				}
+
+				return compiled_func(args, self, ctx);
+			},
+			Type::T_ANY // TODO: 编译时应该维护函数表，确定编译类型，当前为运行时推断
+		};
 	}
 
 	/**
@@ -640,11 +746,11 @@ private:
 		auto rank = compileAsNum(ctx->expr(1));
 
 		return {[cls = std::move(cls), key = std::move(key.func), rank = std::move(rank)]
-				(const Instance& self, const Scene& scene) -> Val {
-				auto cls_name = cls(self, scene);
+				(const Instance& self, EvaluationContext& ctx) -> Val {
+				auto cls_name = cls(self, ctx);
 
-				const auto it = scene.objects.find(cls_name);
-				if (it == scene.objects.end() || it->second.empty()) {
+				const auto it = ctx.scene.objects.find(cls_name);
+				if (it == ctx.scene.objects.end() || it->second.empty()) {
 					throw RuntimeError(std::format("SORT: class '{}' not found or empty", cls_name));
 				}
 
@@ -652,10 +758,10 @@ private:
 				std::vector<Val> keys;
 				keys.reserve(instances.size());
 				for (const auto& inst : instances) {
-					keys.emplace_back(key(inst, scene));
+					keys.emplace_back(key(inst, ctx));
 				}
 
-				double rank_val = rank(self, scene);
+				double rank_val = rank(self, ctx);
 				auto rank_int = static_cast<int>(rank_val);
 				int index = std::abs(rank_int) - 1;
 
@@ -712,6 +818,7 @@ private:
 		if (ctx->SLASH()) return "/";
 		return "";
 	}
+
 };
 
 } // namespace postanvil

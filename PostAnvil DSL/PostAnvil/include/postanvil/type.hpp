@@ -183,9 +183,11 @@ struct Val {
 	 * @return Type 枚举值
 	 */
 	Type type() const {
-		if (std::holds_alternative<double>(data))      return Type::T_NUM;
-		if (std::holds_alternative<std::string>(data)) return Type::T_STR;
-		return Type::T_BOOL;
+		using enum postanvil::Type;
+		if (std::holds_alternative<double>(data))		return T_NUM;
+		if (std::holds_alternative<std::string>(data))	return T_STR;
+		if (std::holds_alternative<bool>(data))			return T_BOOL;
+		return T_ERROR;
 	}
 
 	/**
@@ -221,13 +223,16 @@ struct Val {
 	}
 };
 
+
+struct EvaluationContext;	// 评估环境前向声明
+
 /**
  * @brief 带类型的表达式闭包函数类型
  * @param instance 当前求值的实例
  * @param scene 当前场景上下文
  * @return 表达式求值结果
  */
-using ValFunc = std::function<Val(const Instance&, const Scene&)>;
+using ValFunc = std::function<Val(const Instance&, EvaluationContext&)>;
 
 /**
  * @brief 类型化表达式，包含求值函数及其返回类型
@@ -237,8 +242,12 @@ struct TypedExpr {
 	Type type;
 };
 
-using NumFunc		= std::function<double		(const Instance&, const Scene& scene)>;
-using BoolFunc		= std::function<bool		(const Instance&, const Scene& scene)>;
-using StrFunc		= std::function<std::string	(const Instance&, const Scene& scene)>;
+using NumFunc		= std::function<double		(const Instance&, EvaluationContext& scene)>;
+using BoolFunc		= std::function<bool		(const Instance&, EvaluationContext& scene)>;
+using StrFunc		= std::function<std::string	(const Instance&, EvaluationContext& scene)>;
+
+using StatementFunc	= std::function<void		(EvaluationContext&)>;
+
+
 
 } // namespace postanvil

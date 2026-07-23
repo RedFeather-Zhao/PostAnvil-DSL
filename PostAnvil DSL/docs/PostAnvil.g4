@@ -38,6 +38,7 @@ SELF      : 'SELF';           // 当前实例对象
 NUM       : 'NUM';            // 数值类型
 STR       : 'STR';            // 字符串类型
 BOOL      : 'BOOL';           // 布尔类型
+ANY       : 'ANY';            // 任意类型
 RETURN    : 'RETURN';         // 函数返回语句
 IMPORT    : 'IMPORT';         // 导入宿主变量
 EXPORT    : 'EXPORT';         // 导出结果到宿主
@@ -99,15 +100,25 @@ COMMENT
     ;
 
 
-// ==================== 解析器规则 (Parser) ====================
+// ==================== Parser ====================
 
-// ---------- 程序顶层结构 ----------
+// 程序顶层结构：
+// 包含 变量声明 或 规则声明
+// 
 program
-    : ( declaration | rule_ | NEWLINE )*
+    : ( declaration | rule_ | newlines )*
       EOF
     ;
 
-// ---------- 声明（与宿主交互 & 全局变量） ----------
+newlines
+    : (NEWLINE)+
+    ;
+
+// ============ outside rule ============
+
+// 变量声明：
+// 包含 导入定义|导出定义|全局定义
+// 
 declaration
     : importDef
     | exportDef
@@ -115,55 +126,68 @@ declaration
     ;
 
 // 导入宿主变量
+// 
 importDef
-    : IMPORT importItem (',' importItem)* NEWLINE
+    : IMPORT importItem (',' importItem)* newlines
     ;
+
 importItem
     : type host=IDENTIFIER (AS local=IDENTIFIER)?   // 类型 宿主名 [AS 本地别名]
     ;
 
-// 导出结果
+// 导出程序变量
+// 
 exportDef
-    : EXPORT exportItem (',' exportItem)* NEWLINE
+    : EXPORT exportItem (',' exportItem)* newlines
     ;
+
 exportItem
     : expr AS host=IDENTIFIER        // 表达式 AS 宿主变量名
     ;
 
-// 全局变量定义
+// 声明/赋值变量
+// 
 globalDef
-    : type IDENTIFIER '=' expr NEWLINE
-    ;
-type
-    : NUM | STR | BOOL               // 三种基本类型
+    : type IDENTIFIER '=' expr newlines
+    | IDENTIFIER '=' expr newlines
     ;
 
-// ---------- 规则 (Rules) ----------
+type
+    : NUM | STR | BOOL | ANY         // 基本类型
+    ;
+
+// ============ inside rule ============
+
+// 规则块声明 - 每个规则块都针对类别组进行操作（除函数块）
+// 
+// 
 rule_
     : filter_rule
     | attr_rule
-    | func_rule
     | group_rule
     | append_rule
+    | func_rule
     ;
 
-// --- FILTER 规则（实例过滤） ---
+// FILTER 规则，组内实例过滤
 // 行间自动 AND，每行一个布尔表达式，禁止赋值
 filter_rule
-    : RULE FILTER class_expr ':' NEWLINE
-      ( bool_expr NEWLINE )*
+    : RULE FILTER class_expr ':' newlines
+      ( bool_expr newlines )*
       RULEEND
     ;
 
 // --- ATTR 规则（定义实例属性或类型属性） ---
 attr_rule
-    : RULE ATTR class_expr ':' NEWLINE
-      ( attr_def NEWLINE )*
+    : RULE ATTR class_expr ':' newlines
+      ( attr_def newlines )*
       RULEEND
     ;
+
 attr_def
     : attr_lvalue '=' expr
     ;
+
 attr_lvalue
     : SELF '.' IDENTIFIER           # InstanceAttrDef     // self.xxx = expr
     | STRING '.' IDENTIFIER         # ClassAttrDef       // "class".xxx = expr
@@ -171,49 +195,53 @@ attr_lvalue
 
 // --- FUNC 规则（自定义函数） ---
 func_rule
-    : RULE FUNC name=IDENTIFIER '(' typed_params? ')' (ARROW return_type=type)? ':' NEWLINE
-      ( func_statement NEWLINE )+
+    : RULE FUNC name=IDENTIFIER '(' typed_params? ')' (ARROW return_type=type)? ':' newlines
+      ( func_statement newlines )+
       RULEEND
     ;
+
 typed_params
     : typed_param (',' typed_param)*
     ;
+
 typed_param
     : param_name=IDENTIFIER ':' param_type=type
     ;
+
 func_statement
-    : type IDENTIFIER '=' expr      # FuncVarDef        // 局部变量定义
-    | IDENTIFIER '=' expr           # FuncAssign        // 赋值（仅已存在变量）
+    : type IDENTIFIER '=' expr      # FuncVarDef
+    | IDENTIFIER '=' expr           # FuncAssign
     | ifStmt                        # FuncIfStmt
     | forStmt                       # FuncForStmt
-    | expr                          # FuncExprStmt      // 独立表达式语句
-    | RETURN expr                   # FuncReturnStmt    // 返回语句
+    | expr                          # FuncExprStmt
+    | RETURN expr                   # FuncReturnStmt
     ;
 
 // --- 控制流（仅允许在函数内） ---
 ifStmt
-    : IF expr NEWLINE
-      ( func_statement NEWLINE )*
-      ( ELSE NEWLINE ( func_statement NEWLINE )* )?
+    : IF expr newlines
+      ( func_statement newlines )*
+      ( ELSE newlines ( func_statement newlines )* )?
       ENDIF
     ;
+
 forStmt
-    : FOR IDENTIFIER IN class_expr NEWLINE   // FOR 循环变量 IN 类别
-      ( func_statement NEWLINE )*
+    : FOR IDENTIFIER IN class_expr newlines   // FOR 循环变量 IN 类别
+      ( func_statement newlines )*
       ENDFOR
     ;
 
 // --- GROUP 规则（创建新类别） ---
 group_rule
-    : RULE GROUP class_expr FROM class_expr ':' NEWLINE
-      ( bool_expr NEWLINE )*
+    : RULE GROUP class_expr FROM class_expr ':' newlines
+      ( bool_expr newlines )*
       RULEEND
     ;
 
 // --- APPEND 规则（向已有类别追加实例） ---
 append_rule
-    : RULE APPEND class_expr FROM class_expr ':' NEWLINE
-      ( bool_expr NEWLINE )*
+    : RULE APPEND class_expr FROM class_expr ':' newlines
+      ( bool_expr newlines )*
       RULEEND
     ;
 
@@ -267,7 +295,7 @@ primary
     | func_call
     | attribute
     | '(' expr ')'
-    | sortExpr
+    | sortExpr          // 仅测试
     | IDENTIFIER        // 变量
     ;
 
@@ -285,7 +313,7 @@ sortExpr
 attribute
     : SELF '.' IDENTIFIER           # InstanceAttr       // self.xxx
     | STRING '.' IDENTIFIER         # ClassAttr          // "class".xxx
-    | IDENTIFIER '.' IDENTIFIER     # VarInstanceAttr    // 循环变量.xxx (仅在 FOR 内)
+    | IDENTIFIER '.' IDENTIFIER     # VarInstanceAttr    // img.xxx
     ;
 
 // 运算符分组

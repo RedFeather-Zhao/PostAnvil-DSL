@@ -36,16 +36,25 @@ public:
 		EvaluationContext ctx(scene);
 		ctx.functions = functions;
 
-		for (const auto& op : operators) {
-			op->apply(ctx);
+		for (size_t i = 0; i < operators.size(); i++) {
+			auto& op = operators[i];
+			try {
+				op->apply(ctx);
+			}
+			catch (const RuntimeError& e) {
+				// 错误包装，定位到算子，未来可支持定位到具体行
+				throw RuntimeError(e.what(),
+					static_cast<int>(i),
+					operation_kind_to_string(op->kind));
+			}
+
 		}
 
 		return ctx.to_result();
 	}
 
-
-	std::vector<std::unique_ptr<SceneOperator>> operators; // 算子执行序列
-	std::unordered_map<std::string, CompiledFunc> functions; // 函数注册表
+	std::vector<std::unique_ptr<SceneOperator>> operators;	// 算子执行序列
+	detail::str_map<CompiledFunc> functions;				// 函数注册表
 };
 
 } // namespace postanvil

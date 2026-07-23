@@ -14,12 +14,12 @@ public:
   enum {
     T__0 = 1, RULE = 2, RULEEND = 3, FILTER = 4, ATTR = 5, FUNC = 6, GROUP = 7, 
     APPEND = 8, FROM = 9, AND = 10, OR = 11, NOT = 12, SELF = 13, NUM = 14, 
-    STR = 15, BOOL = 16, RETURN = 17, IMPORT = 18, EXPORT = 19, AS = 20, 
-    IF = 21, ELSE = 22, ENDIF = 23, FOR = 24, IN = 25, ENDFOR = 26, SORT = 27, 
-    BOOL_LIT = 28, ARROW = 29, PLUS = 30, MINUS = 31, STAR = 32, SLASH = 33, 
-    LT = 34, GT = 35, LE = 36, GE = 37, EQ = 38, NE = 39, DOT = 40, LPAREN = 41, 
-    RPAREN = 42, COMMA = 43, ASSIGN = 44, NUMBER = 45, STRING = 46, IDENTIFIER = 47, 
-    WS = 48, NEWLINE = 49, COMMENT = 50
+    STR = 15, BOOL = 16, ANY = 17, RETURN = 18, IMPORT = 19, EXPORT = 20, 
+    AS = 21, IF = 22, ELSE = 23, ENDIF = 24, FOR = 25, IN = 26, ENDFOR = 27, 
+    SORT = 28, BOOL_LIT = 29, ARROW = 30, PLUS = 31, MINUS = 32, STAR = 33, 
+    SLASH = 34, LT = 35, GT = 36, LE = 37, GE = 38, EQ = 39, NE = 40, DOT = 41, 
+    LPAREN = 42, RPAREN = 43, COMMA = 44, ASSIGN = 45, NUMBER = 46, STRING = 47, 
+    IDENTIFIER = 48, WS = 49, NEWLINE = 50, COMMENT = 51
   };
 
   explicit PostAnvilLexer(antlr4::CharStream *input);

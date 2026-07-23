@@ -22,6 +22,17 @@ inline void to_upper_inplace(std::string& s) {
 	}
 }
 
+template <typename T>
+concept HasGetTextFunc = requires(T t) {
+	{ t.getText() } -> std::same_as<std::string>;
+};
+
+inline std::string get_upper_text(HasGetTextFunc auto* a) {
+	std::string str = a->getText();
+	to_upper_inplace(str);
+	return str;
+}
+
 /**
  * @brief 去除字符串首尾的双引号
  * @param s 输入字符串
@@ -33,5 +44,7 @@ inline std::string strip_quotes(const std::string& s) {
 	}
 	return s;
 }
+
+
 
 } // namespace postanvil::utils

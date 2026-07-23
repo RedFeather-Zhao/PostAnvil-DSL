@@ -7,10 +7,22 @@ std::vector<TestCase> get_attr_tests() {
 	tests.emplace_back(
 		"属性算子 — 基本属性计算",
 		R"(
+		num bilibili = 114514
+		bilibili = 114
+		Str ganbei = "QwQ"
+		Bool AreYouHappy = tRUE
+		Any test_any = "person".count // num type
+		// test_any = "hello" // error
+		
 		RULE ATTR "person":
 			self.risk = self.conf * 2.0
 			self.ischild = False
+			// hhh
 		RULEEND
+
+		bilibili = 514
+		export bilibili as BiliBili, ganbei as GanBei
+		export areyouhappy as YouAreHappy
 		)",
 		[] {
 			return Scene({ 200, 200 }, {
@@ -27,6 +39,11 @@ std::vector<TestCase> get_attr_tests() {
 			}
 			const auto& inst0 = it->second[0];
 			const auto& inst1 = it->second[1];
+
+			auto BiliBili = res.get_export("BiliBili").as_num();
+			auto GanBei = res.get_export("GanBei").as_str();
+			auto YouAreHappy = res.get_export("YouAreHappy").as_bool();
+			std::cout << "BiliBili: " << BiliBili << "GanBei: " << GanBei << " " << YouAreHappy << std::endl;
 
 			// 验证 risk（使用 init-statement 分别检查）
 			if (Val risk0 = inst0.get_prop("RISK"); risk0 != 1.8) {
@@ -67,7 +84,7 @@ std::vector<TestCase> get_attr_tests() {
 				Instance("PERSON", 0, 0, 20, 30, 0.9),
 				Instance("PERSON", 0, 0, 10, 10, 0.5),
 				Instance("PERSON", 0, 0, 1, 1, 0.9),
-				});
+			});
 		},
 		[](const Scene& res, std::string& err) {
 			if (!res.objects.contains("PERSON") || res.objects.at("PERSON").size() != 2) {
@@ -82,6 +99,10 @@ std::vector<TestCase> get_attr_tests() {
 	tests.emplace_back(
 		"大小写不敏感 (大写 SELF.CONF > 0.5)",
 		R"(
+			rule attr "X":
+				"X".test = 1
+			ruleend
+
 			RULE FILTER "global":
 				SELF.CONF > 0.5
 				SELF.W > 10

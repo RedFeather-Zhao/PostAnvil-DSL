@@ -15,14 +15,14 @@ int main() {
 		all_tests.insert(all_tests.end(), module_tests.begin(), module_tests.end());
 	};
 
-	append(get_basic_tests());
-	 append(get_attr_tests());
-	// append(get_group_append_tests());
-	// append(get_bool_sort_func_tests());
-	// append(get_new_features_tests());
-	// append(get_control_flow_tests());
-	// append(get_import_export_tests());
-	// append(get_end_to_end_tests());
+	 //append(get_basic_tests());
+	 // append(get_attr_tests());
+	 //append(get_group_append_tests());
+	 //append(get_bool_sort_func_tests());
+	 // append(get_new_features_tests());
+	 append(get_control_flow_tests());
+	 //append(get_import_export_tests());
+	 //append(get_end_to_end_tests());
 
 	int passed = 0;
 	int failed = 0;

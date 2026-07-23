@@ -51,9 +51,6 @@
     <ClInclude Include="PostAnvil\antlr4\PostAnvilParser.h">
       <Filter>antlr4</Filter>
     </ClInclude>
-    <ClInclude Include="PostAnvil\include\postanvil\expr_compiler.hpp">
-      <Filter>头文件\core</Filter>
-    </ClInclude>
     <ClInclude Include="PostAnvil\include\postanvil\operators.hpp">
       <Filter>头文件\core</Filter>
     </ClInclude>
@@ -81,6 +78,9 @@
     <ClInclude Include="PostAnvil\tests\test_common.hpp">
       <Filter>源文件\test</Filter>
     </ClInclude>
+    <ClInclude Include="PostAnvil\include\postanvil\expr_compiler.hpp">
+      <Filter>头文件\core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PostAnvil\antlr4\PostAnvilBaseListener.cpp">
@@ -98,13 +98,10 @@
     <ClCompile Include="PostAnvil\tests\main_test.cpp">
       <Filter>源文件\test</Filter>
     </ClCompile>
-    <ClCompile Include="PostAnvil\tests\test_attr.cpp">
+    <ClCompile Include="PostAnvil\tests\test_control_flow.cpp">
       <Filter>源文件\test</Filter>
     </ClCompile>
     <ClCompile Include="PostAnvil\tests\test_common.cpp">
-      <Filter>源文件\test</Filter>
-    </ClCompile>
-    <ClCompile Include="PostAnvil\tests\test_basic.cpp">
       <Filter>源文件\test</Filter>
     </ClCompile>
   </ItemGroup>

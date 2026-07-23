@@ -13,6 +13,8 @@
 
 namespace postanvil::detail {
 
+//========================= StrMap ==========================
+
 /**
  * @brief 支持透明查找的字符串哈希函数，允许以 std::string_view 等类型直接查找，
  *        避免构造临时 std::string 对象，提升性能
@@ -33,8 +35,57 @@ struct TransparentStrHash
  * @brief 使用透明哈希的字符串键 unordered_map 别名
  *        适合需要以字符串（或 string_view）为键的快速查找场景
  */
-template<typename K, typename V>
-using str_map = std::unordered_map<K, V, TransparentStrHash, std::equal_to<>>;
+template<typename V>
+using str_map = std::unordered_map<std::string, V, TransparentStrHash, std::equal_to<>>;
+
+//========================= Scope ==========================
+
+/**
+ * @brief 链式符号表，定义层级作用域，编译期实现全局/局部变量的定义
+ * @detals 可视为一个可访问底部的栈结构，每层存储符号到特定值的映射关系
+ */
+template<typename T>
+class ScopeChain {
+	using Scope = str_map<T>;
+	std::vector<Scope> scopes;
+
+public:
+	ScopeChain() {
+		push(); // global
+	}
+
+	void push() {
+		scopes.emplace_back();
+	}
+
+	void pop() {
+		if (scopes.size() > 1) {
+			scopes.pop_back();
+		}
+	}
+
+	void set_local(const std::string& name, T val) {
+		if (scopes.size() == 1) {
+			push(); // first
+		}
+		scopes.back()[name] = val;
+	}
+
+	void set_global(const std::string& name, T val) {
+		scopes.front()[name] = val;
+	}
+
+	bool lookup(const std::string& name, T& out) const {
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+			auto found = it->find(name);
+			if (found != it->end()) {
+				out = found->second;
+				return true;
+			}
+		}
+		return false;
+	}
+};
 
 } // namespace postanvil::detail
 

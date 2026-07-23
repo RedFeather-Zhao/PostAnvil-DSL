@@ -138,7 +138,7 @@ private:
 	/**
 	 * @brief 动态属性存储表，键为属性名，值为数值
 	 */
-	detail::str_map<std::string, Val> m_props;
+	detail::str_map<Val> m_props;
 
 #ifdef _DEBUG
 	/**

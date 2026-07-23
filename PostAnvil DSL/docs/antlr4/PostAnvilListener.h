@@ -17,6 +17,9 @@ public:
   virtual void enterProgram(PostAnvilParser::ProgramContext *ctx) = 0;
   virtual void exitProgram(PostAnvilParser::ProgramContext *ctx) = 0;
 
+  virtual void enterNewlines(PostAnvilParser::NewlinesContext *ctx) = 0;
+  virtual void exitNewlines(PostAnvilParser::NewlinesContext *ctx) = 0;
+
   virtual void enterDeclaration(PostAnvilParser::DeclarationContext *ctx) = 0;
   virtual void exitDeclaration(PostAnvilParser::DeclarationContext *ctx) = 0;
 

@@ -45,6 +45,16 @@ struct CompileError : public PostAnvilError {
  */
 struct RuntimeError : public PostAnvilError {
 	using runtime_error::runtime_error;
+
+	/**
+	 * @brief 程序运行错误
+	 * @param msg		错误描述信息
+	 * @param op_idx	算子索引
+	 * @param op_type	算子类型
+	 */
+	RuntimeError(const std::string& msg, int op_idx, const std::string& op_type)
+		: PostAnvilError(std::format("PostAnvil error while running: operation index = {}, operation type = {} : {}\n", op_idx, op_type, msg))
+	{}
 };
 
 } // namespace postanvil

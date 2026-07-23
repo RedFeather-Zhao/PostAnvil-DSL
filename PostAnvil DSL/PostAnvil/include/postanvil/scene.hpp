@@ -36,9 +36,9 @@ struct Scene {
 	
 	// ===================== Type Alias =====================
 	
-	using Objects = detail::str_map<std::string, Instances>;
-	using ClassProps = detail::str_map<std::string, detail::str_map<std::string, Val>>;
-	using Variables = detail::str_map<std::string, Val>;
+	using Objects = detail::str_map<Instances>;
+	using ClassProps = detail::str_map<detail::str_map<Val>>;
+	using Variables = detail::str_map<Val>;
 
 	// ===================== Constructor =====================
 

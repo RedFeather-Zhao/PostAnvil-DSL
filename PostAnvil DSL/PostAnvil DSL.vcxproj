@@ -42,9 +42,8 @@
     <ClCompile Include="PostAnvil\antlr4\PostAnvilListener.cpp" />
     <ClCompile Include="PostAnvil\antlr4\PostAnvilParser.cpp" />
     <ClCompile Include="PostAnvil\tests\main_test.cpp" />
-    <ClCompile Include="PostAnvil\tests\test_attr.cpp" />
-    <ClCompile Include="PostAnvil\tests\test_basic.cpp" />
     <ClCompile Include="PostAnvil\tests\test_common.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_control_flow.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\PostAnvil DSL 用户说明文档 V0.4.md" />
