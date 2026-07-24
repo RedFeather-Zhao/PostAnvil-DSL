@@ -42,11 +42,18 @@
     <ClCompile Include="PostAnvil\antlr4\PostAnvilListener.cpp" />
     <ClCompile Include="PostAnvil\antlr4\PostAnvilParser.cpp" />
     <ClCompile Include="PostAnvil\tests\main_test.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_attr.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_basic.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_bool_sort_func.cpp" />
     <ClCompile Include="PostAnvil\tests\test_common.cpp" />
     <ClCompile Include="PostAnvil\tests\test_control_flow.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_end_to_end.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_group_append.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_import_export.cpp" />
+    <ClCompile Include="PostAnvil\tests\test_new_features.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="docs\PostAnvil DSL 用户说明文档 V0.4.md" />
+    <None Include="docs\PostAnvil DSL 用户说明文档 V0.6.md" />
     <None Include="docs\PostAnvil.g4" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

@@ -1,14 +1,14 @@
-grammar PostAnvil;
+﻿grammar PostAnvil;
 
 // ============================================================
 //  PostAnvil DSL 语法定义 (ANTLR4 / C++ target)
-//  版本 0.3  —  2026-07-07
+//  版本 0.6  —  2026-07-24
 // ============================================================
 //  功能概览：
 //    - 目标检测后处理 DSL
 //    - 规则块：FILTER、ATTR、FUNC、GROUP、APPEND
 //    - 内置对象：self (当前实例)、img (图像尺寸)
-//    - 类型：NUM、STR、BOOL
+//    - 类型：NUM、STR、BOOL、INST、ANY
 //    - 控制流：IF-ELSE、FOR 循环 (仅函数内)
 //    - 排序原语：SORT
 //    - 与宿主交互：IMPORT、EXPORT
@@ -38,12 +38,14 @@ SELF      : 'SELF';           // 当前实例对象
 NUM       : 'NUM';            // 数值类型
 STR       : 'STR';            // 字符串类型
 BOOL      : 'BOOL';           // 布尔类型
+INST      : 'INST';           // 检测实例快照类型
 ANY       : 'ANY';            // 任意类型
 RETURN    : 'RETURN';         // 函数返回语句
 IMPORT    : 'IMPORT';         // 导入宿主变量
 EXPORT    : 'EXPORT';         // 导出结果到宿主
 AS        : 'AS';             // 别名关键字
 IF        : 'IF';             // 条件分支开始
+ELIF      : 'ELIF';           // 条件分支嵌套
 ELSE      : 'ELSE';           // 条件分支否则
 ENDIF     : 'ENDIF';          // 条件分支结束
 FOR       : 'FOR';            // 循环开始
@@ -153,7 +155,7 @@ globalDef
     ;
 
 type
-    : NUM | STR | BOOL | ANY         // 基本类型
+    : NUM | STR | BOOL | INST | ANY  // 值类型
     ;
 
 // ============ inside rule ============
@@ -217,12 +219,23 @@ func_statement
     | RETURN expr                   # FuncReturnStmt
     ;
 
-// --- 控制流（仅允许在函数内） ---
+// --- 控制流 ---
 ifStmt
     : IF expr newlines
-      ( func_statement newlines )*
-      ( ELSE newlines ( func_statement newlines )* )?
+      ( func_statement newlines )*           // IF 分支体
+      ( elifBranch )*                        // 零个或多个 ELIF 分支
+      ( elseBranch )?                        // 可选的 ELSE 分支
       ENDIF
+    ;
+
+elifBranch
+    : ELIF expr newlines
+      ( func_statement newlines )*
+    ;
+
+elseBranch
+    : ELSE newlines
+      ( func_statement newlines )*
     ;
 
 forStmt
@@ -292,6 +305,7 @@ primary
     : NUMBER
     | STRING
     | BOOL_LIT
+    | SELF              // 当前实例值（INST）
     | func_call
     | attribute
     | '(' expr ')'

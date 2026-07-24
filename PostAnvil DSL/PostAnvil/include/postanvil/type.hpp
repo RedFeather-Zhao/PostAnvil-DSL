@@ -14,6 +14,7 @@
 #include <string>
 #include <stdexcept>
 #include <compare>
+#include <memory>
 
 #include "error.hpp"
 
@@ -23,35 +24,38 @@ class Instance;
 struct Scene;
 
 /**
- * @brief 编译期类型枚举，表示 DSL 支持的数据类型
- * @note T_ 前缀用于避免与 Windows SDK 宏 STR、BOOL 冲突
+ * @brief DSL 编译期类型掩码枚举，描述表达式值类型
+ * @details 采用位掩码设计，单值互斥；T_ANY 万能兼容，T_ERROR 代表类型不匹配
+ * @note 前缀 T_ 规避 Windows SDK 全局宏 STR / BOOL / NUM 命名冲突
  */
-enum class Type: uint32_t {
-	T_ERROR		= 0b0000'0000'0000'0000,
-	T_ANY		= 0b1111'1111'1111'1111,
+enum class Type : std::uint32_t
+{
+	T_ERROR	= 0b0000'0000'0000'0000,	// 类型不匹配、运算非法
+	T_ANY	= 0b1111'1111'1111'1111,	// 任意类型万能匹配
 
-	// 注意，以下类型并不兼容
+	// 基础原子类型，互不兼容
 
-	T_NUM		= 0b0000'0000'0000'0001,
-	T_STR		= 0b0000'0000'0000'0010,
-	T_BOOL		= 0b0000'0000'0000'0100,
+	T_NUM	= 0b0000'0000'0000'0001,
+	T_STR	= 0b0000'0000'0000'0010,
+	T_BOOL	= 0b0000'0000'0000'0100,
+	T_INST	= 0b0000'0000'0000'1000,
 };
 
-// 按位与
 /**
- * @brief 类型按位与运算，用于解决类型判断问题的复杂逻辑
- * 如
- * 1.仅支持 NUM 和 ANY 的场景，两操作数类型未知
- * type = op1 & op2
- * 若均为 ANY，则 type = ANY
- * 若均为 NUM，则 type = NUM
- * 若其中一个为ANY，则 type = 另一个操作数类型
- * 若不同类型且均不为 ANY，type = T_ERROR
+ * @brief 类型掩码合并运算符 &，实现类型兼容推导规则
  * 
- * 2.T_ERROR 对任意类型运算均报错
- * 
- * @return 指定类型 | T_ANY | T_ERROR
+ * @param lhs 左操作数类型
+ * @param rhs 右操作数类型
+ * @return 合并后最终推导类型 Type
+ *
+ * 规则定义：
+ * 1. 任意一方为 T_ERROR				→ T_ERROR；
+ * 2. 两方都是 T_ANY					→ T_ANY；
+ * 3. 一方 T_ANY、另一方具体类型		→ 返回具体类型；
+ * 4. 两方为同一种具体类型			→ 返回该类型；
+ * 5. 两方为互不相同的具体类型			→ T_ERROR；
  */
+[[nodiscard]]
 constexpr Type operator&(Type lhs, Type rhs) {
 	return static_cast<Type>(
 		static_cast<std::underlying_type_t<Type>>(lhs) &
@@ -60,20 +64,60 @@ constexpr Type operator&(Type lhs, Type rhs) {
 }
 
 /**
- * @brief 获取类型枚举对应的名称字符串
- * @param t 类型枚举值
- * @return 类型名称的 C 字符串
+ * @brief 判断两个类型是否兼容可运算
+ * @param lhs 类型A
+ * @param rhs 类型B
+ * @return true：兼容；false：类型冲突/错误
+ * @note 兼容判定规则与 operator& 完全统一
  */
-inline const char* type_name(Type t) {
-	switch (t) {
-		using enum postanvil::Type;
-	case T_NUM:		return "NUM";
-	case T_STR:		return "STR";
-	case T_BOOL:	return "BOOL";
-	case T_ANY:		return "ANY";
-	case T_ERROR:	return "ERROR";
-	default:		return "UNKNOW";
+[[nodiscard]]
+constexpr bool type_compatible(Type lhs, Type rhs)
+{
+	return (lhs & rhs) != Type::T_ERROR;
+}
+
+/**
+ * @brief 判断两个类型是否严格相等（忽略ANY万能匹配）
+ * @param lhs 类型A
+ * @param rhs 类型B
+ * @return 完全一致返回true
+ */
+[[nodiscard]]
+constexpr bool type_strict_equal(Type lhs, Type rhs)
+{
+	return lhs == rhs;
+}
+
+/**
+ * @brief 获取类型枚举对应的可读名称字符串
+ * @param t 目标类型枚举值
+ * @return 静态常量C字符串，无需释放
+ */
+[[nodiscard]]
+inline const char* type_name(Type t)
+{
+	using enum postanvil::Type;
+	switch (t)
+	{
+	case T_NUM:     return "NUM";
+	case T_STR:     return "STR";
+	case T_BOOL:    return "BOOL";
+	case T_INST:    return "INST";
+	case T_ANY:     return "ANY";
+	case T_ERROR:   return "ERROR";
+	default:        return "UNKNOWN_TYPE";
 	}
+}
+
+/**
+ * @brief 判断是否为合法具体值类型（排除 ANY/ERROR）
+ * @param t 待检测类型
+ * @return true：NUM/STR/BOOL/INST 其中之一
+ */
+[[nodiscard]]
+constexpr bool is_primitive_type(Type t)
+{
+	return t != Type::T_ANY && t != Type::T_ERROR;
 }
 
 /**
@@ -87,18 +131,30 @@ enum class RuleKind {
 	FUNC,
 };
 
+template<typename T>
+concept ValAllowedType = std::is_same_v<std::decay_t<T>, double>
+					  || std::is_same_v<std::decay_t<T>, bool>
+					  || std::is_same_v<std::decay_t<T>, std::string>
+					  || std::is_same_v<std::decay_t<T>, std::shared_ptr<Instance>>
+					  || std::is_same_v<std::decay_t<T>, const char*>;
+
 /**
  * @brief 运行时多态值，可承载数值、字符串或布尔三种类型
  * @details 提供类型查询和安全转换方法，类型不匹配时抛出 RuntimeError
  */
 struct Val {
-	std::variant<double, std::string, bool> data;
+
+	std::variant<double, std::string, bool, std::shared_ptr<Instance>> data;
 
 	Val() : data(0.0) {}
-	Val(double v) : data(v) {}
-	Val(const std::string& v) : data(v) {}
-	Val(const char* v) : data(std::string(v)) {}
-	Val(bool v) : data(v) {}
+	Val(const Instance& inst) 
+		: data(std::make_shared<Instance>(inst))
+	{}
+
+	template<ValAllowedType T>
+	Val(T&& arg) noexcept(std::is_nothrow_constructible_v<decltype(data), T>)
+		: data(std::forward<T>(arg))
+	{}
 
 	std::partial_ordering operator<=>(const Val& other) const {
 		if (type() != other.type()) {
@@ -122,7 +178,8 @@ struct Val {
 		}
 		case T_BOOL: return as_bool() <=> other.as_bool();
 		case T_STR:  return as_str() <=> other.as_str();
-		default:	 throw RuntimeError("");
+		case T_INST: throw RuntimeError("INST values cannot be compared directly");
+		default:	 throw RuntimeError("Unknown type");
 		}
 	}
 
@@ -187,6 +244,7 @@ struct Val {
 		if (std::holds_alternative<double>(data))		return T_NUM;
 		if (std::holds_alternative<std::string>(data))	return T_STR;
 		if (std::holds_alternative<bool>(data))			return T_BOOL;
+		if (std::holds_alternative<std::shared_ptr<Instance>>(data)) return T_INST;
 		return T_ERROR;
 	}
 
@@ -220,6 +278,16 @@ struct Val {
 		if (auto* p = std::get_if<bool>(&data)) return *p;
 		if (auto* pn = std::get_if<double>(&data)) return *pn != 0.0;
 		throw RuntimeError("Expected BOOL, got " + std::string(type_name(type())));
+	}
+
+	/**
+	 * @brief 获取实例快照
+	 * @return 指向不可变实例快照的共享指针
+	 * @throws RuntimeError 当前值不是 INST 或实例为空时抛出
+	 */
+	std::shared_ptr<const Instance> as_inst() const {
+		if (auto* p = std::get_if<std::shared_ptr<Instance>>(&data); p && *p) return *p;
+		throw RuntimeError("Expected INST, got " + std::string(type_name(type())));
 	}
 };
 

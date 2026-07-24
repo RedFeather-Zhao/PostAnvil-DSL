@@ -91,6 +91,12 @@ public:
   virtual void enterIfStmt(PostAnvilParser::IfStmtContext * /*ctx*/) override { }
   virtual void exitIfStmt(PostAnvilParser::IfStmtContext * /*ctx*/) override { }
 
+  virtual void enterElifBranch(PostAnvilParser::ElifBranchContext * /*ctx*/) override { }
+  virtual void exitElifBranch(PostAnvilParser::ElifBranchContext * /*ctx*/) override { }
+
+  virtual void enterElseBranch(PostAnvilParser::ElseBranchContext * /*ctx*/) override { }
+  virtual void exitElseBranch(PostAnvilParser::ElseBranchContext * /*ctx*/) override { }
+
   virtual void enterForStmt(PostAnvilParser::ForStmtContext * /*ctx*/) override { }
   virtual void exitForStmt(PostAnvilParser::ForStmtContext * /*ctx*/) override { }
 

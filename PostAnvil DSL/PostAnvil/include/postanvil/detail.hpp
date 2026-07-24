@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <format>
 
 namespace postanvil::detail {
 
@@ -54,16 +55,28 @@ public:
 		push(); // global
 	}
 
+	/**
+	 * @brief 提升作用域
+	 */
 	void push() {
 		scopes.emplace_back();
 	}
 
+	/**
+	 * @brief 降低作用域
+	 */
 	void pop() {
 		if (scopes.size() > 1) {
 			scopes.pop_back();
 		}
 	}
 
+	/**
+	 * @brief 在当前作用域设置符号
+	 * 
+	 * @param name	- 符号名
+	 * @param val	- 值
+	 */
 	void set_local(const std::string& name, T val) {
 		if (scopes.size() == 1) {
 			push(); // first
@@ -71,10 +84,23 @@ public:
 		scopes.back()[name] = val;
 	}
 
+	/**
+	 * @brief 在全局作用域设置符号
+	 * 
+	 * @param name	- 符号名
+	 * @param val	- 值
+	 */
 	void set_global(const std::string& name, T val) {
 		scopes.front()[name] = val;
 	}
 
+	/**
+	 * @brief 自顶向下查找符号并取值
+	 * 
+	 * @param name	- 符号名
+	 * @param out	- 输出值
+	 * @return bool	- 是否查找到符号
+	 */
 	bool lookup(const std::string& name, T& out) const {
 		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
 			auto found = it->find(name);
@@ -84,6 +110,46 @@ public:
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * @brief 自顶向下查找符号并取值
+	 *
+	 * @param name	- 符号名
+	 * @return T	- 输出值
+	 */
+	T lookup(const std::string& name) const {
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+			auto found = it->find(name);
+			if (found != it->end()) {
+				return found->second;
+			}
+		}
+		throw std::runtime_error(std::format("Unknowd symbol: {}", name));
+	}
+
+	/**
+	 * @brief 自顶向下查找符号
+	 *
+	 * @param name	- 符号名
+	 * @return bool	- 是否查找到符号
+	 */
+	bool checkup(const std::string& name) const {
+		for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+			auto found = it->find(name);
+			if (found != it->end()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * @brief 清空符号表
+	 */
+	void clear() {
+		scopes.clear();
+		push();
 	}
 };
 

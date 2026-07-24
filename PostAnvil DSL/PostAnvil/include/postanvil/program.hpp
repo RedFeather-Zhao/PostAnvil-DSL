@@ -54,7 +54,7 @@ public:
 	}
 
 	std::vector<std::unique_ptr<SceneOperator>> operators;	// 算子执行序列
-	detail::str_map<CompiledFunc> functions;				// 函数注册表
+	detail::str_map<FunctionInfo> functions;				// 函数注册表
 };
 
 } // namespace postanvil

@@ -89,6 +89,12 @@ public:
   virtual void enterIfStmt(PostAnvilParser::IfStmtContext *ctx) = 0;
   virtual void exitIfStmt(PostAnvilParser::IfStmtContext *ctx) = 0;
 
+  virtual void enterElifBranch(PostAnvilParser::ElifBranchContext *ctx) = 0;
+  virtual void exitElifBranch(PostAnvilParser::ElifBranchContext *ctx) = 0;
+
+  virtual void enterElseBranch(PostAnvilParser::ElseBranchContext *ctx) = 0;
+  virtual void exitElseBranch(PostAnvilParser::ElseBranchContext *ctx) = 0;
+
   virtual void enterForStmt(PostAnvilParser::ForStmtContext *ctx) = 0;
   virtual void exitForStmt(PostAnvilParser::ForStmtContext *ctx) = 0;
 

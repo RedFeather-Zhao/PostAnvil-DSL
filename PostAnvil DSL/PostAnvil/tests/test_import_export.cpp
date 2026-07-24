@@ -97,5 +97,40 @@ std::vector<TestCase> get_import_export_tests() {
 }
         });
 
+    tests.push_back({
+        "INST 类型 IMPORT / EXPORT",
+        R"(
+            IMPORT INST anchor
+
+            RULE FILTER "person":
+                self.conf >= anchor.conf
+            RULEEND
+
+            EXPORT anchor AS selected_anchor
+        )",
+        []() -> Scene {
+            Scene s({200,200}, {
+                Instance("PERSON",0,0,10,10,0.9),
+                Instance("PERSON",0,0,10,10,0.5),
+            });
+            s.add_import("ANCHOR", Val(Instance("PERSON",0,0,10,10,0.7)));
+            return s;
+        },
+        [](const Scene& res, std::string& err) -> bool {
+            try {
+                Val exported = res.get_export("selected_anchor");
+                bool ok = check_count(res, "PERSON", 1) &&
+                    exported.type() == Type::T_INST &&
+                    std::abs(exported.as_inst()->conf() - 0.7) < 1e-6;
+                if (!ok) err = "INST 导入、属性读取或导出值不匹配";
+                return ok;
+            }
+            catch (const std::exception& e) {
+                err = e.what();
+                return false;
+            }
+        }
+        });
+
     return tests;
 }

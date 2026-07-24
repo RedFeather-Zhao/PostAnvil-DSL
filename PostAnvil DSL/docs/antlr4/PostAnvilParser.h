@@ -14,12 +14,12 @@ public:
   enum {
     T__0 = 1, RULE = 2, RULEEND = 3, FILTER = 4, ATTR = 5, FUNC = 6, GROUP = 7, 
     APPEND = 8, FROM = 9, AND = 10, OR = 11, NOT = 12, SELF = 13, NUM = 14, 
-    STR = 15, BOOL = 16, ANY = 17, RETURN = 18, IMPORT = 19, EXPORT = 20, 
-    AS = 21, IF = 22, ELSE = 23, ENDIF = 24, FOR = 25, IN = 26, ENDFOR = 27, 
-    SORT = 28, BOOL_LIT = 29, ARROW = 30, PLUS = 31, MINUS = 32, STAR = 33, 
-    SLASH = 34, LT = 35, GT = 36, LE = 37, GE = 38, EQ = 39, NE = 40, DOT = 41, 
-    LPAREN = 42, RPAREN = 43, COMMA = 44, ASSIGN = 45, NUMBER = 46, STRING = 47, 
-    IDENTIFIER = 48, WS = 49, NEWLINE = 50, COMMENT = 51
+    STR = 15, BOOL = 16, INST = 17, ANY = 18, RETURN = 19, IMPORT = 20, 
+    EXPORT = 21, AS = 22, IF = 23, ELIF = 24, ELSE = 25, ENDIF = 26, FOR = 27, 
+    IN = 28, ENDFOR = 29, SORT = 30, BOOL_LIT = 31, ARROW = 32, PLUS = 33, 
+    MINUS = 34, STAR = 35, SLASH = 36, LT = 37, GT = 38, LE = 39, GE = 40, 
+    EQ = 41, NE = 42, DOT = 43, LPAREN = 44, RPAREN = 45, COMMA = 46, ASSIGN = 47, 
+    NUMBER = 48, STRING = 49, IDENTIFIER = 50, WS = 51, NEWLINE = 52, COMMENT = 53
   };
 
   enum {
@@ -27,12 +27,13 @@ public:
     RuleImportItem = 4, RuleExportDef = 5, RuleExportItem = 6, RuleGlobalDef = 7, 
     RuleType = 8, RuleRule_ = 9, RuleFilter_rule = 10, RuleAttr_rule = 11, 
     RuleAttr_def = 12, RuleAttr_lvalue = 13, RuleFunc_rule = 14, RuleTyped_params = 15, 
-    RuleTyped_param = 16, RuleFunc_statement = 17, RuleIfStmt = 18, RuleForStmt = 19, 
-    RuleGroup_rule = 20, RuleAppend_rule = 21, RuleClass_expr = 22, RuleBool_expr = 23, 
-    RuleExpr = 24, RuleOr_expr = 25, RuleAnd_expr = 26, RuleNot_expr = 27, 
-    RuleCmp_expr = 28, RuleAdd_expr = 29, RuleMul_expr = 30, RuleUnary_expr = 31, 
-    RulePrimary = 32, RuleFunc_call = 33, RuleSortExpr = 34, RuleAttribute = 35, 
-    RuleComp_op = 36, RuleAdd_op = 37, RuleMul_op = 38
+    RuleTyped_param = 16, RuleFunc_statement = 17, RuleIfStmt = 18, RuleElifBranch = 19, 
+    RuleElseBranch = 20, RuleForStmt = 21, RuleGroup_rule = 22, RuleAppend_rule = 23, 
+    RuleClass_expr = 24, RuleBool_expr = 25, RuleExpr = 26, RuleOr_expr = 27, 
+    RuleAnd_expr = 28, RuleNot_expr = 29, RuleCmp_expr = 30, RuleAdd_expr = 31, 
+    RuleMul_expr = 32, RuleUnary_expr = 33, RulePrimary = 34, RuleFunc_call = 35, 
+    RuleSortExpr = 36, RuleAttribute = 37, RuleComp_op = 38, RuleAdd_op = 39, 
+    RuleMul_op = 40
   };
 
   explicit PostAnvilParser(antlr4::TokenStream *input);
@@ -71,6 +72,8 @@ public:
   class Typed_paramContext;
   class Func_statementContext;
   class IfStmtContext;
+  class ElifBranchContext;
+  class ElseBranchContext;
   class ForStmtContext;
   class Group_ruleContext;
   class Append_ruleContext;
@@ -234,6 +237,7 @@ public:
     antlr4::tree::TerminalNode *NUM();
     antlr4::tree::TerminalNode *STR();
     antlr4::tree::TerminalNode *BOOL();
+    antlr4::tree::TerminalNode *INST();
     antlr4::tree::TerminalNode *ANY();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -497,7 +501,9 @@ public:
     antlr4::tree::TerminalNode *ENDIF();
     std::vector<Func_statementContext *> func_statement();
     Func_statementContext* func_statement(size_t i);
-    antlr4::tree::TerminalNode *ELSE();
+    std::vector<ElifBranchContext *> elifBranch();
+    ElifBranchContext* elifBranch(size_t i);
+    ElseBranchContext *elseBranch();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -505,6 +511,41 @@ public:
   };
 
   IfStmtContext* ifStmt();
+
+  class  ElifBranchContext : public antlr4::ParserRuleContext {
+  public:
+    ElifBranchContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *ELIF();
+    ExprContext *expr();
+    std::vector<NewlinesContext *> newlines();
+    NewlinesContext* newlines(size_t i);
+    std::vector<Func_statementContext *> func_statement();
+    Func_statementContext* func_statement(size_t i);
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+   
+  };
+
+  ElifBranchContext* elifBranch();
+
+  class  ElseBranchContext : public antlr4::ParserRuleContext {
+  public:
+    ElseBranchContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *ELSE();
+    std::vector<NewlinesContext *> newlines();
+    NewlinesContext* newlines(size_t i);
+    std::vector<Func_statementContext *> func_statement();
+    Func_statementContext* func_statement(size_t i);
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+   
+  };
+
+  ElseBranchContext* elseBranch();
 
   class  ForStmtContext : public antlr4::ParserRuleContext {
   public:
@@ -727,6 +768,7 @@ public:
     antlr4::tree::TerminalNode *NUMBER();
     antlr4::tree::TerminalNode *STRING();
     antlr4::tree::TerminalNode *BOOL_LIT();
+    antlr4::tree::TerminalNode *SELF();
     Func_callContext *func_call();
     AttributeContext *attribute();
     antlr4::tree::TerminalNode *LPAREN();

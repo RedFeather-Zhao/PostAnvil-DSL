@@ -24,9 +24,10 @@ namespace postanvil {
 
 /**
  * @brief 编译后的函数体类型
- * @param args 参数值列表
- * @param ctx 评估上下文
- * @return double 计算结果
+ * 
+ * @param args	- 参数值列表
+ * @param ctx	- 评估上下文
+ * @return Val	- 计算结果
  */
 using CompiledFunc = std::function<Val(
 	const std::vector<Val>& args,
@@ -34,6 +35,11 @@ using CompiledFunc = std::function<Val(
 	EvaluationContext& ctx
 )>;
 
+struct FunctionInfo {
+	CompiledFunc func;
+	Type ret_type;
+	std::vector<Type> param_types;
+};
 
 /**
  * @brief 评估上下文，承载算子管道执行过程中的可变状态
@@ -123,11 +129,9 @@ public:
 
 	Scene scene;									// 当前场景，被算子逐步变换
 
-	detail::str_map<CompiledFunc> functions;		// 函数注册表
+	detail::str_map<FunctionInfo> functions;		// 函数注册表
 
 	std::vector<detail::str_map<Val>> local_stack;	// 栈空间，存储局部变量
-	detail::str_map<const Instance*> loop_vars;		// 循环变量名，用于 for 语句遍历实例
-
 	std::queue<Scene> frame_cache;					// 临近帧缓存
 
 	const Instance* curr_inst	= nullptr;			// 当前实例对象

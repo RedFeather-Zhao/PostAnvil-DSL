@@ -181,5 +181,99 @@ std::vector<TestCase> get_control_flow_tests() {
 			return ok;
 		});
 
+	tests.emplace_back(
+		"INST 参数接收 self 并读取实例属性",
+		R"(
+			RULE FUNC copy_conf(item:INST) -> NUM:
+				INST current_self = self
+				INST current_arg = item
+				IF current_self.conf == current_arg.conf
+					RETURN current_arg.conf
+				ELSE
+					RETURN 0
+				ENDIF
+			RULEEND
+
+			RULE ATTR "person":
+				self.copied_conf = copy_conf(self)
+			RULEEND
+		)",
+		[]() -> Scene {
+			return Scene({ 200,200 }, {
+				Instance("PERSON",0,0,10,10,0.9),
+				Instance("PERSON",0,0,10,10,0.6),
+			});
+		},
+		[](const Scene& res, std::string& err) -> bool {
+			bool ok = check_prop(res, "PERSON", 0, "COPIED_CONF", 0.9) &&
+				check_prop(res, "PERSON", 1, "COPIED_CONF", 0.6);
+			if (!ok) err = "INST 参数读取到的置信度不匹配";
+			return ok;
+		});
+
+	tests.emplace_back(
+		"FOR 实例可赋给 INST 局部变量并传递",
+		R"(
+			RULE FUNC read_conf(item:INST) -> NUM:
+				RETURN item.conf
+			RULEEND
+
+			RULE FUNC max_conf(cls:STR) -> NUM:
+				NUM best = 0
+				FOR obj IN cls
+					INST current = obj
+					IF read_conf(current) > best
+						best = read_conf(current)
+					ENDIF
+				ENDFOR
+				RETURN best
+			RULEEND
+
+			RULE ATTR "car":
+				"car".max_conf = max_conf("car")
+			RULEEND
+		)",
+		[]() -> Scene {
+			return Scene({ 200,200 }, {
+				Instance("CAR",0,0,10,10,0.5),
+				Instance("CAR",0,0,10,10,0.95),
+				Instance("CAR",0,0,10,10,0.7),
+			});
+		},
+		[](const Scene& res, std::string& err) -> bool {
+			bool ok = check_class_prop(res, "CAR", "MAX_CONF", 0.95);
+			if (!ok) err = "通过 INST 局部变量计算的最大置信度不匹配";
+			return ok;
+		});
+
+	tests.emplace_back(
+		"函数返回 INST 并保存为全局变量",
+		R"(
+			RULE FUNC first_inst(cls:STR) -> INST:
+				FOR obj IN cls
+					INST selected = obj
+					RETURN selected
+				ENDFOR
+				RETURN self
+			RULEEND
+
+			INST anchor = first_inst("person")
+
+			RULE FILTER "person":
+				self.conf >= anchor.conf
+			RULEEND
+		)",
+		[]() -> Scene {
+			return Scene({ 200,200 }, {
+				Instance("PERSON",0,0,10,10,0.75),
+				Instance("PERSON",0,0,10,10,0.5),
+			});
+		},
+		[](const Scene& res, std::string& err) -> bool {
+			bool ok = check_count(res, "PERSON", 1);
+			if (!ok) err = "全局 INST 变量的属性过滤结果不匹配";
+			return ok;
+		});
+
 	return tests;
 }

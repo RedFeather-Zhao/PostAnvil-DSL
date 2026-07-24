@@ -49,19 +49,12 @@ class TreeExprCompiler {
 	 * @brief 函数注册表指针，由外部编译器设置
 	 * @details 用于编译函数调用时查找已定义的函数体
 	 */
-	detail::str_map<CompiledFunc>* functions = nullptr;
+	detail::str_map<FunctionInfo>* functions = nullptr;
 
 	/**
-	 * @brief 全局变量类型表指针，由外部编译器设置
-	 * @details 用于编译 IDENTIFIER 表达式时确定变量的声明类型
+	 * @brief 变量符号表，由主编译器设置
 	 */
-	detail::str_map<Type>* global_types = nullptr;
-
-	/**
-	 * @brief 局部变量类型表
-	 * @details 用于编译函数和循环变量时的局部变量类型
-	 */
-	std::vector<detail::str_map<Type>> local_type_stack;
+	detail::ScopeChain<Type>* m_type_scope = nullptr;
 
 public:
 	static const inline char* OBJECT_SELF = "SELF";
@@ -69,26 +62,12 @@ public:
 
 	TreeExprCompiler() = default;
 
-	void set_functions(detail::str_map<CompiledFunc>* functions) {
+	void set_functions(detail::str_map<FunctionInfo>* functions) {
 		this->functions = functions;
 	}
 
-	void set_global_types(detail::str_map<Type>* global_types) {
-		this->global_types = global_types;
-	}
-
-	void push_local_scope() {
-		local_type_stack.emplace_back();
-	}
-
-	void pop_local_scope() {
-		local_type_stack.pop_back();
-	}
-
-	void setLocalType(const std::string& name, Type t) {
-		if (!local_type_stack.empty()) {
-			local_type_stack.back()[name] = t;
-		}
+	void set_type_scope(detail::ScopeChain<Type>* type_scope) {
+		this->m_type_scope = type_scope;
 	}
 
 public: // public method:
@@ -164,6 +143,14 @@ public: // public method:
 		// 字符串变量
 		if (ctx->IDENTIFIER()) {
 			std::string var = utils::get_upper_text(ctx->IDENTIFIER());
+			Type var_type = Type::T_ANY;
+			if (!m_type_scope || !m_type_scope->lookup(var, var_type)) {
+				handle_compile_error(std::format("Undefined class variable: {}", var), ctx);
+			}
+			if (var_type != Type::T_STR && var_type != Type::T_ANY) {
+				handle_compile_error(std::format(
+					"Class expression requires STR, got {}", type_name(var_type)), ctx);
+			}
 
 			return [var = std::move(var)](const Instance&, EvaluationContext& ctx) {
 				Val val = ctx.get_var(var);
@@ -321,6 +308,9 @@ private:
 			auto err = std::format("Operator '{}' not supported for BOOL", op);
 			handle_compile_error(err, ctx);
 		}
+		if (res_type == Type::T_INST) {
+			handle_compile_error("INST values cannot be compared directly; compare their properties instead", ctx);
+		}
 
 		return { [l = std::move(left.func), r = std::move(right.func), op = std::move(op)]
 			(const Instance& self, EvaluationContext& ctx) -> Val {
@@ -371,6 +361,9 @@ private:
 			// 布尔类型检查
 			if (res_type == Type::T_BOOL) {
 				handle_compile_error("Add expr not supported for BOOL", ctx);
+			}
+			if (res_type == Type::T_INST) {
+				handle_compile_error("Arithmetic is not supported for INST values", ctx);
 			}
 			if (op == "-" && res_type == Type::T_STR) {
 				handle_compile_error("Subtraction not supported for STR", ctx);
@@ -487,22 +480,35 @@ private:
 	TypedExpr compilePrimary(::PostAnvilParser::PrimaryContext* ctx) {
 		// NUMBER
 		if (ctx->NUMBER()) {
-			return compileNumber(ctx->NUMBER());
+			return compileNumber(ctx);
 		}
 
 		// STRING
 		if (ctx->STRING()) {
-			return compileString(ctx->STRING());
+			return compileString(ctx);
 		}
 
 		// BOOL_LIT
 		if (ctx->BOOL_LIT()) {
-			return compileBoolean(ctx->BOOL_LIT());
+			return compileBoolean(ctx);
+		}
+
+		// SELF 当前实例值
+		if (ctx->SELF()) {
+			return {
+				[](const Instance& self, EvaluationContext&) -> Val {
+					if (self.cls() == "__DUMMY") {
+						throw RuntimeError("SELF is unavailable outside an instance context");
+					}
+					return Val(self);
+				},
+				Type::T_INST
+			};
 		}
 
 		//  IDENTIFIER 局部/全局变量
 		if (ctx->IDENTIFIER()) {
-			return compileVariable(ctx->IDENTIFIER());
+			return compileVariable(ctx);
 		}
 
 		// func_call 函数调用闭包
@@ -532,11 +538,11 @@ private:
 	/**
 	 * @brief 编译数字终结符，返回数字常量闭包
 	 * 
-	 * @param node			- 终结节点
+	 * @param ctx			- PrimaryContext 节点
 	 * @return TypedExpr	- T_NUM 类型的闭包
 	 */
-	TypedExpr compileNumber(antlr4::tree::TerminalNode* node) {
-		double v = std::stod(node->getText());
+	TypedExpr compileNumber(::PostAnvilParser::PrimaryContext* ctx) {
+		double v = std::stod(ctx->NUMBER()->getText());
 		return {
 			[v](const Instance&, EvaluationContext&) {
 				return Val(v);
@@ -548,11 +554,11 @@ private:
 	/**
 	 * @brief 编译字串字面量终结符，返回字串字面量闭包
 	 * 
-	 * @param node			- 终结节点
+	 * @param ctx			- PrimaryContext 节点
 	 * @return TypedExpr	- T_STR 类型的闭包
 	 */
-	TypedExpr compileString(antlr4::tree::TerminalNode* node) {
-		std::string s = utils::strip_quotes(node->getText());
+	TypedExpr compileString(::PostAnvilParser::PrimaryContext* ctx) {
+		std::string s = utils::strip_quotes(ctx->STRING()->getText());
 		return {
 			[s = std::move(s)](const Instance&, EvaluationContext&) {
 				return Val(s);
@@ -564,11 +570,11 @@ private:
 	/**
 	 * @brief 编译布尔终结符，返回布尔闭包
 	 *
-	 * @param node			- 终结节点
+	 * @param ctx			- PrimaryContext 节点
 	 * @return TypedExpr	- T_STR 类型的闭包
 	 */
-	TypedExpr compileBoolean(antlr4::tree::TerminalNode* node) {
-		std::string text = utils::get_upper_text(node);
+	TypedExpr compileBoolean(::PostAnvilParser::PrimaryContext* ctx) {
+		std::string text = utils::get_upper_text(ctx->BOOL_LIT());
 		bool v = (text == "TRUE");
 		return {
 			[v](const Instance&, EvaluationContext&) {
@@ -581,21 +587,17 @@ private:
 	/**
 	 * @brief 编译变量终结符，返回变量对应类型闭包
 	 * 
-	 * @param node			- 终结节点
-	 * @return	TypedExpr	- T_STR 类型的闭包
+	 * @param ctx			- PrimaryContext 节点
+	 * @return	TypedExpr	- 变量对应类型的闭包
 	 */
-	TypedExpr compileVariable(antlr4::tree::TerminalNode* node) {
-		std::string var = utils::get_upper_text(node);
+	TypedExpr compileVariable(::PostAnvilParser::PrimaryContext* ctx) {
+		std::string var = utils::get_upper_text(ctx->IDENTIFIER());
 		Type var_type = Type::T_ANY;
 
-		if (!global_types) {
-			auto it = global_types->find(var);
-			if (it != global_types->end()) {
-				var_type = it->second;
-			}
+		// 获取定义类型类型，否则报错
+		if ((m_type_scope && m_type_scope->lookup(var, var_type)) == false) {
+			handle_compile_error(std::format("Undefined varable: {}", var), ctx);
 		}
-
-		// TODO: 缺当前局部变量的类型判定
 
 		return {
 			[var](const Instance&, EvaluationContext& ctx) -> Val {
@@ -662,22 +664,29 @@ private:
 				};
 			}
 
-			// 2. loop_var.prop: 循环实例的属性
-			// TODO: 应改为编译期检查
+			Type object_type = Type::T_ANY;
+			if (!m_type_scope || !m_type_scope->lookup(object, object_type)) {
+				handle_compile_error(std::format("Undefined object variable: {}", object), ctx);
+			}
+			if (object_type != Type::T_INST && object_type != Type::T_STR && object_type != Type::T_ANY) {
+				handle_compile_error(std::format(
+					"Property access requires INST or STR, got {}", type_name(object_type)), ctx);
+			}
 
 			return {
 				[object, prop](const Instance&, EvaluationContext& ctx) -> Val {
-					// 循环实例
-					auto loop_it = ctx.loop_vars.find(object);
-					if (loop_it != ctx.loop_vars.end()) {
-						return ctx.scene.get_inst_prop(*loop_it->second, prop);
+					Val object_val = ctx.get_var(object);
+					if (object_val.type() == Type::T_INST) {
+						return ctx.scene.get_inst_prop(*object_val.as_inst(), prop);
 					}
-
-					// 类别变量-字串类型
-					Val cls_val = ctx.get_var(object);
-					std::string cls_name = cls_val.as_str();
-					utils::to_upper_inplace(cls_name);
-					return ctx.scene.get_cls_prop(cls_name, prop);
+					if (object_val.type() == Type::T_STR) {
+						std::string cls_name = object_val.as_str();
+						utils::to_upper_inplace(cls_name);
+						return ctx.scene.get_cls_prop(cls_name, prop);
+					}
+					throw RuntimeError(std::format(
+						"Property access on '{}' requires INST or STR, got {}",
+						object, type_name(object_val.type())));
 				},
 				Type::T_ANY
 			};
@@ -702,25 +711,48 @@ private:
 			arg_exprs.emplace_back(compile(expr_ctx));
 		}
 
+		// 查询函数返回类型
+		Type ret_type = Type::T_ANY;
+		auto it = functions->find(func_name);
+		if (it != functions->end()) {
+			ret_type = it->second.ret_type;
+			const auto& param_types = it->second.param_types;
+			if (arg_exprs.size() != param_types.size()) {
+				handle_compile_error(std::format(
+					"Function '{}' expects {} arguments, got {}",
+					func_name, param_types.size(), arg_exprs.size()), ctx);
+			}
+			for (size_t i = 0; i < arg_exprs.size(); ++i) {
+				if (!type_compatible(param_types[i], arg_exprs[i].type)) {
+					handle_compile_error(std::format(
+						"Function '{}' argument {} expects {}, got {}",
+						func_name, i + 1, type_name(param_types[i]), type_name(arg_exprs[i].type)), ctx);
+				}
+			}
+		}
+		else {
+			handle_compile_error(std::format("Undefined function: '{}'", func_name), ctx);
+		}
+
 		return {
 			[func_name, arg_exprs = std::move(arg_exprs)]
 			(const Instance& self, EvaluationContext& ctx) -> Val {
 				auto it = ctx.functions.find(func_name);
 				if (it == ctx.functions.end()) {
-					throw RuntimeError("Undefined function '" + func_name + "'");
+					throw RuntimeError(std::format("Undefined function: '{}'", func_name));
 				}
 				const auto& compiled_func = it->second;
 
-				// 求值参数
+				// 参数求值
 				std::vector<Val> args;
 				args.reserve(arg_exprs.size());
 				for (auto& arg_expr : arg_exprs) {
 					args.emplace_back(arg_expr.func(self, ctx));
 				}
 
-				return compiled_func(args, self, ctx);
+				return compiled_func.func(args, self, ctx);
 			},
-			Type::T_ANY // TODO: 编译时应该维护函数表，确定编译类型，当前为运行时推断
+			ret_type
 		};
 	}
 
