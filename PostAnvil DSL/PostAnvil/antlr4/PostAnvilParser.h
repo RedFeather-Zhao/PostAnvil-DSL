@@ -15,8 +15,8 @@ public:
     T__0 = 1, RULE = 2, RULEEND = 3, FILTER = 4, ATTR = 5, FUNC = 6, GROUP = 7, 
     APPEND = 8, FROM = 9, AND = 10, OR = 11, NOT = 12, SELF = 13, NUM = 14, 
     STR = 15, BOOL = 16, INST = 17, ANY = 18, RETURN = 19, IMPORT = 20, 
-    EXPORT = 21, AS = 22, IF = 23, ELIF = 24, ELSE = 25, ENDIF = 26, FOR = 27, 
-    IN = 28, ENDFOR = 29, SORT = 30, ASC = 31, DESC = 32, BOOL_LIT = 33, 
+    EXPORT = 21, AS = 22, IF = 23, ELIF = 24, ELSE = 25, IFEND = 26, FOR = 27, 
+    IN = 28, FOREND = 29, SORT = 30, ASC = 31, DESC = 32, BOOL_LIT = 33, 
     ARROW = 34, PLUS = 35, MINUS = 36, STAR = 37, SLASH = 38, LT = 39, GT = 40, 
     LE = 41, GE = 42, EQ = 43, NE = 44, DOT = 45, LPAREN = 46, RPAREN = 47, 
     COMMA = 48, ASSIGN = 49, NUMBER = 50, STRING = 51, IDENTIFIER = 52, 
@@ -502,7 +502,7 @@ public:
     ExprContext *expr();
     std::vector<NewlinesContext *> newlines();
     NewlinesContext* newlines(size_t i);
-    antlr4::tree::TerminalNode *ENDIF();
+    antlr4::tree::TerminalNode *IFEND();
     std::vector<Func_statementContext *> func_statement();
     Func_statementContext* func_statement(size_t i);
     std::vector<ElifBranchContext *> elifBranch();
@@ -561,7 +561,7 @@ public:
     Class_exprContext *class_expr();
     std::vector<NewlinesContext *> newlines();
     NewlinesContext* newlines(size_t i);
-    antlr4::tree::TerminalNode *ENDFOR();
+    antlr4::tree::TerminalNode *FOREND();
     std::vector<Func_statementContext *> func_statement();
     Func_statementContext* func_statement(size_t i);
 

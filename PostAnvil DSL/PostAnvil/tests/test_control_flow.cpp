@@ -14,8 +14,8 @@ std::vector<TestCase> get_control_flow_tests() {
 						RETURN 2
 					ELSE
 						RETURN 1
-					ENDIF
-				ENDIF
+					IFEND
+				IFEND
 			RULEEND
 
 			RULE ATTR "person":
@@ -60,7 +60,7 @@ std::vector<TestCase> get_control_flow_tests() {
 				NUM total = 0
 				FOR obj IN cls
 					total = total + obj.conf
-				ENDFOR
+				FOREND
 				return total / cls.count
 			RULEEND
 
@@ -102,12 +102,12 @@ std::vector<TestCase> get_control_flow_tests() {
 				NUM total = 0
 				FOR obj IN cls
 					total = total + obj.conf
-				ENDFOR
+				FOREND
 				IF cls.count == 0
 					RETURN 0
 				ELSE
 					return total / cls.count
-				ENDIF
+				IFEND
 			RULEEND
 
 			RULE ATTR "CAR":
@@ -145,8 +145,8 @@ std::vector<TestCase> get_control_flow_tests() {
 				FOR cls IN "global"
 					FOR obj IN cls
 						total = total + obj.area
-					ENDFOR
-				ENDFOR
+					FOREND
+				FOREND
 				return total
 			RULEEND
 
@@ -191,7 +191,7 @@ std::vector<TestCase> get_control_flow_tests() {
 					RETURN current_arg.conf
 				ELSE
 					RETURN 0
-				ENDIF
+				IFEND
 			RULEEND
 
 			RULE ATTR "person":
@@ -224,8 +224,8 @@ std::vector<TestCase> get_control_flow_tests() {
 					INST current = obj
 					IF read_conf(current) > best
 						best = read_conf(current)
-					ENDIF
-				ENDFOR
+					IFEND
+				FOREND
 				RETURN best
 			RULEEND
 
@@ -253,7 +253,7 @@ std::vector<TestCase> get_control_flow_tests() {
 				FOR obj IN cls
 					INST selected = obj
 					RETURN selected
-				ENDFOR
+				FOREND
 				RETURN self
 			RULEEND
 
@@ -282,7 +282,7 @@ std::vector<TestCase> get_control_flow_tests() {
 				NUM _sum = 0
 				FOR _inst IN _cls
 					_sum = _sum + _inst.(_prop)
-				ENDFOR
+				FOREND
 				RETURN _sum / _cls.count
 			RULEEND
 

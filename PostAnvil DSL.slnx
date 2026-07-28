@@ -4,4 +4,7 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="PostAnvil DSL/PostAnvil DSL.vcxproj" Id="fdcdb1a2-fe5c-4f34-8b04-af15226ecb7d" />
+  <Project Path="PostAnvil Test/PostAnvil Test.vcxproj" Id="61d638b7-7e5f-430c-9464-49a571c8ee4d" />
+  <Project Path="PostAnvil Test Language/PostAnvil Test Language.vcxproj" Id="792a9b12-82c0-46f1-b1a4-cb561d01db01" />
+  <Project Path="PostAnvil Test Integration/PostAnvil Test Integration.vcxproj" Id="f10ccf3c-2f95-4a1d-a025-9f30732bac02" />
 </Solution>

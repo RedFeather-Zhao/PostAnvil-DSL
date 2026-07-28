@@ -65,16 +65,16 @@ void postanvilParserInitialize() {
       "", "':'", "'RULE'", "'RULEEND'", "'FILTER'", "'ATTR'", "'FUNC'", 
       "'GROUP'", "'APPEND'", "'FROM'", "'AND'", "'OR'", "'NOT'", "'SELF'", 
       "'NUM'", "'STR'", "'BOOL'", "'INST'", "'ANY'", "'RETURN'", "'IMPORT'", 
-      "'EXPORT'", "'AS'", "'IF'", "'ELIF'", "'ELSE'", "'ENDIF'", "'FOR'", 
-      "'IN'", "'ENDFOR'", "'SORT'", "'ASC'", "'DESC'", "", "'->'", "'+'", 
+      "'EXPORT'", "'AS'", "'IF'", "'ELIF'", "'ELSE'", "'IFEND'", "'FOR'", 
+      "'IN'", "'FOREND'", "'SORT'", "'ASC'", "'DESC'", "", "'->'", "'+'", 
       "'-'", "'*'", "'/'", "'<'", "'>'", "'<='", "'>='", "'=='", "'!='", 
       "'.'", "'('", "')'", "','", "'='"
     },
     std::vector<std::string>{
       "", "", "RULE", "RULEEND", "FILTER", "ATTR", "FUNC", "GROUP", "APPEND", 
       "FROM", "AND", "OR", "NOT", "SELF", "NUM", "STR", "BOOL", "INST", 
-      "ANY", "RETURN", "IMPORT", "EXPORT", "AS", "IF", "ELIF", "ELSE", "ENDIF", 
-      "FOR", "IN", "ENDFOR", "SORT", "ASC", "DESC", "BOOL_LIT", "ARROW", 
+      "ANY", "RETURN", "IMPORT", "EXPORT", "AS", "IF", "ELIF", "ELSE", "IFEND", 
+      "FOR", "IN", "FOREND", "SORT", "ASC", "DESC", "BOOL_LIT", "ARROW", 
       "PLUS", "MINUS", "STAR", "SLASH", "LT", "GT", "LE", "GE", "EQ", "NE", 
       "DOT", "LPAREN", "RPAREN", "COMMA", "ASSIGN", "NUMBER", "STRING", 
       "IDENTIFIER", "WS", "NEWLINE", "COMMENT"
@@ -2131,8 +2131,8 @@ PostAnvilParser::NewlinesContext* PostAnvilParser::IfStmtContext::newlines(size_
   return getRuleContext<PostAnvilParser::NewlinesContext>(i);
 }
 
-tree::TerminalNode* PostAnvilParser::IfStmtContext::ENDIF() {
-  return getToken(PostAnvilParser::ENDIF, 0);
+tree::TerminalNode* PostAnvilParser::IfStmtContext::IFEND() {
+  return getToken(PostAnvilParser::IFEND, 0);
 }
 
 std::vector<PostAnvilParser::Func_statementContext *> PostAnvilParser::IfStmtContext::func_statement() {
@@ -2224,7 +2224,7 @@ PostAnvilParser::IfStmtContext* PostAnvilParser::ifStmt() {
       elseBranch();
     }
     setState(273);
-    match(PostAnvilParser::ENDIF);
+    match(PostAnvilParser::IFEND);
    
   }
   catch (RecognitionException &e) {
@@ -2442,8 +2442,8 @@ PostAnvilParser::NewlinesContext* PostAnvilParser::ForStmtContext::newlines(size
   return getRuleContext<PostAnvilParser::NewlinesContext>(i);
 }
 
-tree::TerminalNode* PostAnvilParser::ForStmtContext::ENDFOR() {
-  return getToken(PostAnvilParser::ENDFOR, 0);
+tree::TerminalNode* PostAnvilParser::ForStmtContext::FOREND() {
+  return getToken(PostAnvilParser::FOREND, 0);
 }
 
 std::vector<PostAnvilParser::Func_statementContext *> PostAnvilParser::ForStmtContext::func_statement() {
@@ -2509,7 +2509,7 @@ PostAnvilParser::ForStmtContext* PostAnvilParser::forStmt() {
       _la = _input->LA(1);
     }
     setState(309);
-    match(PostAnvilParser::ENDFOR);
+    match(PostAnvilParser::FOREND);
    
   }
   catch (RecognitionException &e) {

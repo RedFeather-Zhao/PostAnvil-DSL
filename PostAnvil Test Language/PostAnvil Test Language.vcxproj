@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32"><Configuration>Debug</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32"><Configuration>Release</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><VCProjectVersion>18.0</VCProjectVersion><Keyword>Win32Proj</Keyword><ProjectGuid>{792a9b12-82c0-46f1-b1a4-cb561d01db01}</ProjectGuid><RootNamespace>PostAnvilTestLanguage</RootNamespace><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries><PlatformToolset>v145</PlatformToolset><CharacterSet>Unicode</CharacterSet></PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration"><ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>v145</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization><CharacterSet>Unicode</CharacterSet></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets"><Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" /><Import Project="..\PostAnvil Test\PostAnvil.Test.props" /></ImportGroup>
+  <PropertyGroup><OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir><IntDir>$(SolutionDir)build\obj\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir><TargetName>PostAnvil.Test.Language</TargetName></PropertyGroup>
+  <ItemGroup>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\main_language.cpp" />
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_common.cpp" />
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_bool_sort_func.cpp" />
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_new_features.cpp" />
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_control_flow.cpp" />
+    <ClInclude Include="..\PostAnvil DSL\PostAnvil\tests\test_common.hpp" />
+  </ItemGroup>
+  <ItemGroup><ProjectReference Include="..\PostAnvil DSL\PostAnvil DSL.vcxproj"><Project>{fdcdb1a2-fe5c-4f34-8b04-af15226ecb7d}</Project></ProjectReference></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

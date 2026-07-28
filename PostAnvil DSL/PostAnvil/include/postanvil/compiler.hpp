@@ -190,7 +190,8 @@ private: // Listener 回调实现
 			}
 
 			if (m_type_scope.checkup(varName)) {
-				auto err = std::format("Global variable '{}' already declared, type = {}", varName);
+				auto err = std::format("Global variable '{}' already declared, type = {}",
+					varName, type_name(type));
 				handle_compile_error(err, ctx);
 			}
 			m_type_scope.set_global(varName, type);

@@ -47,10 +47,10 @@ AS        : 'AS';             // 别名关键字
 IF        : 'IF';             // 条件分支开始
 ELIF      : 'ELIF';           // 条件分支嵌套
 ELSE      : 'ELSE';           // 条件分支否则
-ENDIF     : 'ENDIF';          // 条件分支结束
+IFEND     : 'IFEND';          // 条件分支结束
 FOR       : 'FOR';            // 循环开始
 IN        : 'IN';             // 循环遍历指定类别
-ENDFOR    : 'ENDFOR';         // 循环结束
+FOREND    : 'FOREND';         // 循环结束
 SORT      : 'SORT';           // 原地排序规则
 ASC       : 'ASC';            // 升序
 DESC      : 'DESC';           // 降序
@@ -228,7 +228,7 @@ ifStmt
       ( func_statement newlines )*           // IF 分支体
       ( elifBranch )*                        // 零个或多个 ELIF 分支
       ( elseBranch )?                        // 可选的 ELSE 分支
-      ENDIF
+      IFEND
     ;
 
 elifBranch
@@ -244,7 +244,7 @@ elseBranch
 forStmt
     : FOR IDENTIFIER IN class_expr newlines   // FOR 循环变量 IN 类别
       ( func_statement newlines )*
-      ENDFOR
+      FOREND
     ;
 
 // --- GROUP 规则（创建新类别） ---

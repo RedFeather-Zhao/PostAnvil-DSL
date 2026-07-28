@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup><Filter Include="测试源文件"><UniqueIdentifier>{a7905719-071b-487c-b3ad-fb0d33cd6b4b}</UniqueIdentifier></Filter></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\main_language.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_common.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_bool_sort_func.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_new_features.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_control_flow.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClInclude Include="..\PostAnvil DSL\PostAnvil\tests\test_common.hpp"><Filter>测试源文件</Filter></ClInclude>
+  </ItemGroup>
+</Project>

@@ -12,33 +12,33 @@ RULE FUNC density_score(spike: INST) -> NUM:
         IF overlap > 0.3
             count = count + 1
             total_iou = total_iou + overlap
-        ENDIF
-    ENDFOR
+        IFEND
+    FOREND
 
     FOR obj IN "Spikelet"
         IF _CONTAINS(obj, spike)
             count = count + 1
-        ENDIF
-    ENDFOR
+        IFEND
+    FOREND
 
     FOR obj IN "Sterile-Spikelet"
         IF _CONTAINS(obj, spike)
             count = count + 1
-        ENDIF
-    ENDFOR
+        IFEND
+    FOREND
 
     FOR obj IN "Awn"
         NUM overlap = _IOU(spike, obj)
         IF overlap > 0.1 OR _NEARBY(spike, obj, 50)
             count = count + 1
             total_iou = total_iou + overlap
-        ENDIF
-    ENDFOR
+        IFEND
+    FOREND
 
     NUM iou_score = 0
     IF count > 0
         iou_score = total_iou / count
-    ENDIF
+    IFEND
 
     NUM count_score = _MIN(1, count / 10)
     RETURN count_score * 0.6 + iou_score * 0.4
@@ -55,39 +55,39 @@ RULE FUNC hierarchy_score(spike: INST) -> NUM:
     FOR obj IN "All-Spikelet"
         IF _IOU(spike, obj) >= 0.6 OR _CONTAINS(obj, spike)
             has_all_spikelet = TRUE
-        ENDIF
-    ENDFOR
+        IFEND
+    FOREND
 
     FOR obj IN "Spikelet"
         IF _CONTAINS(obj, spike)
             spikelet_count = spikelet_count + 1
-        ENDIF
-    ENDFOR
+        IFEND
+    FOREND
 
     FOR obj IN "Awn"
         IF _IOU(spike, obj) > 0.1 OR _NEARBY(spike, obj, 50)
             has_awn = TRUE
-        ENDIF
-    ENDFOR
+        IFEND
+    FOREND
 
     FOR obj IN "Sterile-Spikelet"
         IF _CONTAINS(obj, spike)
             sterile_count = sterile_count + 1
-        ENDIF
-    ENDFOR
+        IFEND
+    FOREND
 
     IF has_all_spikelet
         score = score + 0.4
-    ENDIF
+    IFEND
     IF spikelet_count > 0
         score = score + 0.3 * _MIN(1, spikelet_count / 5)
-    ENDIF
+    IFEND
     IF has_awn
         score = score + 0.2
-    ENDIF
+    IFEND
     IF sterile_count > 0
         score = score + 0.1 * _MIN(1, sterile_count / 3)
-    ENDIF
+    IFEND
 
     RETURN score
 RULEEND

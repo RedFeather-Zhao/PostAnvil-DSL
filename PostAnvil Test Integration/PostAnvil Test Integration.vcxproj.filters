@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup><Filter Include="测试源文件"><UniqueIdentifier>{ec461265-6b01-4c78-94f3-021cf81096ae}</UniqueIdentifier></Filter></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\main_integration.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_common.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_import_export.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClCompile Include="..\PostAnvil DSL\PostAnvil\tests\test_end_to_end.cpp"><Filter>测试源文件</Filter></ClCompile>
+    <ClInclude Include="..\PostAnvil DSL\PostAnvil\tests\test_common.hpp"><Filter>测试源文件</Filter></ClInclude>
+  </ItemGroup>
+</Project>

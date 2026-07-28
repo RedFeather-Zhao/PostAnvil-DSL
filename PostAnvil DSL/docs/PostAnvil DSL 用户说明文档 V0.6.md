@@ -30,7 +30,7 @@ RULE FUNC risk_level(conf: NUM) -> NUM:
         RETURN 2
     ELSE
         RETURN 1
-    ENDIF
+    IFEND
 RULEEND
 
 RULE ATTR "person":
@@ -121,7 +121,7 @@ RULE FUNC first_inst(cls: STR) -> INST:
     FOR obj IN cls
         INST selected = obj
         RETURN selected
-    ENDFOR
+    FOREND
     RETURN self
 RULEEND
 ```
@@ -235,6 +235,8 @@ RULEEND
 
 ## 6. 函数控制流
 
+块结束关键字统一使用“块声明关键字 + `END`”的顺序：规则块使用 `RULEEND`，条件块使用 `IFEND`，循环块使用 `FOREND`。旧写法 `ENDIF` 和 `ENDFOR` 不再接受。
+
 ### 6.1 IF / ELIF / ELSE
 
 ```postanvil
@@ -244,7 +246,7 @@ ELIF other_condition
     statements
 ELSE
     statements
-ENDIF
+IFEND
 ```
 
 支持零个或多个 `ELIF` 和可选的 `ELSE`，也可以嵌套。分支内声明的局部变量只在该分支作用域内有效。
@@ -257,7 +259,7 @@ RULE FUNC level(conf: NUM) -> NUM:
         RETURN 2
     ELSE
         RETURN 1
-    ENDIF
+    IFEND
 RULEEND
 ```
 
@@ -266,7 +268,7 @@ RULEEND
 ```postanvil
 FOR obj IN <类别表达式>
     statements
-ENDFOR
+FOREND
 ```
 
 普通类别循环中，循环变量的类型为 `INST`，可读取 `obj.conf`、`obj.area` 等属性，也可赋给其他 `INST` 变量或传入函数：
@@ -276,12 +278,12 @@ RULE FUNC avg_conf(cls: STR) -> NUM:
     NUM total = 0
     FOR obj IN cls
         total = total + obj.conf
-    ENDFOR
+    FOREND
     IF cls.count == 0
         RETURN 0
     ELSE
         RETURN total / cls.count
-    ENDIF
+    IFEND
 RULEEND
 ```
 
@@ -293,8 +295,8 @@ RULE FUNC total_area() -> NUM:
     FOR cls IN "global"
         FOR obj IN cls
             total = total + obj.area
-        ENDFOR
-    ENDFOR
+        FOREND
+    FOREND
     RETURN total
 RULEEND
 ```
@@ -351,7 +353,7 @@ RULE FUNC fn_avg(_cls: STR, _prop: STR) -> NUM:
     NUM _sum = 0
     FOR _inst IN _cls
         _sum = _sum + _inst.(_prop)
-    ENDFOR
+    FOREND
     RETURN _sum / _cls.count
 RULEEND
 
@@ -552,7 +554,7 @@ double confidence = snapshot->conf();
 
 ## 11. 关键字
 
-`RULE`、`RULEEND`、`FILTER`、`ATTR`、`FUNC`、`GROUP`、`APPEND`、`SORT`、`ASC`、`DESC`、`FROM`、`AND`、`OR`、`NOT`、`SELF`、`NUM`、`STR`、`BOOL`、`INST`、`ANY`、`RETURN`、`IMPORT`、`EXPORT`、`AS`、`IF`、`ELIF`、`ELSE`、`ENDIF`、`FOR`、`IN`、`ENDFOR`、`TRUE`、`FALSE`。
+`RULE`、`RULEEND`、`FILTER`、`ATTR`、`FUNC`、`GROUP`、`APPEND`、`SORT`、`ASC`、`DESC`、`FROM`、`AND`、`OR`、`NOT`、`SELF`、`NUM`、`STR`、`BOOL`、`INST`、`ANY`、`RETURN`、`IMPORT`、`EXPORT`、`AS`、`IF`、`ELIF`、`ELSE`、`IFEND`、`FOR`、`IN`、`FOREND`、`TRUE`、`FALSE`。
 
 ## 12. 常见问题
 

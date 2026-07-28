@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
 #include <functional>
@@ -40,6 +41,12 @@ bool check_class_prop(
 bool run_test_case(
 	const TestCase& tc,
 	PostAnvilCompiler& compiler
+);
+
+/** @brief 运行一组测试并输出独立汇总。 */
+int run_test_suite(
+	const std::string& suite_name,
+	const std::vector<TestCase>& tests
 );
 
 // 各模块测试生成函数
