@@ -16,10 +16,11 @@ public:
     APPEND = 8, FROM = 9, AND = 10, OR = 11, NOT = 12, SELF = 13, NUM = 14, 
     STR = 15, BOOL = 16, INST = 17, ANY = 18, RETURN = 19, IMPORT = 20, 
     EXPORT = 21, AS = 22, IF = 23, ELIF = 24, ELSE = 25, ENDIF = 26, FOR = 27, 
-    IN = 28, ENDFOR = 29, SORT = 30, BOOL_LIT = 31, ARROW = 32, PLUS = 33, 
-    MINUS = 34, STAR = 35, SLASH = 36, LT = 37, GT = 38, LE = 39, GE = 40, 
-    EQ = 41, NE = 42, DOT = 43, LPAREN = 44, RPAREN = 45, COMMA = 46, ASSIGN = 47, 
-    NUMBER = 48, STRING = 49, IDENTIFIER = 50, WS = 51, NEWLINE = 52, COMMENT = 53
+    IN = 28, ENDFOR = 29, SORT = 30, ASC = 31, DESC = 32, BOOL_LIT = 33, 
+    ARROW = 34, PLUS = 35, MINUS = 36, STAR = 37, SLASH = 38, LT = 39, GT = 40, 
+    LE = 41, GE = 42, EQ = 43, NE = 44, DOT = 45, LPAREN = 46, RPAREN = 47, 
+    COMMA = 48, ASSIGN = 49, NUMBER = 50, STRING = 51, IDENTIFIER = 52, 
+    WS = 53, NEWLINE = 54, COMMENT = 55
   };
 
   explicit PostAnvilLexer(antlr4::CharStream *input);

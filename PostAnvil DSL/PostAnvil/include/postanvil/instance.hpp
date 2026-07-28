@@ -11,6 +11,8 @@
 #include "detail.hpp"
 #include "error.hpp"
 
+#include <cctype>
+#include <cstdint>
 #include <set>
 
 namespace postanvil {
@@ -35,11 +37,9 @@ public:
 	 */
 	Instance(std::string_view class_name, double x, double y,
 		double width, double height, double confidence)
-		: m_cls(class_name), m_x1(x), m_y1(y), m_w(width), m_h(height), m_conf(confidence)
+		: m_x1(x), m_y1(y), m_w(width), m_h(height), m_conf(confidence)
 	{
-		for (auto& ch : m_cls) {
-			ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-		}
+		set_cls(class_name);
 	}
 
 	// ========================= 内置动态属性 ============================
@@ -50,13 +50,26 @@ public:
 	double y1()					const { return m_y1; }
 	double conf()				const { return m_conf; }
 	const std::string& cls()	const { return m_cls; }
+	std::size_t id()			const { return m_id; }
+	std::size_t index()			const { return m_index; }
 
 	void set_w(double width)					{ m_w = width; }
 	void set_h(double height)					{ m_h = height; }
 	void set_x1(double x)						{ m_x1 = x; }
 	void set_y1(double y)						{ m_y1 = y; }
 	void set_conf(double confidence)			{ m_conf = confidence; }
-	void set_cls(std::string_view class_name)	{ m_cls = class_name; }
+	void set_cls(std::string_view class_name) {
+		m_cls = class_name;
+		for (auto& ch : m_cls) {
+			ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+		}
+	}
+
+	/** @brief 由 Scene 分配稳定逻辑实例编号；派生类别中的副本保留该编号。 */
+	void set_id(std::size_t id) { m_id = id; }
+
+	/** @brief 设置实例在当前类别中的实时位置，DSL 侧从 1 开始。 */
+	void set_index(std::size_t index) { m_index = index; }
 
 	// ========================= 内置衍生属性 ============================
 
@@ -80,25 +93,23 @@ public:
 	// ======================== 实例动态属性 ============================
 
 	/**
-	 * @brief 设置动态属性
+	 * @brief 设置实例属性
 	 * @param name 属性名
 	 * @param value 属性值
-	 * @throws RuntimeError 在 Debug 模式下若与内置属性名冲突则抛出
+	 * @details 可写内置属性直接更新实例；其余名称写入动态属性表。
+	 * @throws RuntimeError 写入只读内置属性或值类型不匹配时抛出
 	 */
 	void set_prop(const std::string& name, Val value) {
+		if (name == "W")		{ set_w(value.as_num()); return; }
+		if (name == "H")		{ set_h(value.as_num()); return; }
+		if (name == "X1")		{ set_x1(value.as_num()); return; }
+		if (name == "Y1")		{ set_y1(value.as_num()); return; }
+		if (name == "CONF")		{ set_conf(value.as_num()); return; }
+		if (name == "CLS")		{ set_cls(value.as_str()); return; }
 
-		if (name == "W")		set_w(value.as_num());
-		if (name == "H")		set_h(value.as_num());
-		if (name == "X1")		set_x1(value.as_num());
-		if (name == "Y1")		set_y1(value.as_num());
-		if (name == "CONF")		set_conf(value.as_num());
-		if (name == "CLS")		set_cls(value.as_str());
-
-#ifdef _DEBUG
-		if (_props.contains(name)) {
-			throw RuntimeError("Property '" + name + "' conflicts with const built-in property!");
+		if (_builtin_props.contains(name)) {
+			throw RuntimeError("Property '" + name + "' is a read-only built-in property");
 		}
-#endif
 		this->m_props[name] = value;
 	}
 
@@ -128,29 +139,29 @@ public:
 	}
 
 private:
-	std::string m_cls;      // 类别名
-	double m_x1 = 0;        // 左上角 x 坐标
-	double m_y1 = 0;        // 左上角 y 坐标
-	double m_w = 0;         // 宽度
-	double m_h = 0;         // 高度
-	double m_conf = 0.0;    // 置信度
+	std::string m_cls;			// 类别名
+	double m_x1 = 0;			// 左上角 x 坐标
+	double m_y1 = 0;			// 左上角 y 坐标
+	double m_w = 0;				// 宽度
+	double m_h = 0;				// 高度
+	double m_conf = 0.0;		// 置信度
+	std::size_t m_id = 0;		// Scene 输入实例的稳定编号，0 仅用于占位实例
+	std::size_t m_index = 0;	// 当前所属类别中的 1-based 位置
 
 	/**
 	 * @brief 动态属性存储表，键为属性名，值为数值
 	 */
 	detail::str_map<Val> m_props;
 
-#ifdef _DEBUG
 	/**
-	 * @brief 内置属性名集合（用于冲突检测）
+	 * @brief 内置属性名集合（用于防止只读属性被动态属性覆盖）
 	 */
-	static inline const std::set<std::string_view> _props = {
-		"W", "H", "X1", "Y1", "CONF", "CLS",
+	static inline const std::set<std::string_view> _builtin_props = {
+		"W", "H", "X1", "Y1", "CONF", "CLS", "ID", "INDEX",
 		"X2", "Y2", "CX", "CY", "AREA", "ASPECT",
 		"WN", "HN", "X1N", "X2N", "Y1N", "Y2N",
 		"CXN", "CYN", "AREAN"
 	};
-#endif // _DEBUG
 };
 
 /**

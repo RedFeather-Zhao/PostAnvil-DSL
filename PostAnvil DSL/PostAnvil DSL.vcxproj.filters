@@ -36,6 +36,9 @@
     <ClInclude Include="PostAnvil\include\postanvil\compiler.hpp">
       <Filter>头文件\core</Filter>
     </ClInclude>
+	<ClInclude Include="PostAnvil\include\postanvil\builtins.hpp">
+	  <Filter>头文件\core</Filter>
+	</ClInclude>
     <ClInclude Include="PostAnvil\include\PostAnvil.h">
       <Filter>头文件\public</Filter>
     </ClInclude>

@@ -16,10 +16,11 @@ public:
     APPEND = 8, FROM = 9, AND = 10, OR = 11, NOT = 12, SELF = 13, NUM = 14, 
     STR = 15, BOOL = 16, INST = 17, ANY = 18, RETURN = 19, IMPORT = 20, 
     EXPORT = 21, AS = 22, IF = 23, ELIF = 24, ELSE = 25, ENDIF = 26, FOR = 27, 
-    IN = 28, ENDFOR = 29, SORT = 30, BOOL_LIT = 31, ARROW = 32, PLUS = 33, 
-    MINUS = 34, STAR = 35, SLASH = 36, LT = 37, GT = 38, LE = 39, GE = 40, 
-    EQ = 41, NE = 42, DOT = 43, LPAREN = 44, RPAREN = 45, COMMA = 46, ASSIGN = 47, 
-    NUMBER = 48, STRING = 49, IDENTIFIER = 50, WS = 51, NEWLINE = 52, COMMENT = 53
+    IN = 28, ENDFOR = 29, SORT = 30, ASC = 31, DESC = 32, BOOL_LIT = 33, 
+    ARROW = 34, PLUS = 35, MINUS = 36, STAR = 37, SLASH = 38, LT = 39, GT = 40, 
+    LE = 41, GE = 42, EQ = 43, NE = 44, DOT = 45, LPAREN = 46, RPAREN = 47, 
+    COMMA = 48, ASSIGN = 49, NUMBER = 50, STRING = 51, IDENTIFIER = 52, 
+    WS = 53, NEWLINE = 54, COMMENT = 55
   };
 
   enum {
@@ -29,11 +30,11 @@ public:
     RuleAttr_def = 12, RuleAttr_lvalue = 13, RuleFunc_rule = 14, RuleTyped_params = 15, 
     RuleTyped_param = 16, RuleFunc_statement = 17, RuleIfStmt = 18, RuleElifBranch = 19, 
     RuleElseBranch = 20, RuleForStmt = 21, RuleGroup_rule = 22, RuleAppend_rule = 23, 
-    RuleClass_expr = 24, RuleBool_expr = 25, RuleExpr = 26, RuleOr_expr = 27, 
-    RuleAnd_expr = 28, RuleNot_expr = 29, RuleCmp_expr = 30, RuleAdd_expr = 31, 
-    RuleMul_expr = 32, RuleUnary_expr = 33, RulePrimary = 34, RuleFunc_call = 35, 
-    RuleSortExpr = 36, RuleAttribute = 37, RuleComp_op = 38, RuleAdd_op = 39, 
-    RuleMul_op = 40
+    RuleSort_rule = 24, RuleSort_key = 25, RuleDirection = 26, RuleClass_expr = 27, 
+    RuleBool_expr = 28, RuleExpr = 29, RuleOr_expr = 30, RuleAnd_expr = 31, 
+    RuleNot_expr = 32, RuleCmp_expr = 33, RuleAdd_expr = 34, RuleMul_expr = 35, 
+    RuleUnary_expr = 36, RulePrimary = 37, RuleFunc_call = 38, RuleAttribute = 39, 
+    RuleComp_op = 40, RuleAdd_op = 41, RuleMul_op = 42
   };
 
   explicit PostAnvilParser(antlr4::TokenStream *input);
@@ -77,6 +78,9 @@ public:
   class ForStmtContext;
   class Group_ruleContext;
   class Append_ruleContext;
+  class Sort_ruleContext;
+  class Sort_keyContext;
+  class DirectionContext;
   class Class_exprContext;
   class Bool_exprContext;
   class ExprContext;
@@ -89,7 +93,6 @@ public:
   class Unary_exprContext;
   class PrimaryContext;
   class Func_callContext;
-  class SortExprContext;
   class AttributeContext;
   class Comp_opContext;
   class Add_opContext;
@@ -255,6 +258,7 @@ public:
     Attr_ruleContext *attr_rule();
     Group_ruleContext *group_rule();
     Append_ruleContext *append_rule();
+    Sort_ruleContext *sort_rule();
     Func_ruleContext *func_rule();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -612,6 +616,54 @@ public:
 
   Append_ruleContext* append_rule();
 
+  class  Sort_ruleContext : public antlr4::ParserRuleContext {
+  public:
+    Sort_ruleContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *RULE();
+    antlr4::tree::TerminalNode *SORT();
+    Class_exprContext *class_expr();
+    std::vector<NewlinesContext *> newlines();
+    NewlinesContext* newlines(size_t i);
+    antlr4::tree::TerminalNode *RULEEND();
+    std::vector<Sort_keyContext *> sort_key();
+    Sort_keyContext* sort_key(size_t i);
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+   
+  };
+
+  Sort_ruleContext* sort_rule();
+
+  class  Sort_keyContext : public antlr4::ParserRuleContext {
+  public:
+    Sort_keyContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    ExprContext *expr();
+    DirectionContext *direction();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+   
+  };
+
+  Sort_keyContext* sort_key();
+
+  class  DirectionContext : public antlr4::ParserRuleContext {
+  public:
+    DirectionContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *ASC();
+    antlr4::tree::TerminalNode *DESC();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+   
+  };
+
+  DirectionContext* direction();
+
   class  Class_exprContext : public antlr4::ParserRuleContext {
   public:
     Class_exprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
@@ -774,7 +826,6 @@ public:
     antlr4::tree::TerminalNode *LPAREN();
     ExprContext *expr();
     antlr4::tree::TerminalNode *RPAREN();
-    SortExprContext *sortExpr();
     antlr4::tree::TerminalNode *IDENTIFIER();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -802,26 +853,6 @@ public:
   };
 
   Func_callContext* func_call();
-
-  class  SortExprContext : public antlr4::ParserRuleContext {
-  public:
-    SortExprContext(antlr4::ParserRuleContext *parent, size_t invokingState);
-    virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode *SORT();
-    antlr4::tree::TerminalNode *LPAREN();
-    Class_exprContext *class_expr();
-    std::vector<antlr4::tree::TerminalNode *> COMMA();
-    antlr4::tree::TerminalNode* COMMA(size_t i);
-    std::vector<ExprContext *> expr();
-    ExprContext* expr(size_t i);
-    antlr4::tree::TerminalNode *RPAREN();
-
-    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
-    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
-   
-  };
-
-  SortExprContext* sortExpr();
 
   class  AttributeContext : public antlr4::ParserRuleContext {
   public:

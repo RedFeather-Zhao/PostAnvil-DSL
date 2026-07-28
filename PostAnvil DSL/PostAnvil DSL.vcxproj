@@ -24,6 +24,7 @@
     <ClInclude Include="PostAnvil\antlr4\PostAnvilListener.h" />
     <ClInclude Include="PostAnvil\antlr4\PostAnvilParser.h" />
     <ClInclude Include="PostAnvil\include\PostAnvil.h" />
+	<ClInclude Include="PostAnvil\include\postanvil\builtins.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\compiler.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\detail.hpp" />
     <ClInclude Include="PostAnvil\include\postanvil\error.hpp" />

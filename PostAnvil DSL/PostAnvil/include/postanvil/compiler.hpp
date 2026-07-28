@@ -19,6 +19,7 @@
 
 #include "program.hpp"
 #include "expr_compiler.hpp"
+#include "builtins.hpp"
 
 namespace postanvil {
 
@@ -29,12 +30,12 @@ namespace postanvil {
  */
 struct PostAnvilErrorListener : public antlr4::BaseErrorListener {
 	struct Error {
-		int line;          // 错误所在行号
-		int col;           // 错误所在列号
-		std::string message; // 错误描述
+		int line;				// 错误所在行号
+		int col;				// 错误所在列号
+		std::string message;	// 错误描述
 	};
 
-	std::vector<Error> errors;  // 收集到的所有错误
+	std::vector<Error> errors;	// 收集到的所有错误
 
 	void syntaxError(antlr4::Recognizer* /*recognizer*/, antlr4::Token* /*offendingSymbol*/,
 		size_t line, size_t charPositionInLine,
@@ -58,11 +59,12 @@ struct PostAnvilErrorListener : public antlr4::BaseErrorListener {
  * 3. 表达式部分由 TreeExprCompiler 递归编译生成闭包
  * 4. 最终产出包含算子列表和函数注册表的 CompiledProgram
  *
- * 算子类型对应五种 DSL 规则：
+ * 算子类型对应六种 DSL 规则：
  * - FILTER：条件过滤
  * - ATTR：属性计算
  * - GROUP：创建新类别
  * - APPEND：追加实例
+ * - SORT：按多关键字原地稳定排序
  * - FUNC：自定义函数
  *
  * 类型系统：
@@ -86,8 +88,10 @@ public:
 		m_current_attr.reset();
 		m_current_group.reset();
 		m_current_append.reset();
+		m_current_sort.reset();
 		m_current_vardef.reset();
 		m_type_scope.clear();
+		register_builtin_functions(m_program.functions);
 		m_expr_compiler.set_functions(&m_program.functions);
 		m_expr_compiler.set_type_scope(&m_type_scope);
 
@@ -175,11 +179,11 @@ private: // Listener 回调实现
 		if (ctx->type()) {
 			// 若带类型，则为变量声明
 			type = parseType(ctx->type());
-			if (type == Type::T_ANY) {
+			if (type_strict_equal(type, Type::T_ANY)) {
 				type = initExpr.type;
 			}
 
-			if (initExpr.type != type && initExpr.type != Type::T_ANY) {
+			if (!type_compatible(initExpr.type, type)) {
 				auto err = std::format("Global variable '{}' declared as {} but initialized with {}",
 					varName, type_name(type), type_name(initExpr.type));
 				handle_compile_error(err, ctx);
@@ -199,7 +203,7 @@ private: // Listener 回调实现
 			}
 
 			m_type_scope.lookup(varName, type);
-			if (initExpr.type != type && initExpr.type != Type::T_ANY) {
+			if (!type_compatible(initExpr.type, type)) {
 				auto err = std::format("Global variable '{}' declared as {} but assigned with {}",
 					varName, type_name(type), type_name(initExpr.type));
 				handle_compile_error(err, ctx);
@@ -336,12 +340,49 @@ private: // Listener 回调实现
 		}
 	}
 
+	// ============================ SORT ============================
+
+	/**
+	 * @brief 编译原地稳定排序规则
+	 * @details 排序键允许 NUM、STR、BOOL 或运行时可比较的 ANY；INST 必须改为其具体属性。
+	 */
+	void enterSort_rule(::PostAnvilParser::Sort_ruleContext* ctx) override {
+		m_current_kind = RuleKind::SORT;
+		m_current_sort = std::make_unique<SortOperator>();
+		m_current_sort->target = m_expr_compiler.compileClassExpr(ctx->class_expr());
+
+		for (auto* key_ctx : ctx->sort_key()) {
+			auto typed = m_expr_compiler.compile(key_ctx->expr());
+			if (type_strict_equal(typed.type, Type::T_INST) ||
+				type_strict_equal(typed.type, Type::T_ERROR)) {
+				handle_compile_error(std::format(
+					"SORT key must be NUM, STR, BOOL or ANY, got {}", type_name(typed.type)), key_ctx);
+			}
+
+			m_current_sort->keys.emplace_back(
+				std::move(typed.func),
+				key_ctx->direction()->DESC() != nullptr
+			);
+		}
+	}
+
+	void exitSort_rule(::PostAnvilParser::Sort_ruleContext* /*ctx*/) override {
+		if (m_current_sort) {
+			m_program.operators.emplace_back(std::move(m_current_sort));
+		}
+	}
+
 	// =========================== FUNC ===========================
 
 	void enterFunc_rule(::PostAnvilParser::Func_ruleContext* ctx) override {
 		m_type_scope.push();
 		m_current_func = std::make_unique<FuncOperator>();
 		m_current_func->name = utils::get_upper_text(ctx->name);
+		if (auto it = m_program.functions.find(m_current_func->name);
+			it != m_program.functions.end() && it->second.is_builtin) {
+			handle_compile_error(std::format(
+				"Function '{}' is a reserved built-in function", m_current_func->name), ctx);
+		}
 
 		// 解析返回类型
 		Type ret_type = Type::T_ANY;
@@ -421,7 +462,7 @@ private: // Listener 回调实现
 		std::string name = utils::get_upper_text(ctx->IDENTIFIER());
 		auto typed = m_expr_compiler.compile(ctx->expr());
 		Type declared = parseType(ctx->type());
-		if (declared == Type::T_ANY) {
+		if (type_strict_equal(declared, Type::T_ANY)) {
 			declared = typed.type;
 		}
 		if (!type_compatible(declared, typed.type)) {
@@ -585,7 +626,8 @@ private: // Listener 回调实现
 			// 普通类别
 			auto it = ctx.scene.objects.find(cls_name);
 			if (it == ctx.scene.objects.end()) {
-				throw RuntimeError(std::format("Class {} is undefined!", cls_name));
+				ctx.curr_inst = previous_inst;
+				return;
 			}
 
 			for (const Instance& inst : it->second) {
@@ -705,6 +747,7 @@ private:
 	std::unique_ptr<AttributeOperator>	m_current_attr;
 	std::unique_ptr<GroupOperator>		m_current_group;
 	std::unique_ptr<AppendOperator>		m_current_append;
+	std::unique_ptr<SortOperator>		m_current_sort;
 	std::unique_ptr<FuncOperator>		m_current_func;
 	std::unique_ptr<VarDefOperator>		m_current_vardef;
 

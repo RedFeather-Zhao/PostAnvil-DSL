@@ -12,6 +12,11 @@
 #include "type.hpp"
 #include "instance.hpp"
 
+#include <cmath>
+#include <cstdint>
+#include <format>
+#include <limits>
+
 namespace postanvil {
 
 /**
@@ -71,7 +76,11 @@ struct Scene {
 	 * @return Scene&		- 场景自身的引用，便于链式调用
 	 */
 	Scene& add(const Instance& inst) {
-		objects[inst.cls()].push_back(inst);
+		Instance stored = inst;
+		stored.set_id(m_next_instance_id++);
+		auto& instances = objects[stored.cls()];
+		stored.set_index(instances.size() + 1);
+		instances.push_back(std::move(stored));
 		return *this;
 	}
 
@@ -83,9 +92,64 @@ struct Scene {
 	 */
 	Scene& add(const std::vector<Instance>& instances) {
 		for (const auto& inst : instances) {
-			objects[inst.cls()].push_back(inst);
+			add(inst);
 		}
 		return *this;
+	}
+
+	/** @brief 用保留逻辑 id 的实例副本替换一个派生类别，并重建实时索引。 */
+	void replace_class(const std::string& class_name, Instances instances) {
+		for (std::size_t i = 0; i < instances.size(); ++i) {
+			instances[i].set_index(i + 1);
+		}
+		objects[class_name] = std::move(instances);
+	}
+
+	/** @brief 向类别追加一个实例副本；保留 id，并设置其新类别索引。 */
+	void append_to_class(const std::string& class_name, const Instance& inst) {
+		auto& instances = objects[class_name];
+		Instance stored = inst;
+		stored.set_index(instances.size() + 1);
+		instances.push_back(std::move(stored));
+	}
+
+	/** @brief 在过滤或重排后重建类别内的 1-based 实时索引。 */
+	void reindex_class(const std::string& class_name) {
+		auto it = objects.find(class_name);
+		if (it == objects.end()) return;
+		for (std::size_t i = 0; i < it->second.size(); ++i) {
+			it->second[i].set_index(i + 1);
+		}
+	}
+
+	/** @brief 按 Scene 分配的稳定 id 获取当前实例快照。 */
+	const Instance& get_inst_by_id(double value) const {
+		const auto id = checked_positive_integer(value, "Instance id");
+
+		// 优先返回原始类别中的逻辑实例，避免派生类别副本依赖哈希遍历顺序。
+		for (const auto& [class_name, instances] : objects) {
+			for (const auto& inst : instances) {
+				if (inst.id() == id && inst.cls() == class_name) return inst;
+			}
+		}
+		for (const auto& [_, instances] : objects) {
+			for (const auto& inst : instances) {
+				if (inst.id() == id) return inst;
+			}
+		}
+		throw RuntimeError(std::format("Instance id {} not found", id));
+	}
+
+	/** @brief 按类别和 1-based 实时索引获取当前实例快照。 */
+	const Instance& get_inst_by_index(const std::string& class_name, double value) const {
+		const auto index = checked_positive_integer(value, "Instance index");
+		auto it = objects.find(class_name);
+		if (it == objects.end() || index > it->second.size()) {
+			throw RuntimeError(std::format(
+				"Instance index {} out of range for class '{}' (count {})",
+				index, class_name, it == objects.end() ? 0 : it->second.size()));
+		}
+		return it->second[index - 1];
 	}
 
 	/**
@@ -103,6 +167,9 @@ struct Scene {
 		}
 
 		if (prop == "CONF")   return inst.conf();
+		if (prop == "CLS")    return inst.cls();
+		if (prop == "ID")     return static_cast<double>(inst.id());
+		if (prop == "INDEX")  return static_cast<double>(inst.index());
 
 		if (prop == "W")      return inst.w();
 		if (prop == "H")      return inst.h();
@@ -160,6 +227,7 @@ struct Scene {
 	Val get_cls_prop(const std::string& cls, const std::string& prop) const {
 		auto it = objects.find(cls);
 		if (it == objects.end()) {
+			if (prop == "COUNT") return 0.0;
 			throw RuntimeError("Class '" + cls + "' not found in scene");
 		}
 
@@ -211,6 +279,18 @@ public:
 	Objects objects;					// 全体对象，类别名到实例列表的映射
 	Variables variables;				// 全局变量，包含导入的宿主变量
 	ClassProps class_props;				// 类别级属性
+
+private:
+	static std::uint64_t checked_positive_integer(double value, std::string_view label) {
+		constexpr double max_exact_dsl_integer = 9007199254740991.0; // 2^53 - 1
+		if (!std::isfinite(value) || value < 1.0 || std::trunc(value) != value ||
+			value > max_exact_dsl_integer) {
+			throw RuntimeError(std::format("{} must be a positive integer, got {}", label, value));
+		}
+		return static_cast<std::uint64_t>(value);
+	}
+
+	std::uint64_t m_next_instance_id = 1;
 };
 
 } // namespace postanvil

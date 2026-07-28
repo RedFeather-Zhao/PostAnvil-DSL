@@ -50,10 +50,14 @@ std::vector<TestCase> get_bool_sort_func_tests() {
         });
 
     tests.push_back({
-        "SORT 排序原语 (保留面积最大的实例)",
+        "SORT 规则降序 + index 精确保留第一名",
         R"(
+            RULE SORT "person":
+                self.area DESC
+            RULEEND
+
             RULE FILTER "person":
-                self.area >= SORT("person", self.area, 1)
+                self.index <= 1
             RULEEND
         )",
         []() -> Scene {
@@ -64,35 +68,65 @@ std::vector<TestCase> get_bool_sort_func_tests() {
             });
         },
         [](const Scene& res, std::string& err) -> bool {
-            bool ok = check_count(res, "PERSON", 1);
+            bool ok = check_count(res, "PERSON", 1) &&
+                res.objects.at("PERSON")[0].area() == 900.0 &&
+                res.objects.at("PERSON")[0].id() == 3 &&
+                res.objects.at("PERSON")[0].index() == 1;
             if (!ok) {
-                int cnt = res.objects.count("PERSON") ? (int)res.objects.at("PERSON").size() : 0;
-                err = "期望 PERSON=1, 实际 PERSON=" + std::to_string(cnt);
+                err = "期望面积最大且 id=3 的实例排在第一位并被唯一保留";
             }
             return ok;
         }
         });
 
     tests.push_back({
-        "SORT 负排名升序 (保留面积最小的实例)",
+        "SORT 多关键字稳定排序",
         R"(
-            RULE FILTER "person":
-                self.area <= SORT("person", self.area, -1)
+            RULE SORT "person":
+                self.area ASC
+                self.conf DESC
             RULEEND
         )",
         []() -> Scene {
             return Scene({200,200}, {
                 Instance("PERSON",0,0,10,10,0.5),
-                Instance("PERSON",0,0,20,20,0.5),
-                Instance("PERSON",0,0,30,30,0.5),
+                Instance("PERSON",10,0,10,10,0.9),
+                Instance("PERSON",20,0,20,20,0.8),
+                Instance("PERSON",30,0,10,10,0.5),
             });
         },
         [](const Scene& res, std::string& err) -> bool {
-            bool ok = check_count(res, "PERSON", 1);
-            if (!ok) {
-                int cnt = res.objects.count("PERSON") ? (int)res.objects.at("PERSON").size() : 0;
-                err = "期望 PERSON=1, 实际 PERSON=" + std::to_string(cnt);
+            const auto& people = res.objects.at("PERSON");
+            bool ok = people.size() == 4 &&
+                people[0].id() == 2 &&  // 面积相同时 conf 较高者优先
+                people[1].id() == 1 &&  // 完全同键实例保持原始顺序
+                people[2].id() == 4 &&
+                people[3].id() == 3;
+            for (std::size_t i = 0; ok && i < people.size(); ++i) {
+                ok = people[i].index() == i + 1;
             }
+            if (!ok) {
+                err = "多关键字顺序、稳定性或排序后 index 不匹配";
+            }
+            return ok;
+        }
+        });
+
+    tests.push_back({
+        "SORT 不存在类别按空集合处理",
+        R"(
+            RULE SORT "missing":
+                self.area DESC
+            RULEEND
+        )",
+        []() -> Scene {
+            return Scene({200,200}, {
+                Instance("PERSON",0,0,10,10,0.5),
+            });
+        },
+        [](const Scene& res, std::string& err) -> bool {
+            bool ok = check_count(res, "PERSON", 1) && check_count(res, "MISSING", 0);
+            if (!ok) err = "不存在类别的 SORT 应为空操作";
             return ok;
         }
         });

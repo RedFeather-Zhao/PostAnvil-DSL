@@ -26,7 +26,7 @@ bool check_prop(
     }
 
     Val actual = it->second[idx].get_prop(prop);
-    if (actual.type() != expected.type()) {
+    if (!type_strict_equal(actual.type(), expected.type())) {
         return false;
     }
     return actual == expected;

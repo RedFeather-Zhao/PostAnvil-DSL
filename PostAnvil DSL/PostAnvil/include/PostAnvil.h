@@ -20,6 +20,7 @@
 #include "postanvil/scene.hpp"
 
 #include "postanvil/operators.hpp"
+#include "postanvil/builtins.hpp"
 #include "postanvil/program.hpp"
 #include "postanvil/expr_compiler.hpp"
 #include "postanvil/compiler.hpp"

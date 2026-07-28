@@ -13,6 +13,8 @@
 #include <queue>
 #include <memory>
 #include <algorithm>
+#include <cmath>
+#include <numeric>
 
 #include "type.hpp"
 #include "scene.hpp"
@@ -39,6 +41,7 @@ struct FunctionInfo {
 	CompiledFunc func;
 	Type ret_type;
 	std::vector<Type> param_types;
+	bool is_builtin = false;
 };
 
 /**
@@ -150,6 +153,7 @@ enum class OperatorKind {
 	OP_ATTRIBUTE, // 属性算子
 	OP_GROUP,     // 分组算子
 	OP_APPEND,    // 追加算子
+	OP_SORT,      // 排序算子
 	OP_FUNC,      // 函数算子
 	OP_VARDEF,    // 变量定义算子
 	OP_IMPORT,    // 导入算子
@@ -164,6 +168,7 @@ static const char* operation_kind_to_string(OperatorKind kind) {
 	case OP_ATTRIBUTE:	return "ATTRIBUTE";
 	case OP_GROUP:		return "GROUP";
 	case OP_APPEND:		return "APPEND";
+	case OP_SORT:		return "SORT";
 	case OP_FUNC:		return "FUNC";
 	case OP_VARDEF:		return "VARDEF";
 	case OP_IMPORT:		return "IMPORT";
@@ -211,24 +216,25 @@ struct FilterOperator : SceneOperator {
 			});
 		};
 
-		auto filterInstances = [&](Instances& instances) {
+		auto filterInstances = [&](const std::string& class_name, Instances& instances) {
 			std::erase_if(instances, [&](const auto& inst) {
 				return !is_valid(inst);
 			});
+			ctx.scene.reindex_class(class_name);
 		};
 
 		auto target_name = target(Scene::make_dummy(), ctx);
 
 		if (target_name == EvaluationContext::GLOBAL_TARGET) {
 			for (auto& [name, instances] : ctx.scene.objects) {
-				filterInstances(instances);
+				filterInstances(name, instances);
 			}
 			return;
 		}
 
 		auto it = ctx.scene.objects.find(target_name);
 		if (it != ctx.scene.objects.end()) {
-			filterInstances(it->second);
+			filterInstances(target_name, it->second);
 		}
 	}
 };
@@ -305,7 +311,8 @@ struct GroupOperator : SceneOperator {
 
 		auto it = ctx.scene.objects.find(source_cls);
 		if (it == ctx.scene.objects.end()) {
-			throw RuntimeError("Source class '" + source_cls + "' not found in scene");
+			ctx.scene.replace_class(new_cls, {});
+			return;
 		}
 
 		Instances selected;
@@ -317,7 +324,7 @@ struct GroupOperator : SceneOperator {
 				selected.emplace_back(inst);
 			}
 		}
-		ctx.scene.objects[new_cls] = std::move(selected);
+		ctx.scene.replace_class(new_cls, std::move(selected));
 	}
 };
 
@@ -339,7 +346,7 @@ struct AppendOperator : SceneOperator {
 
 		auto it = ctx.scene.objects.find(source_cls);
 		if (it == ctx.scene.objects.end()) {
-			throw RuntimeError("Source class '" + source_cls + "' not found in scene");
+			return;
 		}
 
 		for (const auto& inst : it->second) {
@@ -347,8 +354,120 @@ struct AppendOperator : SceneOperator {
 				return cond(inst, ctx);
 			});
 			if (all_pass) {
-				ctx.scene.objects[dest_cls].emplace_back(inst);
+				ctx.scene.append_to_class(dest_cls, inst);
 			}
+		}
+	}
+};
+
+// ======================= SortOperator =========================
+
+/**
+ * @brief 对目标类别执行原地稳定排序
+ * @details 每个实例的全部排序键在排序前仅求值一次；多个键按声明顺序进行字典序比较。
+ *          所有键均相等时 stable_sort 保留实例原有顺序，排序完成后重建 1-based index。
+ */
+struct SortOperator : SceneOperator {
+	/** @brief 单个排序键闭包及方向。 */
+	struct Key {
+		ValFunc expression;
+		bool descending = false;
+	};
+
+	std::vector<Key> keys;
+
+	SortOperator() : SceneOperator(OperatorKind::OP_SORT) {}
+
+	void apply(EvaluationContext& ctx) const override {
+		const auto target_name = target(Scene::make_dummy(), ctx);
+
+		auto sort_instances = [&](const std::string& class_name, Instances& instances) {
+			if (instances.size() < 2 || keys.empty()) {
+				ctx.scene.reindex_class(class_name);
+				return;
+			}
+
+			// 装饰阶段：预先缓存每个实例的全部键，避免排序比较器重复执行 DSL 表达式。
+			std::vector<std::vector<Val>> cached_keys(instances.size());
+			for (std::size_t i = 0; i < instances.size(); ++i) {
+				auto& values = cached_keys[i];
+				values.reserve(keys.size());
+				for (const auto& key : keys) {
+					values.emplace_back(key.expression(instances[i], ctx));
+				}
+			}
+
+			// 仅排序下标，完成后一次性移动实例，减少 Instance 及其动态属性的交换次数。
+			std::vector<std::size_t> order(instances.size());
+			std::iota(order.begin(), order.end(), 0);
+			std::stable_sort(order.begin(), order.end(), [&](std::size_t lhs, std::size_t rhs) {
+				for (std::size_t key_index = 0; key_index < keys.size(); ++key_index) {
+					const int comparison = compare_key_values(
+						cached_keys[lhs][key_index], cached_keys[rhs][key_index]);
+					if (comparison == 0) continue;
+					return keys[key_index].descending ? comparison > 0 : comparison < 0;
+				}
+				return false;
+			});
+
+			Instances sorted;
+			sorted.reserve(instances.size());
+			for (const auto index : order) {
+				sorted.emplace_back(std::move(instances[index]));
+			}
+			instances = std::move(sorted);
+			ctx.scene.reindex_class(class_name);
+		};
+
+		if (target_name == EvaluationContext::GLOBAL_TARGET) {
+			for (auto& [class_name, instances] : ctx.scene.objects) {
+				sort_instances(class_name, instances);
+			}
+			return;
+		}
+
+		// 不存在类别按空集合处理，排序为空操作。
+		if (auto it = ctx.scene.objects.find(target_name); it != ctx.scene.objects.end()) {
+			sort_instances(target_name, it->second);
+		}
+	}
+
+private:
+	/**
+	 * @brief 对排序键执行严格全序比较
+	 * @return 小于返回 -1，相等返回 0，大于返回 1
+	 * @note 数值排序不使用 Val 比较中的 epsilon，确保比较器满足严格弱序要求。
+	 */
+	static int compare_key_values(const Val& lhs, const Val& rhs) {
+		if (!type_strict_equal(lhs.type(), rhs.type())) {
+			throw RuntimeError(std::format(
+				"SORT key type mismatch: {} vs {}", type_name(lhs.type()), type_name(rhs.type())));
+		}
+
+		switch (lhs.type()) {
+		using enum postanvil::Type;
+		case T_NUM: {
+			const double a = lhs.as_num();
+			const double b = rhs.as_num();
+			if (std::isnan(a) || std::isnan(b)) {
+				throw RuntimeError("SORT key cannot be NaN");
+			}
+			return a < b ? -1 : (a > b ? 1 : 0);
+		}
+		case T_STR: {
+			const auto& a = std::get<std::string>(lhs.data);
+			const auto& b = std::get<std::string>(rhs.data);
+			return a < b ? -1 : (a > b ? 1 : 0);
+		}
+		case T_BOOL: {
+			const bool a = lhs.as_bool();
+			const bool b = rhs.as_bool();
+			return a == b ? 0 : (a ? 1 : -1);
+		}
+		case T_INST:
+			throw RuntimeError("SORT does not support INST keys; sort by an instance property instead");
+		default:
+			throw RuntimeError(std::format("SORT key has unsupported type {}", type_name(lhs.type())));
 		}
 	}
 };
@@ -407,7 +526,7 @@ struct ImportOperator : SceneOperator {
 			throw RuntimeError("Imported variable '" + local_name + "' not provided by host");
 		}
 		Val const& val = ctx.scene.variables[local_name];
-		if (val.type() != var_type) {
+		if (!type_strict_equal(val.type(), var_type)) {
 			throw RuntimeError("Imported variable '" + local_name + "' type mismatch");
 		}
 	}

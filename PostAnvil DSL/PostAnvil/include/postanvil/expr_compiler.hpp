@@ -94,7 +94,7 @@ public: // public method:
 	 */
 	BoolFunc compileAsBool(::PostAnvilParser::Or_exprContext* ctx) {
 		auto typed = compileOr(ctx);
-		if (typed.type != Type::T_BOOL && typed.type != Type::T_ANY) {
+		if (!type_compatible(typed.type, Type::T_BOOL)) {
 			auto err = std::format("Bool-expr must be BOOL or ANY(runtime bool), got {}", type_name(typed.type));
 			handle_compile_error(err, ctx);
 		}
@@ -112,7 +112,7 @@ public: // public method:
 	 */
 	NumFunc compileAsNum(::PostAnvilParser::ExprContext* ctx) {
 		auto typed = compile(ctx);
-		if (typed.type != Type::T_NUM && typed.type != Type::T_ANY) {
+		if (!type_compatible(typed.type, Type::T_NUM)) {
 			auto err = std::format("Num-expr must be NUM or ANY(runtime NUM), got {}", type_name(typed.type));
 			handle_compile_error(err, ctx);
 		}
@@ -130,7 +130,7 @@ public: // public method:
 	 */
 	StrFunc compileAsStr(::PostAnvilParser::ExprContext* ctx) {
 		auto typed = compile(ctx);
-		if (typed.type != Type::T_STR && typed.type != Type::T_ANY) {
+		if (!type_compatible(typed.type, Type::T_STR)) {
 			auto err = std::format("Str-expr must be STR or ANY(runtime STR), got {}", type_name(typed.type));
 			handle_compile_error(err, ctx);
 		}
@@ -165,7 +165,7 @@ public: // public method:
 			if (!m_type_scope || !m_type_scope->lookup(var, var_type)) {
 				handle_compile_error(std::format("Undefined class variable: {}", var), ctx);
 			}
-			if (var_type != Type::T_STR && var_type != Type::T_ANY) {
+			if (!type_compatible(var_type, Type::T_STR)) {
 				handle_compile_error(std::format(
 					"Class expression requires STR, got {}", type_name(var_type)), ctx);
 			}
@@ -201,7 +201,7 @@ private:
 		}
 
 		// 左式类别检查
-		if (left.type != Type::T_BOOL && left.type != Type::T_ANY) {
+		if (!type_compatible(left.type, Type::T_BOOL)) {
 			auto err = std::format("Left OR-expr must be BOOL or ANY(runtime bool), got {}", type_name(left.type));
 			handle_compile_error(err, ctx);
 		}
@@ -209,7 +209,7 @@ private:
 		// 递归右式类别检查
 		for (size_t i = 0; i < or_count; i++) {
 			auto right = compileAnd(and_exprs[i + 1]);
-			if (right.type != Type::T_BOOL && right.type != Type::T_ANY) {
+			if (!type_compatible(right.type, Type::T_BOOL)) {
 				auto err = std::format("Right OR-expr must be BOOL or ANY(runtime bool), got {}", type_name(right.type));
 				handle_compile_error(err, ctx);
 			}
@@ -243,7 +243,7 @@ private:
 		}
 
 		// 左式类别检查
-		if (left.type != Type::T_BOOL && left.type != Type::T_ANY) {
+		if (!type_compatible(left.type, Type::T_BOOL)) {
 			auto err = std::format("Left AND-expr must be BOOL or ANY(runtime bool), got {}", type_name(left.type));
 			handle_compile_error(err, ctx);
 		}
@@ -251,7 +251,7 @@ private:
 		// 递归右式类别检查
 		for (size_t i = 0; i < and_count; i++) {
 			auto right = compileNot(not_exprs[i + 1]);
-			if (right.type != Type::T_BOOL && right.type != Type::T_ANY) {
+			if (!type_compatible(right.type, Type::T_BOOL)) {
 				auto err = std::format("Right AND-expr must be BOOL or ANY(runtime bool), got {}", type_name(right.type));
 				handle_compile_error(err, ctx);
 			}
@@ -280,7 +280,7 @@ private:
 
 		// 右式类型检查
 		auto rhs = compileNot(ctx->not_expr());
-		if (rhs.type != Type::T_BOOL && rhs.type != Type::T_ANY) {
+		if (!type_compatible(rhs.type, Type::T_BOOL)) {
 			auto err = std::format("NOT-expr must be BOOL or ANY(runtime bool), got {}", type_name(rhs.type));
 			handle_compile_error(err, ctx);
 		}
@@ -316,17 +316,17 @@ private:
 		// 类型判等检查
 		Type res_type = left.type & right.type;
 
-		if (res_type == Type::T_ERROR) {
+		if (type_strict_equal(res_type, Type::T_ERROR)) {
 			auto err = std::format("Comparison type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
 			handle_compile_error(err, ctx);
 		}
 
 		// 布尔类型仅支持相等/不等判断
-		if (res_type == Type::T_BOOL && op != "==" && op != "!=") {
+		if (type_strict_equal(res_type, Type::T_BOOL) && op != "==" && op != "!=") {
 			auto err = std::format("Operator '{}' not supported for BOOL", op);
 			handle_compile_error(err, ctx);
 		}
-		if (res_type == Type::T_INST) {
+		if (type_strict_equal(res_type, Type::T_INST)) {
 			handle_compile_error("INST values cannot be compared directly; compare their properties instead", ctx);
 		}
 
@@ -370,23 +370,23 @@ private:
 			auto right = compileMul(mul_exprs[i + 1]);
 
 			// 左右式类别检查
-			if (left.type != right.type && left.type != Type::T_ANY && right.type != Type::T_ANY) {
+			if (!type_compatible(left.type, right.type)) {
 				auto err = std::format("Add/Sub type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
 				handle_compile_error(err, ctx);
 			}
 			Type res_type = left.type & right.type;	// 获取运算结果类别
 
 			// 布尔类型检查
-			if (res_type == Type::T_BOOL) {
+			if (type_strict_equal(res_type, Type::T_BOOL)) {
 				handle_compile_error("Add expr not supported for BOOL", ctx);
 			}
-			if (res_type == Type::T_INST) {
+			if (type_strict_equal(res_type, Type::T_INST)) {
 				handle_compile_error("Arithmetic is not supported for INST values", ctx);
 			}
-			if (op == "-" && res_type == Type::T_STR) {
+			if (op == "-" && type_strict_equal(res_type, Type::T_STR)) {
 				handle_compile_error("Subtraction not supported for STR", ctx);
 			}
-			if (op == "-" && res_type != Type::T_NUM && res_type != Type::T_ANY) {
+			if (op == "-" && !type_compatible(res_type, Type::T_NUM)) {
 				handle_compile_error("Add expr only supporte NUM", ctx);
 			}
 
@@ -430,14 +430,14 @@ private:
 			auto right = compileUnary(unary_exprs[i + 1]);
 
 			// 左右式类别检查
-			if (left.type != right.type && left.type != Type::T_ANY && right.type != Type::T_ANY) {
+			if (!type_compatible(left.type, right.type)) {
 				auto err = std::format("Mul/Div type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
 				handle_compile_error(err, ctx);
 			}
 			Type res_type = left.type & right.type; // 获取运算结果类别
 
 			// 只允许数值类型
-			if (res_type != Type::T_NUM && res_type != Type::T_ANY) {
+			if (!type_compatible(res_type, Type::T_NUM)) {
 				handle_compile_error("Mul/Div requires NUM operands", ctx);
 			}
 
@@ -471,7 +471,7 @@ private:
 		auto op = ctx->MINUS()->getText();
 		auto rhs = compileUnary(ctx->unary_expr());
 		if (op == "-") {
-			if (rhs.type != Type::T_NUM && rhs.type != Type::T_ANY) {
+			if (!type_compatible(rhs.type, Type::T_NUM)) {
 				auto err = std::format("Unary minus requires NUM operand, got {}", type_name(rhs.type));
 				handle_compile_error(err, ctx);
 			}
@@ -490,7 +490,7 @@ private:
 	}
 
 	/**
-	 * @brief 编译基本表达式，处理字面量、变量引用、函数调用、属性访问、排序原语和括号表达式等
+	 * @brief 编译基本表达式，处理字面量、变量引用、函数调用、属性访问和括号表达式等
 	 * 
 	 * @param ctx			- PrimaryContext 节点
 	 * @return TypedExpr	- 表达式解析闭包
@@ -537,11 +537,6 @@ private:
 		// 属性调用闭包
 		if (ctx->attribute()) {
 			return compileAttribute(ctx->attribute());
-		}
-
-		// 排序原语闭包
-		if (ctx->sortExpr()) {
-			return compileSortExpr(ctx->sortExpr());
 		}
 
 		// 括号表达式闭包
@@ -692,7 +687,8 @@ private:
 			if (!m_type_scope || !m_type_scope->lookup(object, object_type)) {
 				handle_compile_error(std::format("Undefined object variable: {}", object), ctx);
 			}
-			if (object_type != Type::T_INST && object_type != Type::T_STR && object_type != Type::T_ANY) {
+			if (!type_compatible(object_type, Type::T_INST) &&
+				!type_compatible(object_type, Type::T_STR)) {
 				handle_compile_error(std::format(
 					"Property access requires INST or STR, got {}", type_name(object_type)), ctx);
 			}
@@ -700,10 +696,10 @@ private:
 			return {
 				[object, prop](const Instance&, EvaluationContext& ctx) -> Val {
 					Val object_val = ctx.get_var(object);
-					if (object_val.type() == Type::T_INST) {
+					if (type_strict_equal(object_val.type(), Type::T_INST)) {
 						return ctx.scene.get_inst_prop(*object_val.as_inst(), prop);
 					}
-					if (object_val.type() == Type::T_STR) {
+					if (type_strict_equal(object_val.type(), Type::T_STR)) {
 						std::string cls_name = object_val.as_str();
 						utils::to_upper_inplace(cls_name);
 						return ctx.scene.get_cls_prop(cls_name, prop);
@@ -763,7 +759,8 @@ private:
 			if (!m_type_scope || !m_type_scope->lookup(object, object_type)) {
 				handle_compile_error(std::format("Undefined object variable: {}", object), ctx);
 			}
-			if (object_type != Type::T_INST && object_type != Type::T_STR && object_type != Type::T_ANY) {
+			if (!type_compatible(object_type, Type::T_INST) &&
+				!type_compatible(object_type, Type::T_STR)) {
 				handle_compile_error(std::format(
 					"Dynamic property access requires INST or STR object, got {}", type_name(object_type)), ctx);
 			}
@@ -773,10 +770,10 @@ private:
 				(const Instance& self, EvaluationContext& ctx) -> Val {
 					auto prop = normalize_prop(prop_expr(self, ctx));
 					Val object_val = ctx.get_var(object);
-					if (object_val.type() == Type::T_INST) {
+					if (type_strict_equal(object_val.type(), Type::T_INST)) {
 						return ctx.scene.get_inst_prop(*object_val.as_inst(), prop);
 					}
-					if (object_val.type() == Type::T_STR) {
+					if (type_strict_equal(object_val.type(), Type::T_STR)) {
 						std::string cls_name = object_val.as_str();
 						utils::to_upper_inplace(cls_name);
 						return ctx.scene.get_cls_prop(cls_name, prop);
@@ -850,68 +847,6 @@ private:
 				return compiled_func.func(args, self, ctx);
 			},
 			ret_type
-		};
-	}
-
-	/**
-	 * @brief 编译排序原语 SORT
-	 *		  形式：SORT(类别 : STR, 排序键表达式 : ANY, 名次: NUM)
-	 * 		  名次为正数表示降序第 N 名，负数表示升序第 |N| 名
-	 * 		  返回对应名次的键值
-	 * 
-	 * @param ctx			- SortExprContext 节点
-	 * @return TypedExpr	- 排序原语闭包
-	 * 
-	 * TODO: 排序原语仍需要设计，此为暂定实现
-	 */
-	TypedExpr compileSortExpr(::PostAnvilParser::SortExprContext* ctx) {
-		// 编译类别表达式
-		auto cls = compileClassExpr(ctx->class_expr());
-
-		// 编译排序表达式
-		auto key = compile(ctx->expr(0));
-
-		// 编译名次表达式
-		auto rank = compileAsNum(ctx->expr(1));
-
-		return {[cls = std::move(cls), key = std::move(key.func), rank = std::move(rank)]
-				(const Instance& self, EvaluationContext& ctx) -> Val {
-				auto cls_name = cls(self, ctx);
-
-				const auto it = ctx.scene.objects.find(cls_name);
-				if (it == ctx.scene.objects.end() || it->second.empty()) {
-					throw RuntimeError(std::format("SORT: class '{}' not found or empty", cls_name));
-				}
-
-				const auto& instances = it->second;
-				std::vector<Val> keys;
-				keys.reserve(instances.size());
-				for (const auto& inst : instances) {
-					keys.emplace_back(key(inst, ctx));
-				}
-
-				double rank_val = rank(self, ctx);
-				auto rank_int = static_cast<int>(rank_val);
-				int index = std::abs(rank_int) - 1;
-
-				if (index < 0 || index >= static_cast<int>(keys.size())) {
-					throw RuntimeError(std::format(
-						"SORT: index {} out of range (valid 0..{})",
-						index, keys.size() - 1));
-				}
-
-				if (rank_int < 0) {
-					std::nth_element(keys.begin(), keys.begin() + index, keys.end(),
-						[](const Val& a, const Val& b) { return a < b; });
-				}
-				else {
-					std::nth_element(keys.begin(), keys.begin() + index, keys.end(),
-						[](const Val& a, const Val& b) { return a > b; });
-				}
-
-				return keys[index];
-			},
-			key.type
 		};
 	}
 

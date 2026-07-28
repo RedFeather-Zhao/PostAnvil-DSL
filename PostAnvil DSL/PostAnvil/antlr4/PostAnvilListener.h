@@ -104,6 +104,15 @@ public:
   virtual void enterAppend_rule(PostAnvilParser::Append_ruleContext *ctx) = 0;
   virtual void exitAppend_rule(PostAnvilParser::Append_ruleContext *ctx) = 0;
 
+  virtual void enterSort_rule(PostAnvilParser::Sort_ruleContext *ctx) = 0;
+  virtual void exitSort_rule(PostAnvilParser::Sort_ruleContext *ctx) = 0;
+
+  virtual void enterSort_key(PostAnvilParser::Sort_keyContext *ctx) = 0;
+  virtual void exitSort_key(PostAnvilParser::Sort_keyContext *ctx) = 0;
+
+  virtual void enterDirection(PostAnvilParser::DirectionContext *ctx) = 0;
+  virtual void exitDirection(PostAnvilParser::DirectionContext *ctx) = 0;
+
   virtual void enterClass_expr(PostAnvilParser::Class_exprContext *ctx) = 0;
   virtual void exitClass_expr(PostAnvilParser::Class_exprContext *ctx) = 0;
 
@@ -139,9 +148,6 @@ public:
 
   virtual void enterFunc_call(PostAnvilParser::Func_callContext *ctx) = 0;
   virtual void exitFunc_call(PostAnvilParser::Func_callContext *ctx) = 0;
-
-  virtual void enterSortExpr(PostAnvilParser::SortExprContext *ctx) = 0;
-  virtual void exitSortExpr(PostAnvilParser::SortExprContext *ctx) = 0;
 
   virtual void enterInstanceAttr(PostAnvilParser::InstanceAttrContext *ctx) = 0;
   virtual void exitInstanceAttr(PostAnvilParser::InstanceAttrContext *ctx) = 0;

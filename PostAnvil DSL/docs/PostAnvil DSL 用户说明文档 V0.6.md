@@ -1,4 +1,4 @@
-# PostAnvil DSL 用户说明文档
+﻿# PostAnvil DSL 用户说明文档
 
 > 版本：**0.6** | 更新日期：**2026-07-28**
 
@@ -9,10 +9,11 @@ PostAnvil 是用于目标检测结果后处理的领域特定语言（DSL）。�
 当前版本的主要能力：
 
 - 关键字、DSL 标识符、类别名和属性名大小写不敏感；`EXPORT ... AS` 的宿主导出名保留原始拼写。
-- `FILTER`、`ATTR`、`GROUP`、`APPEND` 规则按书写顺序组成执行管道。
+- `FILTER`、`ATTR`、`GROUP`、`APPEND`、`SORT` 规则按书写顺序组成执行管道。
 - 支持 `NUM`、`STR`、`BOOL`、`INST`、`ANY` 类型，以及全局变量、函数参数和函数局部变量。
 - 函数内支持 `IF` / `ELIF` / `ELSE`、嵌套 `FOR`、局部变量声明与赋值、`RETURN`。
-- 内置 `self`、`img`、类别属性和 `SORT` 排序原语。
+- 内置 `self`、`img`、类别属性和原地稳定 `SORT` 规则。
+- 提供原生数学、检测框空间关系和实例查询函数，并支持稳定 `id` 与实时 `index`。
 - 通过 `IMPORT` / `EXPORT` 与 C++ 宿主交换值。
 
 ## 2. 快速开始
@@ -54,7 +55,7 @@ EXPORT "person".count AS person_count
 
 ## 3. 程序结构与执行顺序
 
-顶层可以包含声明和五类规则：
+顶层可以包含声明和六类规则：
 
 | 结构 | 作用 |
 |---|---|
@@ -67,6 +68,7 @@ EXPORT "person".count AS person_count
 | `RULE FUNC` | 定义自定义函数 |
 | `RULE GROUP` | 从源类别复制满足条件的实例，形成目标类别 |
 | `RULE APPEND` | 将满足条件的实例追加到目标类别 |
+| `RULE SORT` | 按一个或多个键原地稳定排序类别实例 |
 
 声明和规则按源文件中的顺序形成算子管道。后续规则可以读取前面规则产生的属性或类别；`EXPORT` 读取的是执行到该位置时的值，因此通常放在程序末尾。
 
@@ -125,6 +127,19 @@ RULEEND
 ```
 
 实例变量通过 `<变量>.<属性>` 读取属性，例如 `selected.area`。`INST` 使用快照语义：赋值或传参时保留当时的实例值，不持有场景容器中的裸指针；后续过滤、分组或追加不会令该值悬空。
+
+每个输入实例在构造 `Scene` 时都会按传入顺序获得从 `1` 开始、场景内稳定的 `id`。`GROUP` / `APPEND` 产生的副本保留源实例 `id`，用于表示同一个逻辑检测结果。`index` 是实例在当前类别中的从 `1` 开始的位置；过滤、分组或追加后会自动重建。
+
+```postanvil
+NUM stable_id = self.id
+NUM current_position = self.index
+STR class_name = self.cls
+
+INST by_id = _INST_ID(12)
+INST by_position = _INST_INDEX("person", 3)
+```
+
+`_INST_ID(id)` 在场景中按稳定编号查询；`_INST_INDEX(class, index)` 按类别的当前位置查询。编号必须是正整数，目标不存在或索引越界时产生运行时错误。
 
 当前限制：
 
@@ -284,7 +299,7 @@ RULE FUNC total_area() -> NUM:
 RULEEND
 ```
 
-循环体拥有独立作用域；`RETURN` 会立即结束循环和函数。空类别循环执行零次。
+循环体拥有独立作用域；`RETURN` 会立即结束循环和函数。空类别和不存在的类别均视为空集合，循环执行零次。
 
 ## 7. 表达式与类型
 
@@ -297,16 +312,15 @@ RULEEND
 | 布尔 | `TRUE`、`FALSE` |
 | 当前实例值 | `self`（类型为 `INST`） |
 | 变量 | `threshold` |
-| 当前实例属性 | `self.conf` |
+| 当前实例属性 | `self.conf`、`self.id`、`self.index`、`self.cls` |
 | 类别属性 | `"car".count`、`cls.count` |
 | 图像属性 | `img.w` |
 | 循环实例属性 | `obj.area` |
 | 实例变量属性 | `selected.conf` |
 | 动态属性 | `obj.(prop_name)` |
-| 函数调用 | `avg_conf("car")` |
-| 排序 | `SORT("person", self.area, 3)` |
+| 函数调用 | `avg_conf("car")`、`_SQRT(9)`、`_IOU(a, b)` |
 
-字符串仅支持 `==` 和 `!=` 比较。表达式系统没有三元运算符，也没有 `LET`、对象构造、幂运算符或未注册的数学内置函数。
+字符串仅支持 `==` 和 `!=` 比较。表达式系统没有三元运算符、`LET`、对象构造或幂运算符；幂运算使用 `_POW(base, exponent)`。
 
 ### 7.2 显式动态属性
 
@@ -373,6 +387,8 @@ NUM avg_area = fn_avg("person", "area")
 | `w`、`h` | 宽、高 | 是 |
 | `conf` | 置信度 | 是 |
 | `cls` | 类别名 | 是 |
+| `id` | Scene 为输入实例分配的稳定编号，从 1 开始 | 否 |
+| `index` | 当前类别中的实时位置，从 1 开始 | 否 |
 | `x2`、`y2` | 右下角坐标 | 否，派生值 |
 | `cx`、`cy` | 中心坐标 | 否，派生值 |
 | `area` | `w * h` | 否，派生值 |
@@ -390,31 +406,98 @@ NUM avg_area = fn_avg("person", "area")
 
 ### 8.3 类别属性
 
-- `<类别>.count`：当前实例数量，由运行时维护。
+- `<类别>.count`：当前实例数量，由运行时维护；类别不存在时返回 `0`。
 - `<类别>.<自定义属性>`：此前由 `ATTR` 设置的类别属性。
 
-类别名不存在或属性尚未定义时，访问会产生运行时错误。
+不存在类别等价于空集合：`FOR` 执行零次、`FILTER` / `APPEND` 不产生实例、`GROUP` 创建空目标类别。读取不存在类别的非 `count` 属性，或读取尚未定义的属性，仍会产生运行时错误。
 
-## 9. SORT 排序原语
+### 8.4 原生内置函数
+
+内置函数使用与用户 `FUNC` 相同的调用形式，名称不区分大小写。编译器会检查参数数量和类型，运行时直接执行原生 C++ 实现。内置名称为保留名称，不能由用户 `RULE FUNC` 覆盖。
+
+#### 数学函数
+
+| 函数 | 返回类型 | 说明 |
+|---|---|---|
+| `_ABS(x)` | `NUM` | 绝对值 |
+| `_MIN(a, b)`、`_MAX(a, b)` | `NUM` | 两数较小值、较大值 |
+| `_SQRT(x)` | `NUM` | 平方根，要求 `x >= 0` |
+| `_POW(base, exponent)` | `NUM` | 幂运算 |
+| `_EXP(x)` | `NUM` | 自然指数 |
+| `_LOG(x)`、`_LOG10(x)` | `NUM` | 自然对数、常用对数，要求 `x > 0` |
+| `_FLOOR(x)`、`_CEIL(x)`、`_ROUND(x)` | `NUM` | 向下、向上、四舍五入取整 |
+| `_CLAMP(x, low, high)` | `NUM` | 限制到闭区间，要求 `low <= high` |
+
+数学函数产生非有限结果或参数不满足定义域时会抛出运行时错误。
+
+#### 检测框与位置关系函数
+
+| 函数 | 返回类型 | 说明 |
+|---|---|---|
+| `_INTER_AREA(a, b)` | `NUM` | 两个 `INST` 检测框的交集面积 |
+| `_IOU(a, b)` | `NUM` | 交集面积除以并集面积 |
+| `_OVERLAP_A(a, b)` | `NUM` | 交集面积除以第一个实例 `a` 的面积 |
+| `_OVERLAP_B(a, b)` | `NUM` | 交集面积除以第二个实例 `b` 的面积 |
+| `_OVERLAPS(a, b)` | `BOOL` | 交集面积是否大于零 |
+| `_CONTAINS(inner, outer)` | `BOOL` | `inner` 是否完全位于 `outer` 内，边界相等也算包含 |
+| `_DISTANCE(a, b)` | `NUM` | 两个检测框中心点的欧氏距离 |
+| `_NEARBY(a, b, threshold)` | `BOOL` | 中心距离是否不大于非负阈值；内部使用距离平方比较 |
+
+当参与比值的分母面积为零时，`_IOU`、`_OVERLAP_A`、`_OVERLAP_B` 返回 `0`。
+
+#### 实例查询函数
+
+| 函数 | 返回类型 | 说明 |
+|---|---|---|
+| `_INST_ID(id)` | `INST` | 按 Scene 稳定编号获取实例快照 |
+| `_INST_INDEX(class, index)` | `INST` | 按类别和当前 1-based 位置获取实例快照 |
+
+`_INST_ID` 和 `_INST_INDEX` 的数字参数必须是 DSL `NUM` 可精确表示的正整数。`_INST_INDEX` 的类别名不区分大小写；实例不存在或索引越界时会产生运行时错误。
+
+## 9. SORT 排序规则
 
 ```postanvil
-SORT(<类别表达式>, <键表达式>, <名次表达式>)
-```
-
-- 返回排序后对应名次的键值，不返回实例。
-- 正名次按降序取值，`1` 表示最大值。
-- 负名次按升序取值，`-1` 表示最小值。
-- 名次从 1 开始。
-
-保留面积最大的三个实例：
-
-```postanvil
-RULE FILTER "person":
-    self.area >= SORT("person", self.area, 3)
+RULE SORT <类别表达式>:
+    <键表达式> ASC|DESC
+    ...
 RULEEND
 ```
 
-若第三名与更多实例并列，所有达到阈值的实例都会保留。
+- `SORT` 会直接改变目标类别中的实例顺序，不再作为表达式返回键值。
+- 支持多关键字排序；各行按书写顺序组成字典序比较。
+- 每个键必须显式指定 `ASC`（升序）或 `DESC`（降序）。
+- 排序是稳定的：所有键都相等时保持排序前的相对顺序。
+- 每个实例的每个排序键只计算一次，之后仅比较缓存值。
+- 排序键可以是 `NUM`、`STR`、`BOOL` 或运行时产生这些类型的 `ANY`，不能直接使用 `INST`。
+- 排序完成后自动重建从 `1` 开始的 `self.index`；`self.id` 不变。
+- 类别不存在或为空时不执行任何操作；`"global"` 表示分别排序所有类别。
+
+按面积降序、置信度降序排列，然后精确保留前三个实例：
+
+```postanvil
+RULE SORT "person":
+    self.area DESC
+    self.conf DESC
+    self.id ASC
+RULEEND
+
+RULE FILTER "person":
+    self.index <= 3
+RULEEND
+```
+
+取得综合得分最高的实例：
+
+```postanvil
+RULE SORT "spike":
+    self.comprehensive_score DESC
+    self.id ASC
+RULEEND
+
+INST best_spike = _INST_INDEX("spike", 1)
+```
+
+`self.id ASC` 可作为最终确定性排序键；即使其他键全部相同，也会按 Scene 输入编号稳定确定顺序。
 
 ## 10. C++ 宿主用法
 
@@ -469,7 +552,7 @@ double confidence = snapshot->conf();
 
 ## 11. 关键字
 
-`RULE`、`RULEEND`、`FILTER`、`ATTR`、`FUNC`、`GROUP`、`APPEND`、`FROM`、`AND`、`OR`、`NOT`、`SELF`、`NUM`、`STR`、`BOOL`、`INST`、`ANY`、`RETURN`、`IMPORT`、`EXPORT`、`AS`、`IF`、`ELIF`、`ELSE`、`ENDIF`、`FOR`、`IN`、`ENDFOR`、`SORT`、`TRUE`、`FALSE`。
+`RULE`、`RULEEND`、`FILTER`、`ATTR`、`FUNC`、`GROUP`、`APPEND`、`SORT`、`ASC`、`DESC`、`FROM`、`AND`、`OR`、`NOT`、`SELF`、`NUM`、`STR`、`BOOL`、`INST`、`ANY`、`RETURN`、`IMPORT`、`EXPORT`、`AS`、`IF`、`ELIF`、`ELSE`、`ENDIF`、`FOR`、`IN`、`ENDFOR`、`TRUE`、`FALSE`。
 
 ## 12. 常见问题
 
@@ -493,9 +576,9 @@ RULEEND
 
 函数从实例规则调用时可访问当前 `self`。做聚合计算时更推荐显式传参或通过 `FOR` 的循环变量访问实例，以避免脱离实例上下文调用时发生错误。
 
-**为什么 `SORT` 后保留数量可能超过 N？**
+**如何在分数并列时仍精确保留 N 个实例？**
 
-`SORT` 返回第 N 名的键值阈值；阈值处并列的实例都会通过 `>=` 条件。
+先使用 `RULE SORT` 排序，再用 `RULE FILTER` 保留 `self.index <= N`。稳定排序会维持完全同键实例原有顺序；也可以增加 `self.id ASC` 作为最终确定性排序键。
 
 **控制流能写在 ATTR 或 FILTER 里吗？**
 

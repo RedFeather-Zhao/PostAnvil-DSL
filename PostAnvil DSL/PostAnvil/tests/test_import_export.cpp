@@ -120,7 +120,7 @@ std::vector<TestCase> get_import_export_tests() {
             try {
                 Val exported = res.get_export("selected_anchor");
                 bool ok = check_count(res, "PERSON", 1) &&
-                    exported.type() == Type::T_INST &&
+                    type_strict_equal(exported.type(), Type::T_INST) &&
                     std::abs(exported.as_inst()->conf() - 0.7) < 1e-6;
                 if (!ok) err = "INST 导入、属性读取或导出值不匹配";
                 return ok;

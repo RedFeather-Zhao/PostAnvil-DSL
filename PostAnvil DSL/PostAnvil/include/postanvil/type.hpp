@@ -64,19 +64,6 @@ constexpr Type operator&(Type lhs, Type rhs) {
 }
 
 /**
- * @brief 判断两个类型是否兼容可运算
- * @param lhs 类型A
- * @param rhs 类型B
- * @return true：兼容；false：类型冲突/错误
- * @note 兼容判定规则与 operator& 完全统一
- */
-[[nodiscard]]
-constexpr bool type_compatible(Type lhs, Type rhs)
-{
-	return (lhs & rhs) != Type::T_ERROR;
-}
-
-/**
  * @brief 判断两个类型是否严格相等（忽略ANY万能匹配）
  * @param lhs 类型A
  * @param rhs 类型B
@@ -86,6 +73,31 @@ constexpr bool type_compatible(Type lhs, Type rhs)
 constexpr bool type_strict_equal(Type lhs, Type rhs)
 {
 	return lhs == rhs;
+}
+
+/**
+ * @brief 判断是否为合法具体值类型（排除 ANY/ERROR）
+ * @param t 待检测类型
+ * @return true：NUM/STR/BOOL/INST 其中之一
+ */
+[[nodiscard]]
+constexpr bool is_primitive_type(Type t)
+{
+	return !type_strict_equal(t, Type::T_ANY) &&
+		!type_strict_equal(t, Type::T_ERROR);
+}
+
+/**
+ * @brief 判断两个类型是否兼容可运算
+ * @param lhs 类型A
+ * @param rhs 类型B
+ * @return true：兼容；false：类型冲突/错误
+ * @note 具体类型必须严格相等；ANY 与任意非错误类型兼容；ERROR 与任何类型均不兼容
+ */
+[[nodiscard]]
+constexpr bool type_compatible(Type lhs, Type rhs)
+{
+	return !type_strict_equal(lhs & rhs, Type::T_ERROR);
 }
 
 /**
@@ -110,24 +122,14 @@ inline const char* type_name(Type t)
 }
 
 /**
- * @brief 判断是否为合法具体值类型（排除 ANY/ERROR）
- * @param t 待检测类型
- * @return true：NUM/STR/BOOL/INST 其中之一
- */
-[[nodiscard]]
-constexpr bool is_primitive_type(Type t)
-{
-	return t != Type::T_ANY && t != Type::T_ERROR;
-}
-
-/**
- * @brief 规则类型枚举，区分 DSL 中五种规则块
+ * @brief 规则类型枚举，区分 DSL 中六种规则块
  */
 enum class RuleKind {
 	FILTER,
 	ATTR,
 	GROUP,
 	APPEND,
+	SORT,
 	FUNC,
 };
 
@@ -157,7 +159,7 @@ struct Val {
 	{}
 
 	std::partial_ordering operator<=>(const Val& other) const {
-		if (type() != other.type()) {
+		if (!type_strict_equal(type(), other.type())) {
 			throw RuntimeError("Cannot compare values of different types: " +
 				std::string(type_name(type())) + " vs " +
 				std::string(type_name(other.type())));
@@ -188,10 +190,11 @@ struct Val {
 	}
 
 	friend Val operator+(const Val& lhs, const Val& rhs) {
-		if (lhs.type() != rhs.type()) {
+		if (!type_strict_equal(lhs.type(), rhs.type())) {
 			throw RuntimeError("Cannot add values of different types");
 		}
-		if (lhs.type() == Type::T_BOOL || rhs.type() == Type::T_BOOL) {
+		if (type_strict_equal(lhs.type(), Type::T_BOOL) ||
+			type_strict_equal(rhs.type(), Type::T_BOOL)) {
 			throw RuntimeError("Cannot add values of boolean type");
 		}
 
@@ -214,21 +217,24 @@ struct Val {
 	}
 
 	friend Val operator-(const Val& lhs, const Val& rhs) {
-		if (lhs.type() != rhs.type() || lhs.type() != Type::T_NUM) {
+		if (!type_strict_equal(lhs.type(), rhs.type()) ||
+			!type_strict_equal(lhs.type(), Type::T_NUM)) {
 			throw RuntimeError("Subtraction requires NUM operands of the same type");
 		}
 		return lhs.as_num() - rhs.as_num();
 	}
 
 	friend Val operator*(const Val& lhs, const Val& rhs) {
-		if (lhs.type() != rhs.type() || lhs.type() != Type::T_NUM) {
+		if (!type_strict_equal(lhs.type(), rhs.type()) ||
+			!type_strict_equal(lhs.type(), Type::T_NUM)) {
 			throw RuntimeError("Multiplication requires NUM operands of the same type");
 		}
 		return lhs.as_num() * rhs.as_num();
 	}
 
 	friend Val operator/(const Val& lhs, const Val& rhs) {
-		if (lhs.type() != rhs.type() || lhs.type() != Type::T_NUM) {
+		if (!type_strict_equal(lhs.type(), rhs.type()) ||
+			!type_strict_equal(lhs.type(), Type::T_NUM)) {
 			throw RuntimeError("Division requires NUM operands of the same type");
 		}
 		double b = rhs.as_num();

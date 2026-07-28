@@ -2,15 +2,15 @@
 
 // ============================================================
 //  PostAnvil DSL 语法定义 (ANTLR4 / C++ target)
-//  版本 0.6  —  2026-07-24
+//  版本 0.6  —  2026-07-28
 // ============================================================
 //  功能概览：
 //    - 目标检测后处理 DSL
-//    - 规则块：FILTER、ATTR、FUNC、GROUP、APPEND
+//    - 规则块：FILTER、ATTR、FUNC、GROUP、APPEND、SORT
 //    - 内置对象：self (当前实例)、img (图像尺寸)
 //    - 类型：NUM、STR、BOOL、INST、ANY
 //    - 控制流：IF-ELSE、FOR 循环 (仅函数内)
-//    - 排序原语：SORT
+//    - 原地稳定排序规则：SORT
 //    - 与宿主交互：IMPORT、EXPORT
 //    - 大小写不敏感，支持 # 和 // 注释
 // ============================================================
@@ -51,7 +51,9 @@ ENDIF     : 'ENDIF';          // 条件分支结束
 FOR       : 'FOR';            // 循环开始
 IN        : 'IN';             // 循环遍历指定类别
 ENDFOR    : 'ENDFOR';         // 循环结束
-SORT      : 'SORT';           // 排序原语
+SORT      : 'SORT';           // 原地排序规则
+ASC       : 'ASC';            // 升序
+DESC      : 'DESC';           // 降序
 
 // ---------- 布尔字面量 ----------
 BOOL_LIT  : 'TRUE' | 'FALSE';
@@ -168,6 +170,7 @@ rule_
     | attr_rule
     | group_rule
     | append_rule
+    | sort_rule
     | func_rule
     ;
 
@@ -258,6 +261,23 @@ append_rule
       RULEEND
     ;
 
+// --- SORT 规则（原地稳定排序） ---
+// 每个排序键只求值一次；多行排序键按书写顺序组成字典序比较。
+sort_rule
+    : RULE SORT class_expr ':' newlines
+      ( sort_key newlines )+
+      RULEEND
+    ;
+
+sort_key
+    : expr direction
+    ;
+
+direction
+    : ASC
+    | DESC
+    ;
+
 // ==================== 表达式系统 ====================
 
 // 类别表达式：只能是字符串字面量或字符串变量
@@ -309,18 +329,12 @@ primary
     | func_call
     | attribute
     | '(' expr ')'
-    | sortExpr          // 仅测试
     | IDENTIFIER        // 变量
     ;
 
 // 普通函数调用
 func_call
     : IDENTIFIER '(' (expr (',' expr)*)? ')'
-    ;
-
-// 排序原语：SORT(类别, 排序键, 名次)
-sortExpr
-    : SORT '(' class_expr ',' expr ',' expr ')'
     ;
 
 // 属性访问
