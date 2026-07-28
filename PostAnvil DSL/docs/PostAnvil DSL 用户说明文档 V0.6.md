@@ -1,6 +1,6 @@
 # PostAnvil DSL 用户说明文档
 
-> 版本：**0.6** | 更新日期：**2026-07-24**
+> 版本：**0.6** | 更新日期：**2026-07-28**
 
 ## 1. 简介
 
@@ -302,12 +302,52 @@ RULEEND
 | 图像属性 | `img.w` |
 | 循环实例属性 | `obj.area` |
 | 实例变量属性 | `selected.conf` |
+| 动态属性 | `obj.(prop_name)` |
 | 函数调用 | `avg_conf("car")` |
 | 排序 | `SORT("person", self.area, 3)` |
 
 字符串仅支持 `==` 和 `!=` 比较。表达式系统没有三元运算符，也没有 `LET`、对象构造、幂运算符或未注册的数学内置函数。
 
-### 7.2 运算符优先级
+### 7.2 显式动态属性
+
+静态属性写法中的点号右侧是固定属性名：
+
+```postanvil
+obj.conf
+cls.count
+img.w
+```
+
+需要由字符串表达式在运行时决定属性名时，在点号后使用括号：
+
+```postanvil
+obj.(prop_name)
+self.(prop_name)
+cls.(prop_name)
+"person".(prop_name)
+img.(prop_name)
+```
+
+括号内表达式必须返回 `STR`（或运行时值为 `STR` 的 `ANY`）。属性名大小写不敏感，运行时会统一转换为大写。静态写法和动态写法互不影响：即使存在名为 `conf` 的变量，`obj.conf` 仍固定读取 `CONF` 属性，只有 `obj.(conf)` 才会读取变量 `conf` 指定的属性。
+
+以下函数可以按属性名计算类别实例的数值平均值：
+
+```postanvil
+RULE FUNC fn_avg(_cls: STR, _prop: STR) -> NUM:
+    NUM _sum = 0
+    FOR _inst IN _cls
+        _sum = _sum + _inst.(_prop)
+    ENDFOR
+    RETURN _sum / _cls.count
+RULEEND
+
+NUM avg_conf = fn_avg("person", "conf")
+NUM avg_area = fn_avg("person", "area")
+```
+
+如果动态属性不存在，或属性值不能参与所在表达式要求的运算，将产生运行时错误。类别为空时当前数值除零规则会返回 `0`。
+
+### 7.3 运算符优先级
 
 从低到高：
 

@@ -122,6 +122,24 @@ public: // public method:
 		};
 	}
 
+	/**
+	 * @brief 编译字符串表达式闭包
+	 *
+	 * @param ctx            - ExprContext 节点
+	 * @return StrFunc       - 字符串类型表达式闭包
+	 */
+	StrFunc compileAsStr(::PostAnvilParser::ExprContext* ctx) {
+		auto typed = compile(ctx);
+		if (typed.type != Type::T_STR && typed.type != Type::T_ANY) {
+			auto err = std::format("Str-expr must be STR or ANY(runtime STR), got {}", type_name(typed.type));
+			handle_compile_error(err, ctx);
+		}
+		const auto& func = typed.func;
+		return [func](const Instance& self, EvaluationContext& ctx) {
+			return func(self, ctx).as_str();
+		};
+	}
+
 
 	/**
 	 * @brief 编译类别字串表达式闭包
@@ -616,11 +634,17 @@ private:
 	 *							对于 var 为预定义对象的情况，解析其属性
 	 *							对于 var 为循环实例的情况，将其解析为实例，即 1 的情况
 	 *							对于 var 为字串类型的情况，将其解析为类别，即 2 的情况
+	 *			4. object.(expr): 显式动态属性访问，expr 必须在运行时产生 STR 属性名
 	 * 
 	 * @param ctx			- AttributeContext 节点
 	 * @return TypedExpr	- T_ANY 类型的闭包
 	 */
 	TypedExpr compileAttribute(::PostAnvilParser::AttributeContext* ctx) {
+		auto normalize_prop = [](std::string prop) {
+			utils::to_upper_inplace(prop);
+			return prop;
+		};
+
 		// 1. self.prop		: SELF '.' IDENTIFIER
 		if (auto* inst = dynamic_cast<::PostAnvilParser::InstanceAttrContext*>(ctx)) {
 			auto prop = utils::get_upper_text(inst->IDENTIFIER());
@@ -686,6 +710,79 @@ private:
 					}
 					throw RuntimeError(std::format(
 						"Property access on '{}' requires INST or STR, got {}",
+						object, type_name(object_val.type())));
+				},
+				Type::T_ANY
+			};
+		}
+
+		// 4. self.(expr)：动态实例属性
+		if (auto* inst = dynamic_cast<::PostAnvilParser::DynamicInstanceAttrContext*>(ctx)) {
+			auto prop_expr = compileAsStr(inst->expr());
+			return {
+				[prop_expr = std::move(prop_expr), normalize_prop]
+				(const Instance& self, EvaluationContext& ctx) -> Val {
+					auto prop = normalize_prop(prop_expr(self, ctx));
+					return ctx.scene.get_inst_prop(self, prop);
+				},
+				Type::T_ANY
+			};
+		}
+
+		// 5. "class".(expr)：动态类别属性
+		if (auto* cls = dynamic_cast<::PostAnvilParser::DynamicClassAttrContext*>(ctx)) {
+			auto cls_name = utils::strip_quotes(utils::get_upper_text(cls->STRING()));
+			auto prop_expr = compileAsStr(cls->expr());
+			return {
+				[cls_name, prop_expr = std::move(prop_expr), normalize_prop]
+				(const Instance& self, EvaluationContext& ctx) -> Val {
+					auto prop = normalize_prop(prop_expr(self, ctx));
+					return ctx.scene.get_cls_prop(cls_name, prop);
+				},
+				Type::T_ANY
+			};
+		}
+
+		// 6. var.(expr)：动态实例/类别/图像属性
+		if (auto* var = dynamic_cast<::PostAnvilParser::DynamicVarAttrContext*>(ctx)) {
+			auto object = utils::get_upper_text(var->IDENTIFIER());
+			auto prop_expr = compileAsStr(var->expr());
+
+			if (object == OBJECT_IMAGE) {
+				return {
+					[prop_expr = std::move(prop_expr), normalize_prop]
+					(const Instance& self, EvaluationContext& ctx) -> Val {
+						auto prop = normalize_prop(prop_expr(self, ctx));
+						return ctx.scene.get_img_prop(prop);
+					},
+					Type::T_ANY
+				};
+			}
+
+			Type object_type = Type::T_ANY;
+			if (!m_type_scope || !m_type_scope->lookup(object, object_type)) {
+				handle_compile_error(std::format("Undefined object variable: {}", object), ctx);
+			}
+			if (object_type != Type::T_INST && object_type != Type::T_STR && object_type != Type::T_ANY) {
+				handle_compile_error(std::format(
+					"Dynamic property access requires INST or STR object, got {}", type_name(object_type)), ctx);
+			}
+
+			return {
+				[object, prop_expr = std::move(prop_expr), normalize_prop]
+				(const Instance& self, EvaluationContext& ctx) -> Val {
+					auto prop = normalize_prop(prop_expr(self, ctx));
+					Val object_val = ctx.get_var(object);
+					if (object_val.type() == Type::T_INST) {
+						return ctx.scene.get_inst_prop(*object_val.as_inst(), prop);
+					}
+					if (object_val.type() == Type::T_STR) {
+						std::string cls_name = object_val.as_str();
+						utils::to_upper_inplace(cls_name);
+						return ctx.scene.get_cls_prop(cls_name, prop);
+					}
+					throw RuntimeError(std::format(
+						"Dynamic property access on '{}' requires INST or STR, got {}",
 						object, type_name(object_val.type())));
 				},
 				Type::T_ANY

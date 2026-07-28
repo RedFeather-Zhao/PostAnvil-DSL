@@ -1,1 +1,1 @@
-java -jar .\antlr-4.13.2-complete.jar -Dlanguage=Cpp -o antlr4 PostAnvil.g4
+java -jar .\antlr-4.13.2-complete.jar -Dlanguage=Cpp -o ../PostAnvil/antlr4 PostAnvil.g4

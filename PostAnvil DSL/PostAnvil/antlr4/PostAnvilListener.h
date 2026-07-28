@@ -152,6 +152,15 @@ public:
   virtual void enterVarInstanceAttr(PostAnvilParser::VarInstanceAttrContext *ctx) = 0;
   virtual void exitVarInstanceAttr(PostAnvilParser::VarInstanceAttrContext *ctx) = 0;
 
+  virtual void enterDynamicInstanceAttr(PostAnvilParser::DynamicInstanceAttrContext *ctx) = 0;
+  virtual void exitDynamicInstanceAttr(PostAnvilParser::DynamicInstanceAttrContext *ctx) = 0;
+
+  virtual void enterDynamicClassAttr(PostAnvilParser::DynamicClassAttrContext *ctx) = 0;
+  virtual void exitDynamicClassAttr(PostAnvilParser::DynamicClassAttrContext *ctx) = 0;
+
+  virtual void enterDynamicVarAttr(PostAnvilParser::DynamicVarAttrContext *ctx) = 0;
+  virtual void exitDynamicVarAttr(PostAnvilParser::DynamicVarAttrContext *ctx) = 0;
+
   virtual void enterComp_op(PostAnvilParser::Comp_opContext *ctx) = 0;
   virtual void exitComp_op(PostAnvilParser::Comp_opContext *ctx) = 0;
 

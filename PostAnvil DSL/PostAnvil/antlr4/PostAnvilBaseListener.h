@@ -154,6 +154,15 @@ public:
   virtual void enterVarInstanceAttr(PostAnvilParser::VarInstanceAttrContext * /*ctx*/) override { }
   virtual void exitVarInstanceAttr(PostAnvilParser::VarInstanceAttrContext * /*ctx*/) override { }
 
+  virtual void enterDynamicInstanceAttr(PostAnvilParser::DynamicInstanceAttrContext * /*ctx*/) override { }
+  virtual void exitDynamicInstanceAttr(PostAnvilParser::DynamicInstanceAttrContext * /*ctx*/) override { }
+
+  virtual void enterDynamicClassAttr(PostAnvilParser::DynamicClassAttrContext * /*ctx*/) override { }
+  virtual void exitDynamicClassAttr(PostAnvilParser::DynamicClassAttrContext * /*ctx*/) override { }
+
+  virtual void enterDynamicVarAttr(PostAnvilParser::DynamicVarAttrContext * /*ctx*/) override { }
+  virtual void exitDynamicVarAttr(PostAnvilParser::DynamicVarAttrContext * /*ctx*/) override { }
+
   virtual void enterComp_op(PostAnvilParser::Comp_opContext * /*ctx*/) override { }
   virtual void exitComp_op(PostAnvilParser::Comp_opContext * /*ctx*/) override { }
 

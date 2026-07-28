@@ -836,6 +836,45 @@ public:
    
   };
 
+  class  DynamicInstanceAttrContext : public AttributeContext {
+  public:
+    DynamicInstanceAttrContext(AttributeContext *ctx);
+
+    antlr4::tree::TerminalNode *SELF();
+    antlr4::tree::TerminalNode *DOT();
+    antlr4::tree::TerminalNode *LPAREN();
+    ExprContext *expr();
+    antlr4::tree::TerminalNode *RPAREN();
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+  };
+
+  class  DynamicClassAttrContext : public AttributeContext {
+  public:
+    DynamicClassAttrContext(AttributeContext *ctx);
+
+    antlr4::tree::TerminalNode *STRING();
+    antlr4::tree::TerminalNode *DOT();
+    antlr4::tree::TerminalNode *LPAREN();
+    ExprContext *expr();
+    antlr4::tree::TerminalNode *RPAREN();
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+  };
+
+  class  DynamicVarAttrContext : public AttributeContext {
+  public:
+    DynamicVarAttrContext(AttributeContext *ctx);
+
+    antlr4::tree::TerminalNode *IDENTIFIER();
+    antlr4::tree::TerminalNode *DOT();
+    antlr4::tree::TerminalNode *LPAREN();
+    ExprContext *expr();
+    antlr4::tree::TerminalNode *RPAREN();
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+  };
+
   class  InstanceAttrContext : public AttributeContext {
   public:
     InstanceAttrContext(AttributeContext *ctx);

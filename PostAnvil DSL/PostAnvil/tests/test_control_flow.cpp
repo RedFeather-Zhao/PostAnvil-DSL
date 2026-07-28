@@ -275,5 +275,38 @@ std::vector<TestCase> get_control_flow_tests() {
 			return ok;
 		});
 
+	tests.emplace_back(
+		"显式动态属性访问 (_inst.(_prop))",
+		R"(
+			RULE FUNC fn_avg(_cls:STR, _prop:STR) -> NUM:
+				NUM _sum = 0
+				FOR _inst IN _cls
+					_sum = _sum + _inst.(_prop)
+				ENDFOR
+				RETURN _sum / _cls.count
+			RULEEND
+
+			NUM avg_conf = fn_avg("person", "conf")
+			NUM avg_area = fn_avg("person", "area")
+
+			RULE ATTR "person":
+				"person".avg_conf = avg_conf
+				"person".avg_area = avg_area
+			RULEEND
+		)",
+		[]() -> Scene {
+			return Scene({ 200,200 }, {
+				Instance("PERSON",0,0,10,10,0.9),
+				Instance("PERSON",0,0,20,20,0.7),
+				Instance("PERSON",0,0,30,30,0.5),
+			});
+		},
+		[](const Scene& res, std::string& err) -> bool {
+			bool ok = check_class_prop(res, "PERSON", "AVG_CONF", 0.7) &&
+				check_class_prop(res, "PERSON", "AVG_AREA", 1400.0 / 3.0);
+			if (!ok) err = "动态属性平均值不匹配";
+			return ok;
+		});
+
 	return tests;
 }

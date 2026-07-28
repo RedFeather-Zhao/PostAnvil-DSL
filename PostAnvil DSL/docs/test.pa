@@ -1,0 +1,319 @@
+// ============================================================
+//  PostAnvil 规则脚本 – 麦穗邻近区分后处理
+// ============================================================
+
+// 导入六种类别名
+import str cls_spike			as spike
+import str cls_spikelet			as spikelet
+import str cls_awn				as awn
+import str cls_sterile_spikelet	as sterile_spikelet
+import str cls_flag_leaf		as flag_leaf
+import str cls_all_spikelet		as all_spikelet
+
+// 全体类别最低置信度，topK
+import num min_conf, num top_k
+
+// 是否debug模式
+import bool if_debug
+
+// 特性测试，any类别
+import any reserved_var as arg
+
+// 取平均函数
+// @param  _cls : 类别
+// @param  _prop: 实例属性
+// @return NUM  : 平均数值
+RULE FUNC fn_avg(_cls:STR, _prop:STR) -> NUM:
+    NUM _sum = 0
+    FOR _inst IN _cls
+        _sum = _sum + _inst._prop
+    ENDFOR
+    return _sum / _cls.count
+RULEEND
+
+RULE FUNC avg_conf(cls:STR) -> NUM:
+    NUM total = 0
+    FOR obj IN cls
+        total = total + obj.conf
+    ENDFOR
+    RETURN total / cls.count
+RULEEND
+
+RULE FUNC sum_area(cls:STR) -> NUM:
+    NUM total = 0
+    FOR obj IN cls
+        total = total + obj.area
+    ENDFOR
+    RETURN total
+RULEEND
+
+RULE ATTR "PERSON":
+    self.risk = risk_level(self.conf)
+    self.norm_area = self.arean
+    self.density = self.conf / (self.w * self.h)
+RULEEND
+
+RULE ATTR "CAR":
+    "CAR".avg_conf = avg_conf("CAR")
+    "CAR".total_area = sum_area("CAR")
+RULEEND
+
+RULE FILTER "global":
+    self.conf > min_conf
+    self.area > area_threshold
+    NOT debug
+RULEEND
+
+RULE FILTER target_class:
+    self.w > 20
+    self.h > 20
+    self.wn > 0.1
+    self.hn > 0.1
+RULEEND
+
+RULE FILTER "CAR":
+    self.w > 100
+RULEEND
+
+RULE GROUP "LARGE_PERSON" FROM "PERSON":
+    self.area > 1000
+RULEEND
+
+RULE APPEND "VIP_PERSON" FROM "PERSON":
+    self.risk >= 2
+RULEEND
+
+RULE FILTER "PERSON":
+    self.area >= SORT("PERSON", self.area, 1)
+RULEEND
+
+EXPORT "PERSON".count AS person_count
+EXPORT "LARGE_PERSON".count AS large_person_count
+EXPORT "VIP_PERSON".count AS vip_person_count
+EXPORT "CAR".avg_conf AS car_avg_conf
+EXPORT "CAR".total_area AS car_total_area
+EXPORT 3.14159 AS pi
+
+
+
+//=====================================//
+
+// ------------------------------
+// 1. 定义辅助函数
+// ------------------------------
+
+// 计算两个矩形框的 IoU（交并比）
+RULE FUNC iou(box1: INST, box2: INST) -> NUM:
+    NUM x1 = MAX(box1.x, box2.x)
+    NUM y1 = MAX(box1.y, box2.y)
+    NUM x2 = MIN(box1.x + box1.w, box2.x + box2.w)
+    NUM y2 = MIN(box1.y + box1.h, box2.y + box2.h)
+    NUM inter = MAX(0, x2 - x1) * MAX(0, y2 - y1)
+    NUM area1 = box1.w * box1.h
+    NUM area2 = box2.w * box2.h
+    NUM union = area1 + area2 - inter
+
+    IF union > 0
+        RETURN inter / union
+    ELSE
+        RETURN 0
+    ENDIF
+RULEEND
+
+// 判断 box2 是否被 box1 包含（完全在内部）
+RULE FUNC is_contained(box2: INST, box1: INST) -> BOOL:
+    RETURN box2.x >= box1.x AND
+           box2.y >= box1.y AND
+           box2.x + box2.w <= box1.x + box1.w AND
+           box2.y + box2.h <= box1.y + box1.h
+RULEEND
+
+// 计算两点距离（用于邻近判断）
+RULE FUNC distance(box1: INST, box2: INST) -> NUM:
+    NUM cx1 = box1.x + box1.w / 2
+    NUM cy1 = box1.y + box1.h / 2
+    NUM cx2 = box2.x + box2.w / 2
+    NUM cy2 = box2.y + box2.h / 2
+    RETURN SQRT((cx1 - cx2)^2 + (cy1 - cy2)^2)
+RULEEND
+
+// 密度得分：统计与当前麦穗相关联的目标数量及平均 IoU
+RULE FUNC density_score(spike: INST) -> NUM:
+    NUM count = 0
+    NUM total_iou = 0
+
+    // 全体小穗（All-Spikelet）
+    FOR obj IN "All-Spikelet":
+        NUM i = iou(spike, obj)
+        IF i > 0.3:
+            count = count + 1
+            total_iou = total_iou + i
+        ENDIF
+    ENDFOR
+
+    // 小穗（Spikelet）— 只要被包含即计数
+    FOR obj IN "Spikelet":
+        IF is_contained(obj, spike):
+            count = count + 1
+        ENDIF
+    ENDFOR
+
+    // 不育小穗（Sterile-Spikelet）
+    FOR obj IN "Sterile-Spikelet":
+        IF is_contained(obj, spike):
+            count = count + 1
+        ENDIF
+    ENDFOR
+
+    // 麦芒（Awn）— IoU > 0.1 或距离 < 50
+    FOR obj IN "Awn":
+        NUM i = iou(spike, obj)
+        NUM d = distance(spike, obj)
+        IF i > 0.1 OR d < 50:
+            count = count + 1
+            total_iou = total_iou + i
+        ENDIF
+    ENDFOR
+
+    // 归一化得分（假设最多 10 个相关目标）
+    NUM count_score = MIN(1, count / 10)
+    NUM iou_score = IF count > 0 THEN total_iou / count ELSE 0 ENDIF
+    RETURN count_score * 0.6 + iou_score * 0.4
+RULEEND
+
+// 层级结构得分：检查各类关联目标是否存在
+RULE FUNC hierarchy_score(spike: INST) -> NUM:
+    NUM score = 0
+    NUM max_score = 0
+
+    // 全体小穗（最高权重 0.4）
+    max_score = max_score + 0.4
+    FOR obj IN "All-Spikelet":
+        IF iou(spike, obj) >= 0.6 OR is_contained(obj, spike):
+            score = score + 0.4
+            BREAK
+        ENDIF
+    ENDFOR
+
+    // 小穗（权重 0.3，按数量比例）
+    max_score = max_score + 0.3
+    NUM s_count = 0
+    FOR obj IN "Spikelet":
+        IF is_contained(obj, spike):
+            s_count = s_count + 1
+        ENDIF
+    ENDFOR
+    IF s_count > 0:
+        score = score + 0.3 * MIN(1, s_count / 5)
+    ENDIF
+
+    // 麦芒（权重 0.2）
+    max_score = max_score + 0.2
+    FOR obj IN "Awn":
+        IF iou(spike, obj) > 0.1 OR distance(spike, obj) < 50:
+            score = score + 0.2
+            BREAK
+        ENDIF
+    ENDFOR
+
+    // 不育小穗（权重 0.1，可选）
+    max_score = max_score + 0.1
+    NUM st_count = 0
+    FOR obj IN "Sterile-Spikelet":
+        IF is_contained(obj, spike):
+            st_count = st_count + 1
+        ENDIF
+    ENDFOR
+    IF st_count > 0:
+        score = score + 0.1 * MIN(1, st_count / 3)
+    ENDIF
+
+    RETURN IF max_score > 0 THEN score / max_score ELSE 0 ENDIF
+RULEEND
+
+// 中心性得分（距离图像中心越近越高）
+RULE FUNC center_score(spike: INST) -> NUM:
+    NUM cx = spike.x + spike.w / 2
+    NUM cy = spike.y + spike.h / 2
+    NUM img_cx = img.w / 2
+    NUM img_cy = img.h / 2
+    NUM norm_dist = SQRT(((cx - img_cx) / img.w)^2 + ((cy - img_cy) / img.h)^2)
+    RETURN MAX(0, 1 - norm_dist * 2)
+RULEEND
+
+// ------------------------------
+// 2. 为每个麦穗计算综合得分
+// ------------------------------
+
+RULE ATTR "Spike":
+    self.center_score = center_score(self)
+    self.density_score = density_score(self)
+    self.hierarchy_score = hierarchy_score(self)
+    self.total_score = self.center_score * 0.20 +
+                       self.density_score * 0.30 +
+                       self.hierarchy_score * 0.50
+
+    // 如果当前麦穗是综合得分最高的，则将其坐标存储为类属性，供其他类别过滤使用
+    IF self.total_score >= SORT("Spike", self.total_score, 1):
+        "Spike".best_x = self.x
+        "Spike".best_y = self.y
+        "Spike".best_w = self.w
+        "Spike".best_h = self.h
+        "Spike".best_score = self.total_score
+    ENDIF
+RULEEND
+
+// ------------------------------
+// 3. 保留综合得分最高的麦穗
+// ------------------------------
+
+RULE FILTER "Spike":
+    self.total_score >= SORT("Spike", self.total_score, 1)
+RULEEND
+
+// ------------------------------
+// 4. 保留与最佳麦穗相关联的其它类别
+//     条件：包含在最佳麦穗框内 或 与之有足够重叠 / 邻近
+//     使用类属性 "Spike".best_* 获取最佳框的坐标
+// ------------------------------
+
+// 全体小穗：IoU ≥ 0.6 或被最佳麦穗包含
+RULE FILTER "All-Spikelet":
+    LET best = INST("Spike".best_x, "Spike".best_y,
+                         "Spike".best_w, "Spike".best_h, 1.0)   // 构造临时检测框
+    iou(self, best) >= 0.6 OR is_contained(self, best)
+RULEEND
+
+// 小穗：必须被最佳麦穗包含
+RULE FILTER "Spikelet":
+    LET best = INST("Spike".best_x, "Spike".best_y,
+                         "Spike".best_w, "Spike".best_h, 1.0)
+    is_contained(self, best)
+RULEEND
+
+// 不育小穗：必须被最佳麦穗包含
+RULE FILTER "Sterile-Spikelet":
+    LET best = INST("Spike".best_x, "Spike".best_y,
+                         "Spike".best_w, "Spike".best_h, 1.0)
+    is_contained(self, best)
+RULEEND
+
+// 麦芒：IoU > 0.1 或距离 < 50
+RULE FILTER "Awn":
+    LET best = INST("Spike".best_x, "Spike".best_y,
+                         "Spike".best_w, "Spike".best_h, 1.0)
+    iou(self, best) > 0.1 OR distance(self, best) < 50
+RULEEND
+
+// 旗叶：邻近（距离 < 100）
+RULE FILTER "Flag-Leaf":
+    LET best = INST("Spike".best_x, "Spike".best_y,
+                         "Spike".best_w, "Spike".best_h, 1.0)
+    distance(self, best) < 100
+RULEEND
+
+// 导出内部变量到外部
+
+export bilibili as BiliBili, ganbei as GanBei
+export areyouhappy as YouAreHappy
+//=====================================//

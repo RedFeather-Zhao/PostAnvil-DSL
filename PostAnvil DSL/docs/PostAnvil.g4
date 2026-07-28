@@ -325,9 +325,12 @@ sortExpr
 
 // 属性访问
 attribute
-    : SELF '.' IDENTIFIER           # InstanceAttr       // self.xxx
-    | STRING '.' IDENTIFIER         # ClassAttr          // "class".xxx
-    | IDENTIFIER '.' IDENTIFIER     # VarInstanceAttr    // img.xxx
+    : SELF '.' IDENTIFIER             # InstanceAttr          // self.xxx
+    | STRING '.' IDENTIFIER           # ClassAttr             // "class".xxx
+    | IDENTIFIER '.' IDENTIFIER       # VarInstanceAttr       // img.xxx / inst.xxx / cls.xxx
+    | SELF '.' '(' expr ')'           # DynamicInstanceAttr   // self.(prop_expr)
+    | STRING '.' '(' expr ')'         # DynamicClassAttr      // "class".(prop_expr)
+    | IDENTIFIER '.' '(' expr ')'     # DynamicVarAttr        // inst.(prop_expr) / cls.(prop_expr)
     ;
 
 // 运算符分组
