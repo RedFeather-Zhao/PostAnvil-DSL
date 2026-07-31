@@ -47,7 +47,6 @@ public:
 					static_cast<int>(i),
 					operation_kind_to_string(op->kind));
 			}
-
 		}
 
 		return ctx.to_result();

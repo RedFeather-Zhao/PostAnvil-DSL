@@ -1,5 +1,5 @@
 // ============================================================
-//  PostAnvil 规则脚本 — 麦穗邻近区分后处理
+//  PostAnvil 规则脚本 — 最优目标麦穗区分后处理
 // ============================================================
 
 // 密度得分：统计与当前麦穗相关联的目标数量及平均 IoU。
@@ -110,8 +110,8 @@ RULEEND
 
 // 按综合得分原地排序；id 作为并列时的确定性排序键。
 RULE SORT "Spike":
-    self.total_score DESC
-    self.id ASC
+    self.total_score    DESC
+    self.id             ASC
 RULEEND
 
 // 保存排序后的最佳麦穗快照，再精确保留对应逻辑实例。
@@ -140,3 +140,4 @@ RULEEND
 RULE FILTER "Flag-Leaf":
     _NEARBY(self, best_spike, 100)
 RULEEND
+

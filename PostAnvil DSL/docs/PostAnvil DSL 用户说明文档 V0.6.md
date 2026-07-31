@@ -150,6 +150,7 @@ INST by_position = _INST_INDEX("person", 3)
 ## 5. 规则
 
 ### 5.1 FILTER
+语法结构如下，由规则名、类别名、规则块和若干并列的布尔表达式组成
 
 ```postanvil
 RULE FILTER <类别表达式>:
@@ -158,7 +159,8 @@ RULE FILTER <类别表达式>:
 RULEEND
 ```
 
-类别表达式只能是字符串字面量或字符串变量。`"global"` 表示对所有类别应用过滤。
+类别表达式只能是字符串字面量或字符串变量。`"global"` 表示对所有类别应用条件过滤。
+当且仅当一个实例满足所有条件表达式为真，则该实例保留。
 
 ```postanvil
 RULE FILTER "person":

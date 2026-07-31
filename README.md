@@ -2,20 +2,42 @@
 
 ## 解决方案结构
 
-- `PostAnvil DSL`：核心静态库，仅包含 PostAnvil 头文件和 ANTLR 生成源文件，不包含测试。
-- `PostAnvil Test`：基础规则、属性、分组与追加测试。
-- `PostAnvil Test Language`：类型、函数、控制流、排序与内置函数测试。
-- `PostAnvil Test Integration`：导入导出和端到端测试。
+- `PostAnvil DSL`：核心静态库，包含 PostAnvil 公共头文件和 ANTLR 生成源文件，输出 `PostAnvil.lib`。
+- `UnitTest1_Basic`：Visual Studio 原生 C++ 单元测试项目，通过项目引用使用核心库，输出由测试资源管理器加载的 `UnitTest1_Basic.dll`。
 
-ANTLR 解析器必须编译其生成的 `.cpp`，因此核心项目使用静态库而不是纯头文件库，避免每个测试项目重复编译 ANTLR。日常开发可在 Visual Studio 中只生成需要运行的测试项目。
+ANTLR 生成的 `.cpp` 只在核心静态库中编译一次。单元测试项目负责链接核心库和 `antlr4-runtime.lib`，不重复编译解析器源文件。
 
-## 新建测试项目
+## 运行单元测试
 
-1. 在当前解决方案中新建 C++ 空项目，将配置类型设为“应用程序”，平台选择 `x64`。
-2. 添加对 `PostAnvil DSL\PostAnvil DSL.vcxproj` 的项目引用。
-3. 在项目属性管理器中导入 `PostAnvil Test\PostAnvil.Test.props`。该属性表统一配置 C++20、UTF-8、PostAnvil/ANTLR 头文件目录和 ANTLR 静态库。
-4. 添加自己的测试源文件；若要复用现有测试输出与统计逻辑，同时加入 `PostAnvil\tests\test_common.hpp` 和 `test_common.cpp`，并在 `main` 中调用 `run_test_suite`。
+1. 在 Visual Studio 顶部选择 `Debug | x64`。
+2. 使用“生成”→“生成解决方案”（`Ctrl+Shift+B`）。
+3. 打开“测试”→“测试资源管理器”。
+4. 运行全部测试，或者右键某个 `TEST_METHOD` 单独运行/调试。
 
-测试源码使用 UTF-8 执行字符集。公共测试运行器会在 Windows 上将控制台输入、输出代码页切换为 UTF-8，避免中文被系统默认 GBK 代码页错误解释。若自定义入口不使用 `run_test_suite`，应在输出中文前自行调用 `SetConsoleOutputCP(CP_UTF8)`。
+单元测试项目生成 DLL 而不是控制台 EXE，因此不需要设置启动项目，也不通过 `F5` 直接启动。
 
-`PostAnvil.Test.props` 中的 `AntlrRuntimeRoot` 默认指向 `D:\UserBin\antlr-vs2022-runtime`。如果本机 ANTLR 运行库位于其他位置，请在导入属性表前覆盖该属性；目前运行库目录仅配置了 `x64` 链接路径。
+## 测试代码结构
+
+- `pch.h`：预编译单元测试框架、PostAnvil 和常用标准库头文件。
+- `TestSupport.hpp/.cpp`：复用场景构造、DSL 编译执行和常用断言。
+- `UnitTest1_Basic.cpp`：基础表达式与过滤规则。
+- `AttributeCollectionTests.cpp`：属性、分组和追加规则。
+- `SortFunctionTests.cpp`：布尔值、排序和简单函数。
+- `ValueBuiltinTests.cpp`：类型、变量、实例身份和内置函数。
+- `ControlFlowTests.cpp`：条件、循环和实例函数。
+- `IntegrationTests.cpp`：宿主导入导出与端到端流程。
+
+当前共有 49 个可被测试资源管理器独立发现的测试方法。
+
+## 添加测试样例
+
+通常无需新建测试项目。右键 `UnitTest1_Basic`，选择“添加”→“新建项”并添加 `.cpp` 文件；首行包含 `pch.h`，随后包含 `TestSupport.hpp`：
+
+```cpp
+#include "pch.h"
+#include "TestSupport.hpp"
+```
+
+简单测试优先调用 `make_scene`、`make_confidence_scene`、`evaluate` 或 `evaluate_and_expect_counts`，只在测试方法内保留该场景特有的输入和断言，避免重复编写编译器及运行逻辑。
+
+当前 ANTLR 运行库路径配置为 `D:\UserBin\antlr-vs2022-runtime`，并使用 x64 静态库。如果运行库位置改变，需要通过测试项目“属性”中的 C/C++ 包含目录及链接器库目录进行调整。
