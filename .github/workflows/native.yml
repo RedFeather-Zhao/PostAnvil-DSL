@@ -1,0 +1,27 @@
+name: native
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        build_type: [Debug, Release]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >-
+          cmake -S . -B out/build/ci -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DPOSTANVIL_BUILD_STATIC=ON -DPOSTANVIL_BUILD_SHARED=ON
+          -DPOSTANVIL_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build out/build/ci --config ${{ matrix.build_type }} --parallel
+      - name: Test
+        run: ctest --test-dir out/build/ci -C ${{ matrix.build_type }} --output-on-failure
+      - name: Install
+        run: cmake --install out/build/ci --config ${{ matrix.build_type }} --prefix out/install

@@ -1,8 +1,0 @@
-<Solution>
-  <Configurations>
-    <Platform Name="x64" />
-    <Platform Name="x86" />
-  </Configurations>
-  <Project Path="PostAnvil DSL/PostAnvil DSL.vcxproj" Id="fdcdb1a2-fe5c-4f34-8b04-af15226ecb7d" />
-  <Project Path="UnitTest1_Basic/UnitTest1_Basic.vcxproj" />
-</Solution>

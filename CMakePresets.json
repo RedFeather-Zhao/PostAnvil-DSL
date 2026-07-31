@@ -1,0 +1,188 @@
+﻿{
+	"version": 6,
+	"cmakeMinimumRequired": {
+		"major": 3,
+		"minor": 25,
+		"patch": 0
+	},
+	"configurePresets": [
+		{
+			"name": "base",
+			"hidden": true,
+			"cacheVariables": {
+				"CMAKE_CXX_STANDARD": "20",
+				"POSTANVIL_BUILD_STATIC": "ON",
+				"POSTANVIL_BUILD_SHARED": "ON",
+				"POSTANVIL_BUILD_TESTS": "ON"
+			}
+		},
+		{
+			"name": "vs2026-x64",
+			"displayName": "Visual Studio 2026 x64",
+			"description": "生成可在 Visual Studio 中打开的多配置解决方案",
+			"inherits": "base",
+			"generator": "Visual Studio 18 2026",
+			"architecture": "x64",
+			"binaryDir": "${sourceDir}/out/build/vs2026-x64",
+			"cacheVariables": {
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/vs2026-x64"
+			}
+		},
+		{
+			"name": "ninja-debug",
+			"displayName": "Ninja Debug",
+			"description": "日常开发配置：生成 Debug 库并启用测试",
+			"inherits": "base",
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/out/build/ninja-debug",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug",
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/debug"
+			}
+		},
+		{
+			"name": "ninja-release",
+			"displayName": "Ninja Release",
+			"description": "发布配置：生成优化库，不编译测试",
+			"inherits": "base",
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/out/build/ninja-release",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release",
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/release",
+				"POSTANVIL_BUILD_TESTS": "OFF"
+			}
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "vs2026-debug",
+			"displayName": "VS Debug - 编译",
+			"configurePreset": "vs2026-x64",
+			"configuration": "Debug"
+		},
+		{
+			"name": "vs2026-release",
+			"displayName": "VS Release - 编译",
+			"configurePreset": "vs2026-x64",
+			"configuration": "Release"
+		},
+		{
+			"name": "ninja-debug",
+			"displayName": "Ninja Debug - 编译",
+			"configurePreset": "ninja-debug"
+		},
+		{
+			"name": "ninja-release",
+			"displayName": "Ninja Release - 编译",
+			"configurePreset": "ninja-release"
+		},
+		{
+			"name": "ninja-debug-rebuild",
+			"displayName": "Ninja Debug - 清理并重新编译",
+			"configurePreset": "ninja-debug",
+			"cleanFirst": true
+		},
+		{
+			"name": "ninja-release-rebuild",
+			"displayName": "Ninja Release - 清理并重新编译",
+			"configurePreset": "ninja-release",
+			"cleanFirst": true
+		},
+		{
+			"name": "ninja-debug-install",
+			"displayName": "Ninja Debug - 编译并安装",
+			"description": "安装到 out/install/debug",
+			"configurePreset": "ninja-debug",
+			"targets": ["install"]
+		},
+		{
+			"name": "ninja-release-install",
+			"displayName": "Ninja Release - 编译并安装",
+			"description": "安装到 out/install/release",
+			"configurePreset": "ninja-release",
+			"targets": ["install"]
+		},
+		{
+			"name": "vs2026-debug-install",
+			"displayName": "VS Debug - 编译并安装",
+			"description": "安装到 out/install/vs2026-x64",
+			"configurePreset": "vs2026-x64",
+			"configuration": "Debug",
+			"targets": ["install"]
+		},
+		{
+			"name": "vs2026-release-install",
+			"displayName": "VS Release - 编译并安装",
+			"description": "安装到 out/install/vs2026-x64",
+			"configurePreset": "vs2026-x64",
+			"configuration": "Release",
+			"targets": ["install"]
+		},
+		{
+			"name": "ninja-release-package-build",
+			"displayName": "Ninja Release - 编译并打包",
+			"description": "编译 Release 并生成 ZIP/TGZ 原生开发包",
+			"configurePreset": "ninja-release",
+			"targets": ["package"]
+		},
+		{
+			"name": "vs2026-release-package-build",
+			"displayName": "VS Release - 编译并打包",
+			"description": "编译 Release 并生成 ZIP/TGZ 原生开发包",
+			"configurePreset": "vs2026-x64",
+			"configuration": "Release",
+			"targets": ["package"]
+		}
+	],
+	"testPresets": [
+		{
+			"name": "vs2026-debug",
+			"displayName": "VS Debug - 运行测试",
+			"configurePreset": "vs2026-x64",
+			"configuration": "Debug",
+			"output": { "outputOnFailure": true }
+		},
+		{
+			"name": "ninja-debug",
+			"displayName": "Ninja Debug - 运行测试",
+			"configurePreset": "ninja-debug",
+			"output": { "outputOnFailure": true }
+		}
+	],
+	"packagePresets": [
+		{
+			"name": "ninja-release-zip",
+			"displayName": "Ninja Release - 生成 ZIP 发布包",
+			"configurePreset": "ninja-release",
+			"generators": ["ZIP"]
+		},
+		{
+			"name": "vs2026-release-zip",
+			"displayName": "VS Release - 生成 ZIP 发布包",
+			"configurePreset": "vs2026-x64",
+			"generators": ["ZIP"],
+			"configurations": ["Release"]
+		}
+	],
+	"workflowPresets": [
+		{
+			"name": "ninja-debug-check",
+			"displayName": "Ninja Debug - 配置、编译并测试",
+			"steps": [
+				{ "type": "configure", "name": "ninja-debug" },
+				{ "type": "build", "name": "ninja-debug" },
+				{ "type": "test", "name": "ninja-debug" }
+			]
+		},
+		{
+			"name": "ninja-release-package",
+			"displayName": "Ninja Release - 配置、编译并打包",
+			"steps": [
+				{ "type": "configure", "name": "ninja-release" },
+				{ "type": "build", "name": "ninja-release" },
+				{ "type": "package", "name": "ninja-release-zip" }
+			]
+		}
+	]
+}
