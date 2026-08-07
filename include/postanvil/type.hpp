@@ -142,7 +142,7 @@ concept ValAllowedType = std::is_same_v<std::decay_t<T>, double>
 
 /**
  * @brief 运行时多态值，可承载数值、字符串或布尔三种类型
- * @details 提供类型查询和安全转换方法，类型不匹配时抛出 RuntimeError
+ * @details 提供类型查询和安全转换方法，类型不匹配时抛出 PARuntimeError
  */
 struct Val {
 
@@ -160,7 +160,7 @@ struct Val {
 
 	std::partial_ordering operator<=>(const Val& other) const {
 		if (!type_strict_equal(type(), other.type())) {
-			throw RuntimeError("Cannot compare values of different types: " +
+			throw PARuntimeError("Cannot compare values of different types: " +
 				std::string(type_name(type())) + " vs " +
 				std::string(type_name(other.type())));
 		}
@@ -180,8 +180,8 @@ struct Val {
 		}
 		case T_BOOL: return as_bool() <=> other.as_bool();
 		case T_STR:  return as_str() <=> other.as_str();
-		case T_INST: throw RuntimeError("INST values cannot be compared directly");
-		default:	 throw RuntimeError("Unknown type");
+		case T_INST: throw PARuntimeError("INST values cannot be compared directly");
+		default:	 throw PARuntimeError("Unknown type");
 		}
 	}
 
@@ -191,11 +191,11 @@ struct Val {
 
 	friend Val operator+(const Val& lhs, const Val& rhs) {
 		if (!type_strict_equal(lhs.type(), rhs.type())) {
-			throw RuntimeError("Cannot add values of different types");
+			throw PARuntimeError("Cannot add values of different types");
 		}
 		if (type_strict_equal(lhs.type(), Type::T_BOOL) ||
 			type_strict_equal(rhs.type(), Type::T_BOOL)) {
-			throw RuntimeError("Cannot add values of boolean type");
+			throw PARuntimeError("Cannot add values of boolean type");
 		}
 
 		return std::visit(
@@ -209,7 +209,7 @@ struct Val {
 					return a + b;
 				}
 				else {
-					throw RuntimeError("Unsupported addition types");
+					throw PARuntimeError("Unsupported addition types");
 				}
 			},
 			lhs.data, rhs.data
@@ -219,7 +219,7 @@ struct Val {
 	friend Val operator-(const Val& lhs, const Val& rhs) {
 		if (!type_strict_equal(lhs.type(), rhs.type()) ||
 			!type_strict_equal(lhs.type(), Type::T_NUM)) {
-			throw RuntimeError("Subtraction requires NUM operands of the same type");
+			throw PARuntimeError("Subtraction requires NUM operands of the same type");
 		}
 		return lhs.as_num() - rhs.as_num();
 	}
@@ -227,7 +227,7 @@ struct Val {
 	friend Val operator*(const Val& lhs, const Val& rhs) {
 		if (!type_strict_equal(lhs.type(), rhs.type()) ||
 			!type_strict_equal(lhs.type(), Type::T_NUM)) {
-			throw RuntimeError("Multiplication requires NUM operands of the same type");
+			throw PARuntimeError("Multiplication requires NUM operands of the same type");
 		}
 		return lhs.as_num() * rhs.as_num();
 	}
@@ -235,7 +235,7 @@ struct Val {
 	friend Val operator/(const Val& lhs, const Val& rhs) {
 		if (!type_strict_equal(lhs.type(), rhs.type()) ||
 			!type_strict_equal(lhs.type(), Type::T_NUM)) {
-			throw RuntimeError("Division requires NUM operands of the same type");
+			throw PARuntimeError("Division requires NUM operands of the same type");
 		}
 		double b = rhs.as_num();
 		return b != 0.0 ? lhs.as_num() / b : 0.0;
@@ -257,43 +257,43 @@ struct Val {
 	/**
 	 * @brief 转换为数值类型
 	 * @return double 值
-	 * @throws RuntimeError 当前值非数值类型时抛出
+	 * @throws PARuntimeError 当前值非数值类型时抛出
 	 */
 	double as_num() const {
 		if (auto* p = std::get_if<double>(&data)) return *p;
-		throw RuntimeError("Expected NUM, got " + std::string(type_name(type())));
+		throw PARuntimeError("Expected NUM, got " + std::string(type_name(type())));
 	}
 
 	/**
 	 * @brief 转换为字符串类型
 	 * @return std::string 副本
-	 * @throws RuntimeError 当前值非字符串类型时抛出
+	 * @throws PARuntimeError 当前值非字符串类型时抛出
 	 */
 	std::string as_str() const {
 		if (auto* p = std::get_if<std::string>(&data)) return *p;
-		throw RuntimeError("Expected STR, got " + std::string(type_name(type())));
+		throw PARuntimeError("Expected STR, got " + std::string(type_name(type())));
 	}
 
 	/**
 	 * @brief 转换为布尔类型
 	 * @return bool 值
 	 * @details 若当前为数值，按非零为真进行转换；若当前为字符串则抛出异常
-	 * @throws RuntimeError 当前值非数值且非布尔类型时抛出
+	 * @throws PARuntimeError 当前值非数值且非布尔类型时抛出
 	 */
 	bool as_bool() const {
 		if (auto* p = std::get_if<bool>(&data)) return *p;
 		if (auto* pn = std::get_if<double>(&data)) return *pn != 0.0;
-		throw RuntimeError("Expected BOOL, got " + std::string(type_name(type())));
+		throw PARuntimeError("Expected BOOL, got " + std::string(type_name(type())));
 	}
 
 	/**
 	 * @brief 获取实例快照
 	 * @return 指向不可变实例快照的共享指针
-	 * @throws RuntimeError 当前值不是 INST 或实例为空时抛出
+	 * @throws PARuntimeError 当前值不是 INST 或实例为空时抛出
 	 */
 	std::shared_ptr<const Instance> as_inst() const {
 		if (auto* p = std::get_if<std::shared_ptr<Instance>>(&data); p && *p) return *p;
-		throw RuntimeError("Expected INST, got " + std::string(type_name(type())));
+		throw PARuntimeError("Expected INST, got " + std::string(type_name(type())));
 	}
 };
 

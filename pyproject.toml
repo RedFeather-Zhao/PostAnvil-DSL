@@ -1,4 +1,4 @@
-﻿[build-system]
+[build-system]
 requires = [
   "scikit-build-core>=0.10",
   "pybind11>=2.13"
@@ -23,6 +23,11 @@ classifiers = [
   "Operating System :: MacOS"
 ]
 
+[project.optional-dependencies]
+ultralytics = [
+  "ultralytics>=8.3"
+]
+
 [tool.scikit-build]
 cmake.build-type = "Release"
 cmake.args = [
@@ -35,6 +40,7 @@ wheel.packages = ["bindings/python/postanvil"]
 sdist.include = [
   "bindings/python/**",
   "cmake/**",
+  "docs/**",
   "generated/antlr/**",
   "grammar/**",
   "include/**",

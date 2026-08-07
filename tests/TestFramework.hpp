@@ -12,7 +12,53 @@
 #include <utility>
 #include <vector>
 
+#ifdef _WIN32
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
+#else
+#include <unistd.h>
+#endif
+
 namespace postanvil::test::framework {
+
+inline bool should_use_color() {
+	static bool init = false;
+	static bool use = false;
+	if (!init) {
+		init = true;
+		// 若 NO_COLOR 环境变量存在，则禁用颜色
+		const char* no_color = std::getenv("NO_COLOR");
+		if (no_color && no_color[0] != '\0') {
+			use = false;
+		}
+		else {
+			// 检查 stdout 是否为终端
+			use = isatty(fileno(stdout)) != 0;
+		}
+	}
+	return use;
+}
+
+inline std::string_view color_reset() {
+	static const std::string reset = should_use_color() ? "\033[0m" : "";
+	return reset;
+}
+
+inline std::string_view color_green() {
+	static const std::string green = should_use_color() ? "\033[32m" : "";
+	return green;
+}
+
+inline std::string_view color_red() {
+	static const std::string red = should_use_color() ? "\033[31m" : "";
+	return red;
+}
+
+inline std::string_view color_bold() {
+	static const std::string bold = should_use_color() ? "\033[1m" : "";
+	return bold;
+}
 
 using TestFunction = void (*)();
 
@@ -85,26 +131,30 @@ public:
 	}
 };
 
-inline int run_all_tests()
-{
+inline int run_all_tests() {
 	std::size_t passed = 0;
 	for (const auto& test : registry()) {
 		try {
 			test.function();
 			++passed;
-			std::cout << "[PASS] " << test.name << '\n';
+			std::cout << color_green() << "[PASS] " << color_reset() << test.name << '\n';
 		}
 		catch (const std::exception& error) {
-			std::cerr << "[FAIL] " << test.name << ": " << error.what() << '\n';
+			std::cerr << color_red() << "[FAIL] " << color_reset() << test.name
+				<< ": " << error.what() << '\n';
 		}
 		catch (...) {
-			std::cerr << "[FAIL] " << test.name << ": unknown exception\n";
+			std::cerr << color_red() << "[FAIL] " << color_reset() << test.name
+				<< ": unknown exception\n";
 		}
 	}
 
-	const auto failed = registry().size() - passed;
-	std::cout << "\nPostAnvil tests: " << passed << " passed, "
-			  << failed << " failed, " << registry().size() << " total\n";
+	const auto total = registry().size();
+	const auto failed = total - passed;
+	std::cout << "\nPostAnvil tests: "
+		<< color_green() << passed << color_reset() << " passed, "
+		<< color_red() << failed << color_reset() << " failed, "
+		<< total << " total\n";
 	return failed == 0 ? 0 : 1;
 }
 

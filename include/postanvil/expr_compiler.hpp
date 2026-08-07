@@ -24,20 +24,6 @@ namespace postanvil {
 
 // ====================== TreeExprCompiler =========================
 
-
-[[noreturn]]
-static void handle_compile_error(const std::string& msg, const ::antlr4::ParserRuleContext* ctx = nullptr) {
-	if (!ctx) {
-		throw CompileError(msg);
-	}
-	auto start = ctx->getStart();
-	throw CompileError(msg,
-		static_cast<int>(start->getLine()),
-		static_cast<int>(start->getCharPositionInLine())
-	);
-}
-
-
 /**
  * @brief 表达式编译器
  * @details 接收 ANTLR4 表达式 ParseTree 节点，递归编译为 TypedExpr 闭包
@@ -45,16 +31,39 @@ static void handle_compile_error(const std::string& msg, const ::antlr4::ParserR
  *          支持的表达式层级：expr → or/and/not/cmp/add/mul/unary → primary
  */
 class TreeExprCompiler {
-	/**
-	 * @brief 函数注册表指针，由外部编译器设置
-	 * @details 用于编译函数调用时查找已定义的函数体
-	 */
-	detail::str_map<FunctionInfo>* functions = nullptr;
 
-	/**
-	 * @brief 变量符号表，由主编译器设置
-	 */
-	detail::ScopeChain<Type>* m_type_scope = nullptr;
+	[[noreturn]] static inline void
+	throw_compile_error					(PACompileError::Kind kind,
+										 std::string_view msg,
+										 const ::antlr4::ParserRuleContext* ctx = nullptr) {
+		if (!ctx) {
+			throw PACompileError(kind, std::string(msg));
+		}
+		auto start = ctx->getStart();
+		throw PACompileError(
+			kind,
+			std::string(msg),
+			SourceLocation{
+				static_cast<int>(start->getLine()),
+				static_cast<int>(start->getCharPositionInLine()) + 1,
+				std::nullopt
+			}
+		);
+	}
+
+	[[noreturn]] static inline void
+	report_semantic_error			(std::string_view msg,
+									 const ::antlr4::ParserRuleContext* ctx)
+	{
+		throw_compile_error(PACompileError::Kind::Semantic, msg, ctx);
+	}
+
+	[[noreturn]] static inline void
+	report_internal_error			(std::string_view msg,
+									 const ::antlr4::ParserRuleContext* ctx = nullptr)
+	{
+		throw_compile_error(PACompileError::Kind::Internal, msg, ctx);
+	}
 
 public:
 	static const inline char* OBJECT_SELF = "SELF";
@@ -77,11 +86,11 @@ public: // public method:
 	 * 
 	 * @param ctx			- ANTLR4 ExprContext 节点
 	 * @return TypedExpr	- 带类型的表达式闭包
-	 * @throw CompileError	- 编译错误，包含编译信息
+	 * @throw PACompileError	- 编译错误，包含编译信息
 	 */
 	TypedExpr compile(::PostAnvilParser::ExprContext* ctx) {
 		if (!ctx || !ctx->or_expr()) {
-			handle_compile_error("Empty ExprContext node type", ctx);
+			report_internal_error("Empty ExprContext node type", ctx);
 		}
 		return compileOr(ctx->or_expr());
 	}
@@ -96,7 +105,7 @@ public: // public method:
 		auto typed = compileOr(ctx);
 		if (!type_compatible(typed.type, Type::T_BOOL)) {
 			auto err = std::format("Bool-expr must be BOOL or ANY(runtime bool), got {}", type_name(typed.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
 		return [func](const Instance& self, EvaluationContext& ctx) {
@@ -114,7 +123,7 @@ public: // public method:
 		auto typed = compile(ctx);
 		if (!type_compatible(typed.type, Type::T_NUM)) {
 			auto err = std::format("Num-expr must be NUM or ANY(runtime NUM), got {}", type_name(typed.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
 		return [func](const Instance& self, EvaluationContext& ctx) {
@@ -132,7 +141,7 @@ public: // public method:
 		auto typed = compile(ctx);
 		if (!type_compatible(typed.type, Type::T_STR)) {
 			auto err = std::format("Str-expr must be STR or ANY(runtime STR), got {}", type_name(typed.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
 		return [func](const Instance& self, EvaluationContext& ctx) {
@@ -163,10 +172,10 @@ public: // public method:
 			std::string var = utils::get_upper_text(ctx->IDENTIFIER());
 			Type var_type = Type::T_ANY;
 			if (!m_type_scope || !m_type_scope->lookup(var, var_type)) {
-				handle_compile_error(std::format("Undefined class variable: {}", var), ctx);
+				report_semantic_error(std::format("Undefined class variable: {}", var), ctx);
 			}
 			if (!type_compatible(var_type, Type::T_STR)) {
-				handle_compile_error(std::format(
+				report_semantic_error(std::format(
 					"Class expression requires STR, got {}", type_name(var_type)), ctx);
 			}
 
@@ -177,7 +186,7 @@ public: // public method:
 				return str;
 			};
 		}
-		handle_compile_error("Invalid class_expr: expected STRING or IDENTIFIER", ctx);
+		report_internal_error("Invalid class_expr: expected STRING or IDENTIFIER", ctx);
 	}
 
 private:
@@ -203,7 +212,7 @@ private:
 		// 左式类别检查
 		if (!type_compatible(left.type, Type::T_BOOL)) {
 			auto err = std::format("Left OR-expr must be BOOL or ANY(runtime bool), got {}", type_name(left.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 
 		// 递归右式类别检查
@@ -211,7 +220,7 @@ private:
 			auto right = compileAnd(and_exprs[i + 1]);
 			if (!type_compatible(right.type, Type::T_BOOL)) {
 				auto err = std::format("Right OR-expr must be BOOL or ANY(runtime bool), got {}", type_name(right.type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 			left = {
 				[l = std::move(left.func), r = std::move(right.func)]
@@ -245,7 +254,7 @@ private:
 		// 左式类别检查
 		if (!type_compatible(left.type, Type::T_BOOL)) {
 			auto err = std::format("Left AND-expr must be BOOL or ANY(runtime bool), got {}", type_name(left.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 
 		// 递归右式类别检查
@@ -253,7 +262,7 @@ private:
 			auto right = compileNot(not_exprs[i + 1]);
 			if (!type_compatible(right.type, Type::T_BOOL)) {
 				auto err = std::format("Right AND-expr must be BOOL or ANY(runtime bool), got {}", type_name(right.type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 			left = { [l = std::move(left.func), r = std::move(right.func)]
 				(const Instance& self, EvaluationContext& ctx) -> Val {
@@ -282,7 +291,7 @@ private:
 		auto rhs = compileNot(ctx->not_expr());
 		if (!type_compatible(rhs.type, Type::T_BOOL)) {
 			auto err = std::format("NOT-expr must be BOOL or ANY(runtime bool), got {}", type_name(rhs.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 		return { [r = std::move(rhs.func)]
 			(const Instance& self, EvaluationContext& ctx) -> Val {
@@ -318,16 +327,16 @@ private:
 
 		if (type_strict_equal(res_type, Type::T_ERROR)) {
 			auto err = std::format("Comparison type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 
 		// 布尔类型仅支持相等/不等判断
 		if (type_strict_equal(res_type, Type::T_BOOL) && op != "==" && op != "!=") {
 			auto err = std::format("Operator '{}' not supported for BOOL", op);
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 		if (type_strict_equal(res_type, Type::T_INST)) {
-			handle_compile_error("INST values cannot be compared directly; compare their properties instead", ctx);
+			report_semantic_error("INST values cannot be compared directly; compare their properties instead", ctx);
 		}
 
 		return { [l = std::move(left.func), r = std::move(right.func), op = std::move(op)]
@@ -340,7 +349,7 @@ private:
 				if (op == "<=") return lval <= rval;
 				if (op == "==") return lval == rval;
 				if (op == "!=") return lval != rval;
-				throw RuntimeError(std::format("Unknown compare operation: {}", op));
+				throw PARuntimeError(std::format("Unknown compare operation: {}", op));
 			},
 			Type::T_BOOL
 		};
@@ -372,22 +381,22 @@ private:
 			// 左右式类别检查
 			if (!type_compatible(left.type, right.type)) {
 				auto err = std::format("Add/Sub type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 			Type res_type = left.type & right.type;	// 获取运算结果类别
 
 			// 布尔类型检查
 			if (type_strict_equal(res_type, Type::T_BOOL)) {
-				handle_compile_error("Add expr not supported for BOOL", ctx);
+				report_semantic_error("Add expr not supported for BOOL", ctx);
 			}
 			if (type_strict_equal(res_type, Type::T_INST)) {
-				handle_compile_error("Arithmetic is not supported for INST values", ctx);
+				report_semantic_error("Arithmetic is not supported for INST values", ctx);
 			}
 			if (op == "-" && type_strict_equal(res_type, Type::T_STR)) {
-				handle_compile_error("Subtraction not supported for STR", ctx);
+				report_semantic_error("Subtraction not supported for STR", ctx);
 			}
 			if (op == "-" && !type_compatible(res_type, Type::T_NUM)) {
-				handle_compile_error("Add expr only supporte NUM", ctx);
+				report_semantic_error("Add expr only supporte NUM", ctx);
 			}
 
 			left = {
@@ -397,7 +406,7 @@ private:
 					Val rv = r(self, ctx);
 					if (o == "+") return lv + rv;
 					if (o == "-") return lv - rv;
-					throw RuntimeError(std::format("Unknown operation: {}", o));
+					throw PARuntimeError(std::format("Unknown operation: {}", o));
 				},
 				res_type
 			};
@@ -432,13 +441,13 @@ private:
 			// 左右式类别检查
 			if (!type_compatible(left.type, right.type)) {
 				auto err = std::format("Mul/Div type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 			Type res_type = left.type & right.type; // 获取运算结果类别
 
 			// 只允许数值类型
 			if (!type_compatible(res_type, Type::T_NUM)) {
-				handle_compile_error("Mul/Div requires NUM operands", ctx);
+				report_semantic_error("Mul/Div requires NUM operands", ctx);
 			}
 
 			left = {
@@ -448,7 +457,7 @@ private:
 					Val rv = r(self, ctx);
 					if (o == "*") return lv * rv;
 					if (o == "/") return lv / rv;
-					throw RuntimeError(std::format("Unknown operation: {}", o));
+					throw PARuntimeError(std::format("Unknown operation: {}", o));
 				},
 				res_type
 			};
@@ -473,7 +482,7 @@ private:
 		if (op == "-") {
 			if (!type_compatible(rhs.type, Type::T_NUM)) {
 				auto err = std::format("Unary minus requires NUM operand, got {}", type_name(rhs.type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 
 			return {
@@ -486,7 +495,7 @@ private:
 		}
 
 		auto err = std::format("Unknown unary operation: {}", op);
-		handle_compile_error(err, ctx);
+		report_internal_error(err, ctx);
 	}
 
 	/**
@@ -516,7 +525,7 @@ private:
 			return {
 				[](const Instance& self, EvaluationContext&) -> Val {
 					if (self.cls() == "__DUMMY") {
-						throw RuntimeError("SELF is unavailable outside an instance context");
+						throw PARuntimeError("SELF is unavailable outside an instance context");
 					}
 					return Val(self);
 				},
@@ -545,7 +554,7 @@ private:
 		}
 
 		auto err = std::format("Unknown primary item {}", ctx->getText());
-		handle_compile_error(err, ctx);
+		report_internal_error(err, ctx);
 	}
 
 	/**
@@ -609,7 +618,7 @@ private:
 
 		// 获取定义类型类型，否则报错
 		if ((m_type_scope && m_type_scope->lookup(var, var_type)) == false) {
-			handle_compile_error(std::format("Undefined varable: {}", var), ctx);
+			report_semantic_error(std::format("Undefined variable: {}", var), ctx);
 		}
 
 		return {
@@ -667,7 +676,7 @@ private:
 		if (auto* var = dynamic_cast<::PostAnvilParser::VarInstanceAttrContext*>(ctx)) {
 			auto identifiers = var->IDENTIFIER();
 			if (identifiers.size() < 2) {
-				handle_compile_error("Invalid VarInstanceAttr syntax, missing identifier", ctx);
+				report_internal_error("Invalid VarInstanceAttr syntax, missing identifier", ctx);
 			}
 
 			auto object = utils::get_upper_text(identifiers[0]);
@@ -685,11 +694,11 @@ private:
 
 			Type object_type = Type::T_ANY;
 			if (!m_type_scope || !m_type_scope->lookup(object, object_type)) {
-				handle_compile_error(std::format("Undefined object variable: {}", object), ctx);
+				report_semantic_error(std::format("Undefined object variable: {}", object), ctx);
 			}
 			if (!type_compatible(object_type, Type::T_INST) &&
 				!type_compatible(object_type, Type::T_STR)) {
-				handle_compile_error(std::format(
+				report_semantic_error(std::format(
 					"Property access requires INST or STR, got {}", type_name(object_type)), ctx);
 			}
 
@@ -704,7 +713,7 @@ private:
 						utils::to_upper_inplace(cls_name);
 						return ctx.scene.get_cls_prop(cls_name, prop);
 					}
-					throw RuntimeError(std::format(
+					throw PARuntimeError(std::format(
 						"Property access on '{}' requires INST or STR, got {}",
 						object, type_name(object_val.type())));
 				},
@@ -757,11 +766,11 @@ private:
 
 			Type object_type = Type::T_ANY;
 			if (!m_type_scope || !m_type_scope->lookup(object, object_type)) {
-				handle_compile_error(std::format("Undefined object variable: {}", object), ctx);
+				report_semantic_error(std::format("Undefined object variable: {}", object), ctx);
 			}
 			if (!type_compatible(object_type, Type::T_INST) &&
 				!type_compatible(object_type, Type::T_STR)) {
-				handle_compile_error(std::format(
+				report_semantic_error(std::format(
 					"Dynamic property access requires INST or STR object, got {}", type_name(object_type)), ctx);
 			}
 
@@ -778,7 +787,7 @@ private:
 						utils::to_upper_inplace(cls_name);
 						return ctx.scene.get_cls_prop(cls_name, prop);
 					}
-					throw RuntimeError(std::format(
+					throw PARuntimeError(std::format(
 						"Dynamic property access on '{}' requires INST or STR, got {}",
 						object, type_name(object_val.type())));
 				},
@@ -787,7 +796,7 @@ private:
 		}
 
 		// 无法识别的属性访问节点类型
-		handle_compile_error("Unknown AttributeContext node type", ctx);
+		report_internal_error("Unknown AttributeContext node type", ctx);
 	}
 
 	/**
@@ -812,20 +821,20 @@ private:
 			ret_type = it->second.ret_type;
 			const auto& param_types = it->second.param_types;
 			if (arg_exprs.size() != param_types.size()) {
-				handle_compile_error(std::format(
+				report_semantic_error(std::format(
 					"Function '{}' expects {} arguments, got {}",
 					func_name, param_types.size(), arg_exprs.size()), ctx);
 			}
 			for (size_t i = 0; i < arg_exprs.size(); ++i) {
 				if (!type_compatible(param_types[i], arg_exprs[i].type)) {
-					handle_compile_error(std::format(
+					report_semantic_error(std::format(
 						"Function '{}' argument {} expects {}, got {}",
 						func_name, i + 1, type_name(param_types[i]), type_name(arg_exprs[i].type)), ctx);
 				}
 			}
 		}
 		else {
-			handle_compile_error(std::format("Undefined function: '{}'", func_name), ctx);
+			report_semantic_error(std::format("Undefined function: '{}'", func_name), ctx);
 		}
 
 		return {
@@ -833,7 +842,7 @@ private:
 			(const Instance& self, EvaluationContext& ctx) -> Val {
 				auto it = ctx.functions.find(func_name);
 				if (it == ctx.functions.end()) {
-					throw RuntimeError(std::format("Undefined function: '{}'", func_name));
+					throw PARuntimeError(std::format("Undefined function: '{}'", func_name));
 				}
 				const auto& compiled_func = it->second;
 
@@ -862,7 +871,7 @@ private:
 		if (ctx->LE()) return "<=";
 		if (ctx->EQ()) return "==";
 		if (ctx->NE()) return "!=";
-		handle_compile_error("Unknown comp op, expected: >,<,>=,<=,==,!=", ctx);
+		report_internal_error("Unknown comp op, expected: >,<,>=,<=,==,!=", ctx);
 	}
 
 	/**
@@ -871,7 +880,7 @@ private:
 	static std::string getAddOp(::PostAnvilParser::Add_opContext* ctx) {
 		if (ctx->PLUS())  return "+";
 		if (ctx->MINUS()) return "-";
-		return "";
+		report_internal_error("Unknown add op, expected '+' or '-'", ctx);
 	}
 
 	/**
@@ -880,9 +889,19 @@ private:
 	static std::string getMulOp(::PostAnvilParser::Mul_opContext* ctx) {
 		if (ctx->STAR())  return "*";
 		if (ctx->SLASH()) return "/";
-		return "";
+		report_internal_error("Unknown mul op, expected '*' or '/'", ctx);
 	}
 
+	/**
+	 * @brief 函数注册表指针，由主编译器设置
+	 * @details 用于编译函数调用时查找已定义的函数体
+	 */
+	detail::str_map<FunctionInfo>* functions = nullptr;
+
+	/**
+	 * @brief 变量符号表，由主编译器设置
+	 */
+	detail::ScopeChain<Type>* m_type_scope = nullptr;
 };
 
 } // namespace postanvil

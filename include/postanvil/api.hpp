@@ -42,7 +42,7 @@ private:
 /** @brief PostAnvil DSL 编译入口。 */
 class POSTANVIL_API Compiler {
 public:
-	/** @throws CompileError 源代码存在词法、语法或语义错误。 */
+	/** @throws PACompileError 源代码存在词法、语法或语义错误。 */
 	[[nodiscard]] Program compile(std::string_view source) const;
 };
 

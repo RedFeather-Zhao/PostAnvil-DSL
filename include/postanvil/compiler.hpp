@@ -31,20 +31,87 @@ namespace postanvil {
 struct PostAnvilErrorListener : public antlr4::BaseErrorListener {
 	struct Error {
 		int line;				// 错误所在行号
-		int col;				// 错误所在列号
-		std::string message;	// 错误描述
+		int column;				// 从 1 开始的错误列号
+		std::string offending_text;
+		std::string raw_message;
+	};
+	struct FriendlyError {
+		std::string message;
+		std::string hint;
 	};
 
 	std::vector<Error> errors;	// 收集到的所有错误
 
-	void syntaxError(antlr4::Recognizer* /*recognizer*/, antlr4::Token* /*offendingSymbol*/,
-		size_t line, size_t charPositionInLine,
-		const std::string& msg, std::exception_ptr /*e*/) override
+	void syntaxError		(antlr4::Recognizer* /*recognizer*/,
+							 antlr4::Token* offendingSymbol,
+							 size_t line, size_t charPositionInLine,
+							 const std::string& msg, std::exception_ptr /*e*/) override
 	{
-		errors.emplace_back(static_cast<int>(line), static_cast<int>(charPositionInLine), msg);
+		errors.push_back({
+			static_cast<int>(line),
+			static_cast<int>(charPositionInLine) + 1,
+			offendingSymbol ? offendingSymbol->getText() : std::string{},
+			msg
+		});
 	}
 
 	bool hasErrors() const { return !errors.empty(); }
+
+	static FriendlyError explain(const Error& error) {
+		const auto& token = error.offending_text;
+		const auto& raw = error.raw_message;
+		auto normalized_token = token;
+		utils::to_upper_inplace(normalized_token);
+
+		if (normalized_token == "OR" || normalized_token == "AND") {
+			return {
+				std::format("Logical operator '{}' cannot start a new statement.", token),
+				"Move the operator to the previous line, or end the previous line with '\\' to continue the expression."
+			};
+		}
+		if (normalized_token == "ENDIF") {
+			return { "Unexpected token 'ENDIF'.", "PostAnvil closes an IF block with IFEND." };
+		}
+		if (normalized_token == "ENDFOR") {
+			return { "Unexpected token 'ENDFOR'.", "PostAnvil closes a FOR block with FOREND." };
+		}
+		if (token == "<EOF>") {
+			return {
+				"Unexpected end of input.",
+				"Check for a missing ')', IFEND, FOREND, or RULEEND before the end of the script."
+			};
+		}
+
+		const bool is_newline = token == "\n" || token == "\r\n";
+		if (is_newline && raw.find("':'") != std::string::npos) {
+			return { "Expected ':' before the end of the line.", "Add ':' after the rule header." };
+		}
+		if (is_newline) {
+			return {
+				"Unexpected end of line.",
+				"Complete the statement on this line, or use '\\' at the end of the line to continue it."
+			};
+		}
+		if (raw.find("token recognition error") != std::string::npos) {
+			return {
+				"The input contains an unrecognized character or token.",
+				"Check spelling, quotes, and supported PostAnvil operators near the marked column."
+			};
+		}
+
+		std::string hint = "Check the statement structure and keyword spelling near the marked token.";
+		if (raw.find("RULEEND") != std::string::npos) {
+			hint = "Close each RULE block with RULEEND and keep statements inside the block.";
+		}
+		else if (raw.find("NEWLINE") != std::string::npos) {
+			hint = "Put each declaration or statement on its own line.";
+		}
+
+		if (!token.empty()) {
+			return { std::format("Unexpected token '{}'.", token), std::move(hint) };
+		}
+		return { "The source cannot be parsed near this position.", std::move(hint) };
+	}
 };
 
 // ====================== PostAnvilCompiler =========================
@@ -72,6 +139,104 @@ struct PostAnvilErrorListener : public antlr4::BaseErrorListener {
  * - 运行时使用 Val 多态值传递数据
  */
 class PostAnvilCompiler : public ::PostAnvilBaseListener {
+	/**
+	 * @brief 报告语法错误，抛出 PACompileError-Syntax 异常
+	 *
+	 * @param source - DSL 源代码文本
+	 * @param errors - 收集到的语法错误列表，仅对首个错误进行源码定位，后续错误仅附加提示
+	 */
+	[[noreturn]] static inline void
+	report_syntax_error				(std::string_view source,
+									 const std::vector<PostAnvilErrorListener::Error>& errors)
+	{
+		std::string combined_msg;
+		std::string combined_hint;
+		SourceLocation first_loc;
+		bool first = true;
+
+		for (const auto& err : errors) {
+			auto friendly = PostAnvilErrorListener::explain(err);
+			auto loc = PostAnvilError::locate_source(source, err.line, err.column);
+
+			if (first) {
+				first_loc = loc;
+				combined_hint = friendly.hint;
+				first = false;
+			}
+
+			combined_msg += std::format(
+				"Error at line {}, column {}: {}\n  {}\n",
+				err.line, err.column,
+				friendly.message,
+				friendly.hint
+			);
+		}
+
+		if (errors.size() > 1) {
+			combined_msg += std::format(
+				"Total {} parser errors. Fix the first error first.\n",
+				errors.size()
+			);
+			combined_hint += std::format(
+				" Fix this first error before reviewing the {} following parser error(s).",
+				errors.size() - 1
+			);
+		}
+
+		throw PACompileError(
+			PACompileError::Kind::Syntax,
+			std::move(combined_msg),
+			first_loc,
+			std::move(combined_hint),
+			errors.front().raw_message
+		);
+	}
+
+	[[noreturn]] static inline void
+	throw_compile_error				(PACompileError::Kind kind,
+									 std::string_view msg,
+									 const ::antlr4::ParserRuleContext* ctx = nullptr)
+	{
+		if (!ctx) {
+			throw PACompileError(kind, std::string(msg));
+		}
+		auto start = ctx->getStart();
+		throw PACompileError(
+			kind,
+			std::string(msg),
+			SourceLocation{
+				static_cast<int>(start->getLine()),
+				static_cast<int>(start->getCharPositionInLine()) + 1,
+				std::nullopt
+			}
+		);
+	}
+
+	/**
+	 * @brief 报告语义错误，抛出 PACompileError-Semantic 异常
+	 *
+	 * @param msg - 错误消息
+	 * @param ctx - 解析树上下文
+	 */
+	[[noreturn]] static inline void
+	report_semantic_error			(std::string_view msg,
+									 const ::antlr4::ParserRuleContext* ctx)
+	{
+		throw_compile_error(PACompileError::Kind::Semantic, msg, ctx);
+	}
+
+	/**
+	 * @brief 报告内部错误，抛出 PACompileError-Internal 异常
+	 *
+	 * @param msg - 错误消息
+	 */
+	[[noreturn]] static inline void
+	report_internal_error			(std::string_view msg,
+									 const ::antlr4::ParserRuleContext* ctx)
+	{
+		throw_compile_error(PACompileError::Kind::Internal, msg, ctx);
+	}
+
 public:
 	PostAnvilCompiler() = default;
 
@@ -79,9 +244,9 @@ public:
 	 * @brief 编译 DSL 源文本
 	 * @param source DSL 源代码
 	 * @return CompiledProgram 编译结果，包含算子管道和函数表
-	 * @throws CompileError 语法错误或编译错误时抛出
+	 * @throws PACompileError 语法错误或编译错误时抛出
 	 */
-	CompiledProgram compile(const std::string& source) {
+	CompiledProgram compile(std::string_view source) {
 		// 重置编译状态
 		m_program = CompiledProgram();
 		m_current_filter.reset();
@@ -111,15 +276,24 @@ public:
 		::PostAnvilParser::ProgramContext* tree = parser.program();
 
 		if (error_listener.hasErrors()) {
-			std::string err_msg;
-			for (const auto& err : error_listener.errors) {
-				err_msg += std::format("line {} col {}: {}\n", err.line, err.col, err.message);
-			}
-			handle_compile_error(err_msg);
+			report_syntax_error(source, error_listener.errors);
 		}
 
 		// 遍历 ParseTree 构建算子管道
-		antlr4::tree::ParseTreeWalker::DEFAULT.walk(this, tree);
+		try {
+			antlr4::tree::ParseTreeWalker::DEFAULT.walk(this, tree);
+		}
+		catch (const PACompileError& error) {
+			if (error.line() > 0 && !error.has_source_line()) {
+				throw PACompileError(
+					error.kind(),
+					error.message(),
+					PostAnvilError::locate_source(source, error.line(), error.column()),
+					error.hint(),
+					error.raw_message());
+			}
+			throw;	// 转发编译错误，统一补充源码定位信息
+		}
 
 		return std::move(m_program);
 	}
@@ -186,13 +360,13 @@ private: // Listener 回调实现
 			if (!type_compatible(initExpr.type, type)) {
 				auto err = std::format("Global variable '{}' declared as {} but initialized with {}",
 					varName, type_name(type), type_name(initExpr.type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 
 			if (m_type_scope.checkup(varName)) {
 				auto err = std::format("Global variable '{}' already declared, type = {}",
 					varName, type_name(type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 			m_type_scope.set_global(varName, type);
 		}
@@ -200,14 +374,14 @@ private: // Listener 回调实现
 			// 否则为赋值，应确保类型一致
 			if (!m_type_scope.checkup(varName)) {
 				auto err = std::format("Cannot assign to undeclared global variable '{}'", varName);
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 
 			m_type_scope.lookup(varName, type);
 			if (!type_compatible(initExpr.type, type)) {
 				auto err = std::format("Global variable '{}' declared as {} but assigned with {}",
 					varName, type_name(type), type_name(initExpr.type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 		}
 
@@ -292,7 +466,7 @@ private: // Listener 回调实现
 			cls_name = utils::strip_quotes(utils::get_upper_text(cls_def->STRING()));
 		}
 		else {
-			handle_compile_error("Unknown attribute definition type", ctx);
+			report_internal_error("Unknown attribute definition type", ctx);
 		}
 
 		auto typed = m_expr_compiler.compile(ctx->expr());
@@ -356,7 +530,7 @@ private: // Listener 回调实现
 			auto typed = m_expr_compiler.compile(key_ctx->expr());
 			if (type_strict_equal(typed.type, Type::T_INST) ||
 				type_strict_equal(typed.type, Type::T_ERROR)) {
-				handle_compile_error(std::format(
+				report_semantic_error(std::format(
 					"SORT key must be NUM, STR, BOOL or ANY, got {}", type_name(typed.type)), key_ctx);
 			}
 
@@ -381,7 +555,7 @@ private: // Listener 回调实现
 		m_current_func->name = utils::get_upper_text(ctx->name);
 		if (auto it = m_program.functions.find(m_current_func->name);
 			it != m_program.functions.end() && it->second.is_builtin) {
-			handle_compile_error(std::format(
+			report_semantic_error(std::format(
 				"Function '{}' is a reserved built-in function", m_current_func->name), ctx);
 		}
 
@@ -438,7 +612,7 @@ private: // Listener 回调实现
 
 			// 返回计算值
 			if (!ctx.is_returned) {
-				throw RuntimeError("Function current branch no return!");
+				throw PARuntimeError("Function current branch no return!");
 			}
 			ctx.is_returned = false;
 			return ctx.return_value;
@@ -469,7 +643,7 @@ private: // Listener 回调实现
 		if (!type_compatible(declared, typed.type)) {
 			auto err = std::format("Local variable '{}' declared as {} but initialized with {}",
 				name, type_name(declared), type_name(typed.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 		m_type_scope.set_local(name, declared);
 
@@ -491,12 +665,12 @@ private: // Listener 回调实现
 		
 		Type existing;
 		if (!m_type_scope.lookup(name, existing)) {
-			handle_compile_error("Assignment to undeclared variable '" + name + "'", ctx);
+			report_semantic_error("Assignment to undeclared variable '" + name + "'", ctx);
 		}
 		if (!type_compatible(existing, typed.type)) {
 			auto err = std::format("Type mismatch: variable '{}' is {}, assigned {}",
 				name, type_name(existing), type_name(typed.type));
-			handle_compile_error(err, ctx);
+			report_semantic_error(err, ctx);
 		}
 		// 赋值并不改变变量类型
 
@@ -665,7 +839,7 @@ private: // Listener 回调实现
 				if (!type_compatible(declared, typed.type)) {
 					auto err = std::format("Return type mismatch: function declared {}, but returns {}",
 						type_name(declared), type_name(typed.type));
-					handle_compile_error(err, ctx);
+					report_semantic_error(err, ctx);
 				}
 			}
 			return [func = std::move(typed.func)](EvaluationContext& ctx) {
@@ -691,7 +865,7 @@ private: // Listener 回调实现
 			if (!type_compatible(declared, typed.type)) {
 				auto err = std::format("Return type mismatch: function declared {}, but returns {}",
 					type_name(declared), type_name(typed.type));
-				handle_compile_error(err, ctx);
+				report_semantic_error(err, ctx);
 			}
 		}
 
@@ -721,7 +895,7 @@ private: // Listener 回调实现
 		if (auto* retStmt = dynamic_cast<::PostAnvilParser::FuncReturnStmtContext*>(ctx)) {
 			return compileFuncReturn(retStmt);
 		}
-		handle_compile_error("Unknown func_statement type", ctx);
+		report_internal_error("Unknown func_statement type", ctx);
 	}
 
 	// ======================== Helpers ============================
@@ -732,13 +906,13 @@ private: // Listener 回调实现
 	 */
 	static Type parseType(::PostAnvilParser::TypeContext* ctx) {
 		using enum postanvil::Type;
-		if (!ctx)			handle_compile_error("Nullptr: ctx", ctx);
+		if (!ctx)			report_internal_error("ParseType called with null context", ctx);
 		if (ctx->NUM())		return T_NUM;
 		if (ctx->STR())		return T_STR;
 		if (ctx->BOOL())	return T_BOOL;
 		if (ctx->INST())	return T_INST;
 		if (ctx->ANY())		return T_ANY;
-		handle_compile_error("Error type", ctx);
+		report_internal_error("Invalid type context in parseType", ctx);
 	}
 
 private:

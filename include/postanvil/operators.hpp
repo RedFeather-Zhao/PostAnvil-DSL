@@ -93,7 +93,7 @@ struct EvaluationContext {
 		// 未找到则查找全局变量
 		auto it = scene.variables.find(name);
 		if (it == scene.variables.end()) {
-			throw RuntimeError("Undefined variable '" + name + "'");
+			throw PARuntimeError("Undefined variable '" + name + "'");
 		}
 		return it->second;
 	}
@@ -440,7 +440,7 @@ private:
 	 */
 	static int compare_key_values(const Val& lhs, const Val& rhs) {
 		if (!type_strict_equal(lhs.type(), rhs.type())) {
-			throw RuntimeError(std::format(
+			throw PARuntimeError(std::format(
 				"SORT key type mismatch: {} vs {}", type_name(lhs.type()), type_name(rhs.type())));
 		}
 
@@ -450,7 +450,7 @@ private:
 			const double a = lhs.as_num();
 			const double b = rhs.as_num();
 			if (std::isnan(a) || std::isnan(b)) {
-				throw RuntimeError("SORT key cannot be NaN");
+				throw PARuntimeError("SORT key cannot be NaN");
 			}
 			return a < b ? -1 : (a > b ? 1 : 0);
 		}
@@ -465,9 +465,9 @@ private:
 			return a == b ? 0 : (a ? 1 : -1);
 		}
 		case T_INST:
-			throw RuntimeError("SORT does not support INST keys; sort by an instance property instead");
+			throw PARuntimeError("SORT does not support INST keys; sort by an instance property instead");
 		default:
-			throw RuntimeError(std::format("SORT key has unsupported type {}", type_name(lhs.type())));
+			throw PARuntimeError(std::format("SORT key has unsupported type {}", type_name(lhs.type())));
 		}
 	}
 };
@@ -523,11 +523,11 @@ struct ImportOperator : SceneOperator {
 
 	void apply(EvaluationContext& ctx) const override {
 		if (!ctx.scene.variables.contains(local_name)) {
-			throw RuntimeError("Imported variable '" + local_name + "' not provided by host");
+			throw PARuntimeError("Imported variable '" + local_name + "' not provided by host");
 		}
 		Val const& val = ctx.scene.variables[local_name];
 		if (!type_strict_equal(val.type(), var_type)) {
-			throw RuntimeError("Imported variable '" + local_name + "' type mismatch");
+			throw PARuntimeError("Imported variable '" + local_name + "' type mismatch");
 		}
 	}
 };

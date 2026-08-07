@@ -20,9 +20,9 @@ PA_TEST(ImportsHostVariables)
 		evaluate_and_expect_counts(R"(
 			IMPORT NUM external_threshold
 			IMPORT STR target_class
-			RULE FILTER target_class:
+			RULE FILTER target_class {
 				self.conf > external_threshold
-			RULEEND
+			}
 		)", std::move(input), { { "PERSON", 1 }, { "CAR", 1 } });
 	}
 
@@ -33,21 +33,21 @@ PA_TEST(ImportsHostVariables)
 
 		evaluate_and_expect_counts(R"(
 			IMPORT NUM host_conf AS conf_threshold
-			RULE FILTER "global":
+			RULE FILTER "global" {
 				self.conf > conf_threshold
-			RULEEND
+			}
 		)", std::move(input), { { "A", 1 } });
 	}
 
 	PA_TEST(ExportsValues)
 	{
 		auto output = evaluate_and_expect_counts(R"(
-			RULE ATTR "person":
+			RULE ATTR "person" {
 				self.risk = self.conf * 2.0
-			RULEEND
-			RULE FILTER "person":
+			}
+			RULE FILTER "person" {
 				self.conf > 0.5
-			RULEEND
+			}
 			EXPORT "person".count AS person_count
 			EXPORT 1.8 AS max_risk
 		)", make_confidence_scene("PERSON", { 0.9, 0.6, 0.3 }),
@@ -66,9 +66,9 @@ PA_TEST(ImportsHostVariables)
 
 		auto output = evaluate_and_expect_counts(R"(
 			IMPORT INST anchor
-			RULE FILTER "person":
+			RULE FILTER "person" {
 				self.conf >= anchor.conf
-			RULEEND
+			}
 			EXPORT anchor AS selected_anchor
 		)", std::move(input), { { "PERSON", 1 } });
 
@@ -90,17 +90,17 @@ PA_TEST(ImportsHostVariables)
 		auto output = evaluate_and_expect_counts(R"(
 			IMPORT NUM min_conf
 			NUM area_threshold = 500
-			RULE ATTR "person":
+			RULE ATTR "person" {
 				self.risk = self.conf * 2.0
 				self.norm_area = self.arean
-			RULEEND
-			RULE FILTER "person":
+			}
+			RULE FILTER "person" {
 				self.conf > min_conf
 				self.area > area_threshold
-			RULEEND
-			RULE GROUP "high_risk" FROM "person":
+			}
+			RULE GROUP "high_risk" FROM "person" {
 				self.risk > 1.0
-			RULEEND
+			}
 			EXPORT "high_risk".count AS high_risk_count
 			EXPORT "person".count AS total_person
 		)", std::move(input), { { "PERSON", 2 }, { "HIGH_RISK", 2 } });

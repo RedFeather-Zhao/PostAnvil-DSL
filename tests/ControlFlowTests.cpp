@@ -10,24 +10,24 @@ namespace UnitTest1Basic {
 PA_TEST(NestedIfElseFunction)
 	{
 		auto output = evaluate_and_expect_counts(R"(
-			RULE FUNC risk_level(conf: NUM) -> NUM:
-				IF conf > 0.8
-					RETURN 3
-				ELSE
-					IF conf > 0.5
-						RETURN 2
-					ELSE
-						RETURN 1
-					IFEND
-				IFEND
-			RULEEND
-			RULE ATTR "person":
+			rule func risk_level(conf: num) -> num {
+				if conf > 0.8 {
+					return 3
+				} else {
+					if conf > 0.5 {
+						return 2
+					} else {
+						return 1
+					}
+				}
+			}
+			rule attr "person" {
 				self.level = risk_level(self.conf)
-			RULEEND
-			RULE FILTER "person":
+			}
+			rule filter "person" {
 				self.level >= 2
-			RULEEND
-		)", make_confidence_scene("PERSON", { 0.9, 0.6, 0.3 }),
+			}
+		)", make_confidence_scene("person", { 0.9, 0.6, 0.3 }),
 			{ { "PERSON", 2 } });
 
 		expect_num_prop(output, "PERSON", 0, "LEVEL", 3.0);
@@ -37,16 +37,16 @@ PA_TEST(NestedIfElseFunction)
 	PA_TEST(ForLoopComputesAverage)
 	{
 		auto output = evaluate(R"(
-			RULE FUNC avg_conf(cls: STR) -> NUM:
+			RULE FUNC avg_conf(cls: STR) -> NUM {
 				NUM total = 0
-				FOR obj IN cls
+				FOR obj IN cls {
 					total = total + obj.conf
-				FOREND
+				}
 				RETURN total / cls.count
-			RULEEND
-			RULE ATTR "car":
+			}
+			RULE ATTR "car" {
 				"car".avg_conf = avg_conf("car")
-			RULEEND
+			}
 		)", make_confidence_scene("CAR", { 0.9, 0.7, 0.5 }));
 
 		expect_class_num(output, "CAR", "AVG_CONF", 0.7);
@@ -55,20 +55,20 @@ PA_TEST(NestedIfElseFunction)
 	PA_TEST(ForLoopOverEmptyClass)
 	{
 		auto output = evaluate(R"(
-			RULE FUNC safe_avg(cls: STR) -> NUM:
+			RULE FUNC safe_avg(cls: STR) -> NUM {
 				NUM total = 0
-				FOR obj IN cls
+				FOR obj IN cls {
 					total = total + obj.conf
-				FOREND
-				IF cls.count == 0
+				}
+				IF cls.count == 0 {
 					RETURN 0
-				ELSE
+				} ELSE {
 					RETURN total / cls.count
-				IFEND
-			RULEEND
-			RULE ATTR "car":
+				}
+			}
+			RULE ATTR "car" {
 				"car".avg_conf = safe_avg("car")
-			RULEEND
+			}
 		)", make_scene({}));
 
 		expect_class_num(output, "CAR", "AVG_CONF", 0.0);
@@ -77,18 +77,18 @@ PA_TEST(NestedIfElseFunction)
 	PA_TEST(NestedForLoops)
 	{
 		auto output = evaluate(R"(
-			RULE FUNC sum_areas() -> NUM:
+			RULE FUNC sum_areas() -> NUM {
 				NUM total = 0
-				FOR cls IN "global"
-					FOR obj IN cls
+				FOR cls IN "global" {
+					FOR obj IN cls {
 						total = total + obj.area
-					FOREND
-				FOREND
+					}
+				}
 				RETURN total
-			RULEEND
-			RULE ATTR "global":
+			}
+			RULE ATTR "global" {
 				"global".total_area = sum_areas()
-			RULEEND
+			}
 		)", make_scene({
 			Instance("A", 0, 0, 10, 10, 0.5),
 			Instance("A", 0, 0, 20, 20, 0.5),
@@ -101,18 +101,18 @@ PA_TEST(NestedIfElseFunction)
 	PA_TEST(InstanceFunctionParameterReadsSelf)
 	{
 		auto output = evaluate(R"(
-			RULE FUNC copy_conf(item: INST) -> NUM:
+			RULE FUNC copy_conf(item: INST) -> NUM {
 				INST current_self = self
 				INST current_arg = item
-				IF current_self.conf == current_arg.conf
+				IF current_self.conf == current_arg.conf {
 					RETURN current_arg.conf
-				ELSE
+				} ELSE {
 					RETURN 0
-				IFEND
-			RULEEND
-			RULE ATTR "person":
+				}
+			}
+			RULE ATTR "person" {
 				self.copied_conf = copy_conf(self)
-			RULEEND
+			}
 		)", make_confidence_scene("PERSON", { 0.9, 0.6 }));
 
 		expect_num_prop(output, "PERSON", 0, "COPIED_CONF", 0.9);
@@ -122,22 +122,22 @@ PA_TEST(NestedIfElseFunction)
 	PA_TEST(ForInstanceCanBePassedThroughLocal)
 	{
 		auto output = evaluate(R"(
-			RULE FUNC read_conf(item: INST) -> NUM:
+			RULE FUNC read_conf(item: INST) -> NUM {
 				RETURN item.conf
-			RULEEND
-			RULE FUNC max_conf(cls: STR) -> NUM:
+			}
+			RULE FUNC max_conf(cls: STR) -> NUM {
 				NUM best = 0
-				FOR obj IN cls
+				FOR obj IN cls {
 					INST current = obj
-					IF read_conf(current) > best
+					IF read_conf(current) > best {
 						best = read_conf(current)
-					IFEND
-				FOREND
+					}
+				}
 				RETURN best
-			RULEEND
-			RULE ATTR "car":
+			}
+			RULE ATTR "car" {
 				"car".max_conf = max_conf("car")
-			RULEEND
+			}
 		)", make_confidence_scene("CAR", { 0.5, 0.95, 0.7 }));
 
 		expect_class_num(output, "CAR", "MAX_CONF", 0.95);
@@ -146,17 +146,17 @@ PA_TEST(NestedIfElseFunction)
 	PA_TEST(FunctionReturnsInstance)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FUNC first_inst(cls: STR) -> INST:
-				FOR obj IN cls
+			RULE FUNC first_inst(cls: STR) -> INST {
+				FOR obj IN cls {
 					INST selected = obj
 					RETURN selected
-				FOREND
+				}
 				RETURN self
-			RULEEND
+			}
 			INST anchor = first_inst("person")
-			RULE FILTER "person":
+			RULE FILTER "person" {
 				self.conf >= anchor.conf
-			RULEEND
+			}
 		)", make_confidence_scene("PERSON", { 0.75, 0.5 }),
 			{ { "PERSON", 1 } });
 	}
@@ -164,19 +164,19 @@ PA_TEST(NestedIfElseFunction)
 	PA_TEST(DynamicInstancePropertyAccess)
 	{
 		auto output = evaluate(R"(
-			RULE FUNC fn_avg(cls: STR, prop: STR) -> NUM:
+			RULE FUNC fn_avg(cls: STR, prop: STR) -> NUM {
 				NUM total = 0
-				FOR item IN cls
+				FOR item IN cls {
 					total = total + item.(prop)
-				FOREND
+				}
 				RETURN total / cls.count
-			RULEEND
+			}
 			NUM avg_conf = fn_avg("person", "conf")
 			NUM avg_area = fn_avg("person", "area")
-			RULE ATTR "person":
+			RULE ATTR "person" {
 				"person".avg_conf = avg_conf
 				"person".avg_area = avg_area
-			RULEEND
+			}
 		)", make_scene({
 			Instance("PERSON", 0, 0, 10, 10, 0.9),
 			Instance("PERSON", 0, 0, 20, 20, 0.7),

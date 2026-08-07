@@ -56,6 +56,14 @@
 	],
 	"buildPresets": [
 		{
+			"name": "gen-parser",
+			"displayName": "生成ANTLR文法解析器",
+			"configurePreset": "vs2026-x64",
+			"targets": [
+				"postanvil_generate_parser"
+			]
+		},
+		{
 			"name": "vs2026-debug",
 			"displayName": "VS Debug - 编译",
 			"configurePreset": "vs2026-x64",
@@ -94,14 +102,14 @@
 			"displayName": "Ninja Debug - 编译并安装",
 			"description": "安装到 out/install/debug",
 			"configurePreset": "ninja-debug",
-			"targets": ["install"]
+			"targets": [ "install" ]
 		},
 		{
 			"name": "ninja-release-install",
 			"displayName": "Ninja Release - 编译并安装",
 			"description": "安装到 out/install/release",
 			"configurePreset": "ninja-release",
-			"targets": ["install"]
+			"targets": [ "install" ]
 		},
 		{
 			"name": "vs2026-debug-install",
@@ -109,7 +117,7 @@
 			"description": "安装到 out/install/vs2026-x64",
 			"configurePreset": "vs2026-x64",
 			"configuration": "Debug",
-			"targets": ["install"]
+			"targets": [ "install" ]
 		},
 		{
 			"name": "vs2026-release-install",
@@ -117,14 +125,14 @@
 			"description": "安装到 out/install/vs2026-x64",
 			"configurePreset": "vs2026-x64",
 			"configuration": "Release",
-			"targets": ["install"]
+			"targets": [ "install" ]
 		},
 		{
 			"name": "ninja-release-package-build",
 			"displayName": "Ninja Release - 编译并打包",
 			"description": "编译 Release 并生成 ZIP/TGZ 原生开发包",
 			"configurePreset": "ninja-release",
-			"targets": ["package"]
+			"targets": [ "package" ]
 		},
 		{
 			"name": "vs2026-release-package-build",
@@ -132,7 +140,7 @@
 			"description": "编译 Release 并生成 ZIP/TGZ 原生开发包",
 			"configurePreset": "vs2026-x64",
 			"configuration": "Release",
-			"targets": ["package"]
+			"targets": [ "package" ]
 		}
 	],
 	"testPresets": [

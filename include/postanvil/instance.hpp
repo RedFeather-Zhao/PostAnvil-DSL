@@ -98,7 +98,7 @@ public:
 	 * @param name 属性名
 	 * @param value 属性值
 	 * @details 可写内置属性直接更新实例；其余名称写入动态属性表。
-	 * @throws RuntimeError 写入只读内置属性或值类型不匹配时抛出
+	 * @throws PARuntimeError 写入只读内置属性或值类型不匹配时抛出
 	 */
 	void set_prop(const std::string& name, Val value) {
 		if (name == "W")		{ set_w(value.as_num()); return; }
@@ -109,7 +109,7 @@ public:
 		if (name == "CLS")		{ set_cls(value.as_str()); return; }
 
 		if (_builtin_props.contains(name)) {
-			throw RuntimeError("Property '" + name + "' is a read-only built-in property");
+			throw PARuntimeError("Property '" + name + "' is a read-only built-in property");
 		}
 		this->m_props[name] = value;
 	}
@@ -118,23 +118,23 @@ public:
 	 * @brief 获取动态属性值
 	 * @param name 属性名
 	 * @return double 属性值
-	 * @throws RuntimeError 属性不存在时抛出
+	 * @throws PARuntimeError 属性不存在时抛出
 	 */
 	Val get_prop(const std::string& name) const {
 		if (auto it = this->m_props.find(name); it != this->m_props.end()) {
 			return it->second;
 		}
-		throw RuntimeError("Property '" + name + "' not found in instance of class '" + this->cls() + "'");
+		throw PARuntimeError("Property '" + name + "' not found in instance of class '" + this->cls() + "'");
 	}
 
 	/**
 	 * @brief 删除动态属性
 	 * @param name 属性名
-	 * @throws RuntimeError 属性不存在时抛出
+	 * @throws PARuntimeError 属性不存在时抛出
 	 */
 	void del_prop(const std::string& name) {
 		if (!this->m_props.contains(name)) {
-			throw RuntimeError("Property '" + name + "' not found in instance of class '" + this->cls() + "'");
+			throw PARuntimeError("Property '" + name + "' not found in instance of class '" + this->cls() + "'");
 		}
 		this->m_props.erase(name);
 	}

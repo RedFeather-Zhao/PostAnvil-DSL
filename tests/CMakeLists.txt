@@ -1,6 +1,7 @@
 ﻿set(POSTANVIL_TEST_SOURCES
 	ApiTests.cpp
 	BasicFilterRuleTests.cpp
+	CompileDiagnosticsTests.cpp
 	ControlFlowTests.cpp
 	IntegrationTests.cpp
 	SortFunctionTests.cpp

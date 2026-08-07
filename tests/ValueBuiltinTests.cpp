@@ -11,13 +11,13 @@ PA_TEST(StringConcatenationAndGlobalReference)
 	{
 		auto output = evaluate_and_expect_counts(R"(
 				NUM threshold = 0.5
-				RULE FUNC get_prefix() -> STR:
+				RULE FUNC get_prefix() -> STR {
 					"class_"
-				RULEEND
+				}
 				STR label = get_prefix() + "person"
-				RULE FILTER "global":
+				RULE FILTER "global" {
 					self.conf > threshold
-				RULEEND
+				}
 				EXPORT label AS generated_label
 			)",
 			make_confidence_scene("PERSON", { 0.9, 0.3 }),
@@ -32,7 +32,7 @@ PA_TEST(StringConcatenationAndGlobalReference)
 	PA_TEST(NormalizedProperties)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FILTER "obj":
+			RULE FILTER "obj" {
 				self.wn > 0.1
 				self.hn > 0.1
 				self.x1n > 0
@@ -40,7 +40,7 @@ PA_TEST(StringConcatenationAndGlobalReference)
 				self.x2n < 1.0
 				self.y2n < 1.0
 				self.arean > 0.01
-			RULEEND
+			}
 		)", make_scene({
 			Instance("OBJ", 10, 10, 60, 30, 0.5),
 			Instance("OBJ", 5, 5, 5, 5, 0.5),
@@ -52,10 +52,10 @@ PA_TEST(StringConcatenationAndGlobalReference)
 	{
 		auto output = evaluate(R"(
 			NUM test_val = 0.5
-			RULE ATTR "car":
+			RULE ATTR "car" {
 				"car".avg_conf = test_val
 				"car".total_area = 400 * 2 / 2
-			RULEEND
+			}
 		)", make_confidence_scene("CAR", { 0.9, 0.5 }));
 
 		expect_class_num(output, "CAR", "AVG_CONF", 0.5);
@@ -66,9 +66,9 @@ PA_TEST(StringConcatenationAndGlobalReference)
 	{
 		evaluate_and_expect_counts(R"(
 			STR target = "animal"
-			RULE FILTER target:
+			RULE FILTER target {
 				self.conf > 0.7
-			RULEEND
+			}
 		)", make_scene({
 			Instance("ANIMAL", 0, 0, 10, 10, 0.9),
 			Instance("ANIMAL", 0, 0, 10, 10, 0.5),
@@ -81,10 +81,10 @@ PA_TEST(StringConcatenationAndGlobalReference)
 		evaluate_and_expect_counts(R"(
 			NUM min_conf = 0.6
 			NUM min_w = 15
-			RULE FILTER "global":
+			RULE FILTER "global" {
 				self.conf > min_conf
 				self.w > min_w
-			RULEEND
+			}
 		)", make_scene({
 			Instance("A", 0, 0, 20, 20, 0.7),
 			Instance("A", 0, 0, 20, 20, 0.5),
@@ -96,10 +96,10 @@ PA_TEST(StringConcatenationAndGlobalReference)
 	{
 		evaluate_and_expect_counts(R"(
 			BOOL debug = FALSE
-			RULE FILTER "global":
+			RULE FILTER "global" {
 				debug == FALSE
 				self.conf > 0.5
-			RULEEND
+			}
 		)", make_confidence_scene("A", { 0.9, 0.3 }), { { "A", 1 } });
 	}
 
@@ -109,7 +109,7 @@ PA_TEST(StringConcatenationAndGlobalReference)
 			INST first = _INST_INDEX("box", 1)
 			INST second = _INST_ID(2)
 			INST inner = _INST_ID(3)
-			RULE ATTR "box":
+			RULE ATTR "box" {
 				"box".math = _SQRT(9) + _ABS(-2) + _POW(2, 3) + _MIN(4, 5) + _MAX(6, 5)
 				"box".rounding = _FLOOR(1.9) + _CEIL(1.1) + _ROUND(1.5)
 				"box".logs = _LOG(1) + _EXP(0) + _LOG10(100)
@@ -122,7 +122,7 @@ PA_TEST(StringConcatenationAndGlobalReference)
 				"box".overlapping = _OVERLAPS(first, second)
 				"box".contained = _CONTAINS(inner, first)
 				"box".nearby = _NEARBY(first, second, 10)
-			RULEEND
+			}
 		)", make_scene({
 			Instance("BOX", 0, 0, 10, 10, 0.9),
 			Instance("BOX", 5, 0, 20, 10, 0.8),
@@ -148,15 +148,15 @@ PA_TEST(StringConcatenationAndGlobalReference)
 		auto output = evaluate_and_expect_counts(R"(
 			INST selected_by_id = _INST_ID(2)
 			INST selected_by_index = _INST_INDEX("person", 2)
-			RULE FILTER "person":
+			RULE FILTER "person" {
 				self.id == selected_by_id.id
 				self.id == selected_by_index.id
-			RULEEND
-			RULE ATTR "person":
+			}
+			RULE ATTR "person" {
 				self.saved_id = self.id
 				self.saved_index = self.index
 				self.saved_cls = self.cls
-			RULEEND
+			}
 		)", make_confidence_scene("PERSON", { 0.4, 0.8, 0.6 }),
 			{ { "PERSON", 1 } });
 
@@ -168,13 +168,13 @@ PA_TEST(StringConcatenationAndGlobalReference)
 	PA_TEST(WritableBuiltinInstanceProperties)
 	{
 		auto output = evaluate(R"(
-			RULE ATTR "box":
+			RULE ATTR "box" {
 				self.x1 = 3
 				self.y1 = 4
 				self.w = 20
 				self.h = 30
 				self.conf = 0.75
-			RULEEND
+			}
 		)", make_confidence_scene("BOX", { 0.5 }));
 
 		const auto& box = instance_at(output, "BOX");
@@ -188,24 +188,24 @@ PA_TEST(StringConcatenationAndGlobalReference)
 	PA_TEST(MissingClassesBehaveAsEmptyCollections)
 	{
 		auto output = evaluate_and_expect_counts(R"(
-			RULE FUNC count_missing(cls: STR) -> NUM:
+			RULE FUNC count_missing(cls: STR) -> NUM {
 				NUM total = 0
-				FOR item IN cls
+				FOR item IN cls {
 					total = total + 1
-				FOREND
+				}
 				RETURN total
-			RULEEND
+			}
 			NUM missing_count = "missing".count
 			NUM iterated_count = count_missing("missing")
-			RULE GROUP "empty_group" FROM "missing":
+			RULE GROUP "empty_group" FROM "missing" {
 				TRUE
-			RULEEND
-			RULE APPEND "empty_group" FROM "also_missing":
+			}
+			RULE APPEND "empty_group" FROM "also_missing" {
 				TRUE
-			RULEEND
-			RULE ATTR "person":
+			}
+			RULE ATTR "person" {
 				self.empty_total = missing_count + iterated_count + "empty_group".count
-			RULEEND
+			}
 		)", make_confidence_scene("PERSON", { 0.9 }),
 			{ { "PERSON", 1 }, { "EMPTY_GROUP", 0 } });
 

@@ -137,7 +137,7 @@ struct Scene {
 				if (inst.id() == id) return inst;
 			}
 		}
-		throw RuntimeError(std::format("Instance id {} not found", id));
+		throw PARuntimeError(std::format("Instance id {} not found", id));
 	}
 
 	/** @brief 按类别和 1-based 实时索引获取当前实例快照。 */
@@ -145,7 +145,7 @@ struct Scene {
 		const auto index = checked_positive_integer(value, "Instance index");
 		auto it = objects.find(class_name);
 		if (it == objects.end() || index > it->second.size()) {
-			throw RuntimeError(std::format(
+			throw PARuntimeError(std::format(
 				"Instance index {} out of range for class '{}' (count {})",
 				index, class_name, it == objects.end() ? 0 : it->second.size()));
 		}
@@ -158,12 +158,12 @@ struct Scene {
 	 * @param inst			- 实例
 	 * @param prop			- 属性
 	 * @return Val			- 属性值
-	 * @throw RuntimeError	- 实例非法或属性不存在时抛出
+	 * @throw PARuntimeError	- 实例非法或属性不存在时抛出
 	 */
 	Val get_inst_prop(const Instance& inst, const std::string& prop) const {
 		// 实例非法
 		if (inst.cls() == "__DUMMY") {
-			throw RuntimeError("Try to access a dummy instance by self.*");
+			throw PARuntimeError("Try to access a dummy instance by self.*");
 		}
 
 		if (prop == "CONF")   return inst.conf();
@@ -202,7 +202,7 @@ struct Scene {
 	 * 
 	 * @param prop			- 属性名称
 	 * @return Val			- 属性值
-	 * @throw RuntimeError	- 属性不存在时抛出
+	 * @throw PARuntimeError	- 属性不存在时抛出
 	 */
 	Val get_img_prop(const std::string& prop) const {
 		if (prop == "W")		return image.width;
@@ -211,7 +211,7 @@ struct Scene {
 		if (prop == "AREA")		return image.area();
 		if (prop == "ASPECT")	return image.aspect();
 
-		throw RuntimeError("Unknown property '" + std::string(prop) + "' for image");
+		throw PARuntimeError("Unknown property '" + std::string(prop) + "' for image");
 	}
 
 	// ===================== Class =====================
@@ -222,13 +222,13 @@ struct Scene {
 	 * @param cls			- 类别名称
 	 * @param prop			- 属性名称
 	 * @return Val			- 属性值
-	 * @throw RuntimeError	- 类别或属性不存在时抛出
+	 * @throw PARuntimeError	- 类别或属性不存在时抛出
 	 */
 	Val get_cls_prop(const std::string& cls, const std::string& prop) const {
 		auto it = objects.find(cls);
 		if (it == objects.end()) {
 			if (prop == "COUNT") return 0.0;
-			throw RuntimeError("Class '" + cls + "' not found in scene");
+			throw PARuntimeError("Class '" + cls + "' not found in scene");
 		}
 
 		if (prop == "COUNT") {
@@ -242,7 +242,7 @@ struct Scene {
 			}
 		}
 
-		throw RuntimeError("Unknown property '" + prop + "' for class '" + cls + "'");
+		throw PARuntimeError("Unknown property '" + prop + "' for class '" + cls + "'");
 	}
 
 	// ===================== Import/Export =====================
@@ -264,14 +264,14 @@ struct Scene {
 	 * 
 	 * @param host_name		- 宿主端变量名
 	 * @return Val			- 值
-	 * @throw  RuntimeError	- 变量名不存在时触发
+	 * @throw  PARuntimeError	- 变量名不存在时触发
 	 */
 	Val get_export(const std::string& host_name) const {
 		auto key = "__export__" + host_name;	// 内置默认前缀
 		if (auto it = variables.find(key); it != variables.end()) {
 			return it->second;
 		}
-		throw RuntimeError("Exported value '" + host_name + "' not found");
+		throw PARuntimeError("Exported value '" + host_name + "' not found");
 	}
 
 public:
@@ -285,7 +285,7 @@ private:
 		constexpr double max_exact_dsl_integer = 9007199254740991.0; // 2^53 - 1
 		if (!std::isfinite(value) || value < 1.0 || std::trunc(value) != value ||
 			value > max_exact_dsl_integer) {
-			throw RuntimeError(std::format("{} must be a positive integer, got {}", label, value));
+			throw PARuntimeError(std::format("{} must be a positive integer, got {}", label, value));
 		}
 		return static_cast<std::uint64_t>(value);
 	}

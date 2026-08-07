@@ -1,5 +1,5 @@
-﻿
-// Generated from D:/UserProject/vsstudio/PostAnvil DSL/PostAnvil DSL/docs/PostAnvil.g4 by ANTLR 4.13.2
+
+// Generated from D:/UserProject/vsstudio/PostAnvil DSL/grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -20,6 +20,8 @@ public:
    * Visit parse trees produced by PostAnvilParser.
    */
     virtual std::any visitProgram(PostAnvilParser::ProgramContext *context) = 0;
+
+    virtual std::any visitNewlines(PostAnvilParser::NewlinesContext *context) = 0;
 
     virtual std::any visitDeclaration(PostAnvilParser::DeclarationContext *context) = 0;
 
@@ -67,11 +69,21 @@ public:
 
     virtual std::any visitIfStmt(PostAnvilParser::IfStmtContext *context) = 0;
 
+    virtual std::any visitElifBranch(PostAnvilParser::ElifBranchContext *context) = 0;
+
+    virtual std::any visitElseBranch(PostAnvilParser::ElseBranchContext *context) = 0;
+
     virtual std::any visitForStmt(PostAnvilParser::ForStmtContext *context) = 0;
 
     virtual std::any visitGroup_rule(PostAnvilParser::Group_ruleContext *context) = 0;
 
     virtual std::any visitAppend_rule(PostAnvilParser::Append_ruleContext *context) = 0;
+
+    virtual std::any visitSort_rule(PostAnvilParser::Sort_ruleContext *context) = 0;
+
+    virtual std::any visitSort_key(PostAnvilParser::Sort_keyContext *context) = 0;
+
+    virtual std::any visitDirection(PostAnvilParser::DirectionContext *context) = 0;
 
     virtual std::any visitClass_expr(PostAnvilParser::Class_exprContext *context) = 0;
 
@@ -97,13 +109,17 @@ public:
 
     virtual std::any visitFunc_call(PostAnvilParser::Func_callContext *context) = 0;
 
-    virtual std::any visitSortExpr(PostAnvilParser::SortExprContext *context) = 0;
-
     virtual std::any visitInstanceAttr(PostAnvilParser::InstanceAttrContext *context) = 0;
 
     virtual std::any visitClassAttr(PostAnvilParser::ClassAttrContext *context) = 0;
 
     virtual std::any visitVarInstanceAttr(PostAnvilParser::VarInstanceAttrContext *context) = 0;
+
+    virtual std::any visitDynamicInstanceAttr(PostAnvilParser::DynamicInstanceAttrContext *context) = 0;
+
+    virtual std::any visitDynamicClassAttr(PostAnvilParser::DynamicClassAttrContext *context) = 0;
+
+    virtual std::any visitDynamicVarAttr(PostAnvilParser::DynamicVarAttrContext *context) = 0;
 
     virtual std::any visitComp_op(PostAnvilParser::Comp_opContext *context) = 0;
 

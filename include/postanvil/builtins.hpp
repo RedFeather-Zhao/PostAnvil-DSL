@@ -51,12 +51,12 @@ make_builtin(Type ret_type,
  * @param name			- 函数名称，用于错误信息
  * @param value			- 待检查的浮点数值
  * @return double		- 返回原始值（如果有限）
- * @throw RuntimeError	- 当 value 为非有限值（无穷大或 NaN）时抛出
+ * @throw PARuntimeError	- 当 value 为非有限值（无穷大或 NaN）时抛出
  */
 inline double checked_finite(std::string_view name, double value)
 {
 	if (!std::isfinite(value)) {
-		throw RuntimeError(std::format("{} produced a non-finite result", name));
+		throw PARuntimeError(std::format("{} produced a non-finite result", name));
 	}
 	return value;
 }
@@ -95,7 +95,7 @@ inline double safe_ratio(double numerator, double denominator)
  * @param args				- 参数值列表
  * @param index				- 参数索引
  * @return const Instance&	- 对应索引的实例引用
- * @throw RuntimeError		- 当参数不是实例类型或实例为空时抛出
+ * @throw PARuntimeError		- 当参数不是实例类型或实例为空时抛出
  */
 inline const Instance& instance_arg(const std::vector<Val>& args, size_t index)
 {
@@ -140,7 +140,7 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
 			const double value = args[0].as_num();
 			if (value < 0.0) {
-				throw RuntimeError("_SQRT requires a non-negative argument");
+				throw PARuntimeError("_SQRT requires a non-negative argument");
 			}
 			return checked_finite("_SQRT", std::sqrt(value));
 		})
@@ -150,7 +150,7 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
 			const double value = args[0].as_num();
 			if (value <= 0.0) {
-				throw RuntimeError("_LOG requires a positive argument");
+				throw PARuntimeError("_LOG requires a positive argument");
 			}
 			return checked_finite("_LOG", std::log(value));
 		})
@@ -160,7 +160,7 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
 			const double value = args[0].as_num();
 			if (value <= 0.0) {
-				throw RuntimeError("_LOG10 requires a positive argument");
+				throw PARuntimeError("_LOG10 requires a positive argument");
 			}
 			return checked_finite("_LOG10", std::log10(value));
 		})
@@ -187,7 +187,7 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 			const double low = args[1].as_num();
 			const double high = args[2].as_num();
 			if (low > high) {
-				throw RuntimeError("_CLAMP requires low <= high");
+				throw PARuntimeError("_CLAMP requires low <= high");
 			}
 			return checked_finite("_CLAMP", std::clamp(value, low, high));
 		})
@@ -248,7 +248,7 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 			const auto& b = instance_arg(args, 1);
 			const double threshold = args[2].as_num();
 			if (threshold < 0.0) {
-				throw RuntimeError("_NEARBY requires a non-negative threshold");
+				throw PARuntimeError("_NEARBY requires a non-negative threshold");
 			}
 			const double dx = a.cx() - b.cx();
 			const double dy = a.cy() - b.cy();

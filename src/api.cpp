@@ -17,7 +17,7 @@ struct Program::Impl {
 
 const char* version() noexcept
 {
-	return "0.6.4";
+	return "0.7.0";
 }
 
 Program::Program(std::unique_ptr<Impl> impl) noexcept
@@ -30,7 +30,7 @@ Program::~Program() = default;
 Scene Program::evaluate(const Scene& scene) const
 {
 	if (!m_impl) {
-		throw RuntimeError("Cannot evaluate a moved-from program");
+		throw PARuntimeError("Cannot evaluate a moved-from program");
 	}
 	return m_impl->program.evaluate(scene);
 }
@@ -38,7 +38,7 @@ Scene Program::evaluate(const Scene& scene) const
 Program Compiler::compile(std::string_view source) const
 {
 	PostAnvilCompiler compiler;
-	auto compiled = compiler.compile(std::string(source));
+	auto compiled = compiler.compile(source);
 	return Program(std::make_unique<Program::Impl>(std::move(compiled)));
 }
 

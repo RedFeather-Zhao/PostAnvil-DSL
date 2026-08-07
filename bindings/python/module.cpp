@@ -29,7 +29,7 @@ py::object to_python(const Val& value)
     case Type::T_STR:  return py::str(value.as_str());
     case Type::T_BOOL: return py::bool_(value.as_bool());
     case Type::T_INST: return py::cast(*value.as_inst());
-    default: throw RuntimeError("Cannot convert an invalid PostAnvil value to Python");
+    default: throw PARuntimeError("Cannot convert an invalid PostAnvil value to Python");
     }
 }
 
@@ -40,9 +40,9 @@ PYBIND11_MODULE(_postanvil, module)
     module.doc() = "PostAnvil DSL native bindings";
     module.attr("__version__") = version();
 
-    py::register_exception<ParseError>(module, "ParseError", PyExc_RuntimeError);
-    py::register_exception<CompileError>(module, "CompileError", PyExc_RuntimeError);
-    py::register_exception<RuntimeError>(module, "RuntimeError", PyExc_RuntimeError);
+    py::register_exception<PAParseError>(module, "PAParseError", PyExc_RuntimeError);
+    py::register_exception<PACompileError>(module, "PACompileError", PyExc_RuntimeError);
+    py::register_exception<PARuntimeError>(module, "PARuntimeError", PyExc_RuntimeError);
 
     py::class_<Image>(module, "Image")
         .def(py::init<double, double, std::string>(),
@@ -89,6 +89,14 @@ PYBIND11_MODULE(_postanvil, module)
         .def("instances", [](const Scene& self, const std::string& class_name) {
             const auto it = self.objects.find(class_name);
             return it == self.objects.end() ? Instances{} : it->second;
+        })
+        .def("class_names", [](const Scene& self) {
+            std::vector<std::string> names;
+            names.reserve(self.objects.size());
+            for (const auto& [name, _] : self.objects) {
+                names.push_back(name);
+            }
+            return names;
         })
         .def("add_import", [](Scene& self, const std::string& name,
                               const py::handle& value) -> Scene& {

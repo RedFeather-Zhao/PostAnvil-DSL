@@ -10,30 +10,30 @@ namespace UnitTest1Basic {
 PA_TEST(FalseLiteralFiltersEverything)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FILTER "global":
+			RULE FILTER "global" {
 				FALSE
-			RULEEND
+			}
 		)", make_confidence_scene("A", { 0.9, 0.6 }), { { "A", 0 } });
 	}
 
 	PA_TEST(TrueLiteralKeepsEverything)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FILTER "global":
+			RULE FILTER "global" {
 				TRUE
-			RULEEND
+			}
 		)", make_confidence_scene("A", { 0.9, 0.6 }), { { "A", 2 } });
 	}
 
 	PA_TEST(SortDescendingThenFilterByLiveIndex)
 	{
 		auto output = evaluate_and_expect_counts(R"(
-			RULE SORT "person":
+			RULE SORT "person" {
 				self.area DESC
-			RULEEND
-			RULE FILTER "person":
+			}
+			RULE FILTER "person" {
 				self.index <= 1
-			RULEEND
+			}
 		)", make_scene({
 			Instance("PERSON", 0, 0, 10, 10, 0.5),
 			Instance("PERSON", 0, 0, 20, 20, 0.5),
@@ -49,10 +49,10 @@ PA_TEST(FalseLiteralFiltersEverything)
 	PA_TEST(StableMultiKeySort)
 	{
 		auto output = evaluate(R"(
-			RULE SORT "person":
+			RULE SORT "person" {
 				self.area ASC
 				self.conf DESC
-			RULEEND
+			}
 		)", make_scene({
 			Instance("PERSON", 0, 0, 10, 10, 0.5),
 			Instance("PERSON", 10, 0, 10, 10, 0.9),
@@ -72,9 +72,9 @@ PA_TEST(FalseLiteralFiltersEverything)
 	PA_TEST(SortMissingClassIsNoOp)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE SORT "missing":
+			RULE SORT "missing" {
 				self.area DESC
-			RULEEND
+			}
 		)", make_confidence_scene("PERSON", { 0.5 }),
 			{ { "PERSON", 1 }, { "MISSING", 0 } });
 	}
@@ -82,12 +82,12 @@ PA_TEST(FalseLiteralFiltersEverything)
 	PA_TEST(FunctionReturningTrue)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FUNC always_true() -> BOOL:
+			RULE FUNC always_true() -> BOOL {
 				TRUE
-			RULEEND
-			RULE FILTER "global":
+			}
+			RULE FILTER "global" {
 				always_true()
-			RULEEND
+			}
 		)", make_scene({
 			Instance("A", 0, 0, 10, 10, 0.9),
 			Instance("B", 0, 0, 10, 10, 0.3)
@@ -97,12 +97,12 @@ PA_TEST(FalseLiteralFiltersEverything)
 	PA_TEST(FunctionReturningFalse)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FUNC always_false() -> BOOL:
+			RULE FUNC always_false() -> BOOL {
 				FALSE
-			RULEEND
-			RULE FILTER "global":
+			}
+			RULE FILTER "global" {
 				always_false()
-			RULEEND
+			}
 		)", make_scene({
 			Instance("A", 0, 0, 10, 10, 0.9),
 			Instance("B", 0, 0, 10, 10, 0.3)

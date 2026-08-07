@@ -41,9 +41,9 @@ public:
 			try {
 				op->apply(ctx);
 			}
-			catch (const RuntimeError& e) {
+			catch (const PARuntimeError& e) {
 				// 错误包装，定位到算子，未来可支持定位到具体行
-				throw RuntimeError(e.what(),
+				throw PARuntimeError(e.what(),
 					static_cast<int>(i),
 					operation_kind_to_string(op->kind));
 			}

@@ -7,13 +7,13 @@ namespace UnitTest1Basic {
 PA_TEST(PublicApiVersionAndFacade)
 {
 	Microsoft::VisualStudio::CppUnitTestFramework::Assert::AreEqual(
-		std::string("0.6.4"), std::string(version()));
+		std::string("0.7.0"), std::string(version()));
 
 	Compiler compiler;
 	auto program = compiler.compile(R"(
-		RULE FILTER "person":
+		RULE FILTER "person" {
 			self.conf >= 0.5
-		RULEEND
+		}
 	)");
 
 	Scene scene(Image{ 100, 100 });

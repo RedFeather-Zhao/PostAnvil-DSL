@@ -1,5 +1,5 @@
-﻿
-// Generated from D:/UserProject/vsstudio/PostAnvil DSL/PostAnvil DSL/docs/PostAnvil.g4 by ANTLR 4.13.2
+
+// Generated from D:/UserProject/vsstudio/PostAnvil DSL/grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -16,6 +16,10 @@ class  PostAnvilBaseVisitor : public PostAnvilVisitor {
 public:
 
   virtual std::any visitProgram(PostAnvilParser::ProgramContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitNewlines(PostAnvilParser::NewlinesContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -111,6 +115,14 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitElifBranch(PostAnvilParser::ElifBranchContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitElseBranch(PostAnvilParser::ElseBranchContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitForStmt(PostAnvilParser::ForStmtContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -120,6 +132,18 @@ public:
   }
 
   virtual std::any visitAppend_rule(PostAnvilParser::Append_ruleContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitSort_rule(PostAnvilParser::Sort_ruleContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitSort_key(PostAnvilParser::Sort_keyContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDirection(PostAnvilParser::DirectionContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -171,10 +195,6 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitSortExpr(PostAnvilParser::SortExprContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitInstanceAttr(PostAnvilParser::InstanceAttrContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -184,6 +204,18 @@ public:
   }
 
   virtual std::any visitVarInstanceAttr(PostAnvilParser::VarInstanceAttrContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDynamicInstanceAttr(PostAnvilParser::DynamicInstanceAttrContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDynamicClassAttr(PostAnvilParser::DynamicClassAttrContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDynamicVarAttr(PostAnvilParser::DynamicVarAttrContext *ctx) override {
     return visitChildren(ctx);
   }
 
