@@ -34,6 +34,34 @@ PA_TEST(NestedIfElseFunction)
 		expect_num_prop(output, "PERSON", 1, "LEVEL", 2.0);
 	}
 
+	PA_TEST(MultipleElifBranchesMayStartOnNewLines)
+	{
+		auto output = evaluate(R"(
+			RULE FUNC level(conf: NUM) -> NUM {
+				IF conf > 0.9 {
+					RETURN 4
+				}
+				ELIF conf > 0.7 {
+					RETURN 3
+				}
+				ELIF conf > 0.5 {
+					RETURN 2
+				}
+				ELSE {
+					RETURN 1
+				}
+			}
+			RULE ATTR "person" {
+				self.level = level(self.conf)
+			}
+		)", make_confidence_scene("PERSON", { 0.95, 0.8, 0.6, 0.4 }));
+
+		expect_num_prop(output, "PERSON", 0, "LEVEL", 4.0);
+		expect_num_prop(output, "PERSON", 1, "LEVEL", 3.0);
+		expect_num_prop(output, "PERSON", 2, "LEVEL", 2.0);
+		expect_num_prop(output, "PERSON", 3, "LEVEL", 1.0);
+	}
+
 	PA_TEST(ForLoopComputesAverage)
 	{
 		auto output = evaluate(R"(
@@ -90,9 +118,9 @@ PA_TEST(NestedIfElseFunction)
 				"global".total_area = sum_areas()
 			}
 		)", make_scene({
-			Instance("A", 0, 0, 10, 10, 0.5),
-			Instance("A", 0, 0, 20, 20, 0.5),
-			Instance("B", 0, 0, 30, 30, 0.5)
+			make_instance("A", 0, 0, 10, 10, 0.5),
+			make_instance("A", 0, 0, 20, 20, 0.5),
+			make_instance("B", 0, 0, 30, 30, 0.5)
 		}));
 
 		expect_class_num(output, "GLOBAL", "TOTAL_AREA", 1400.0);
@@ -178,9 +206,9 @@ PA_TEST(NestedIfElseFunction)
 				"person".avg_area = avg_area
 			}
 		)", make_scene({
-			Instance("PERSON", 0, 0, 10, 10, 0.9),
-			Instance("PERSON", 0, 0, 20, 20, 0.7),
-			Instance("PERSON", 0, 0, 30, 30, 0.5)
+			make_instance("PERSON", 0, 0, 10, 10, 0.9),
+			make_instance("PERSON", 0, 0, 20, 20, 0.7),
+			make_instance("PERSON", 0, 0, 30, 30, 0.5)
 		}));
 
 		expect_class_num(output, "PERSON", "AVG_CONF", 0.7);

@@ -3,6 +3,7 @@
 	BasicFilterRuleTests.cpp
 	CompileDiagnosticsTests.cpp
 	ControlFlowTests.cpp
+	IdentityModelTests.cpp
 	IntegrationTests.cpp
 	SortFunctionTests.cpp
 	TestAttributeCollection.cpp

@@ -1,6 +1,5 @@
-#pragma once
+﻿#pragma once
 
-// 公共且稳定的依赖集中放入预编译头，缩短 49 个测试的重复解析时间。
 #include "TestFramework.hpp"
 #include <PostAnvil.h>
 

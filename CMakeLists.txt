@@ -1,6 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.25)
 
-project(PostAnvil VERSION 0.7.0 LANGUAGES CXX)
+project(PostAnvil VERSION 0.8.0 LANGUAGES CXX)
 
 include(CMakePackageConfigHelpers)      # 用于生成库的 CMake 导入配置文件
 include(GNUInstallDirs)                 # 统一跨平台安装目录规范
@@ -158,10 +158,10 @@ install(FILES   # 仅暴露必要接口
 	include/postanvil/api.hpp
 	include/postanvil/detail.hpp
 	include/postanvil/error.hpp
-	include/postanvil/export.hpp
 	include/postanvil/instance.hpp
 	include/postanvil/scene.hpp
 	include/postanvil/type.hpp
+	include/postanvil/utils.hpp
 	DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/postanvil")
 
 # 生成并安装 CMake Config 文件

@@ -1,5 +1,5 @@
 
-// Generated from D:/UserProject/vsstudio/PostAnvil DSL/grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -37,11 +37,27 @@ public:
 
     virtual std::any visitType(PostAnvilParser::TypeContext *context) = 0;
 
+    virtual std::any visitCondition_block(PostAnvilParser::Condition_blockContext *context) = 0;
+
+    virtual std::any visitAttr_block(PostAnvilParser::Attr_blockContext *context) = 0;
+
+    virtual std::any visitSort_block(PostAnvilParser::Sort_blockContext *context) = 0;
+
+    virtual std::any visitStmt_block(PostAnvilParser::Stmt_blockContext *context) = 0;
+
     virtual std::any visitRule_(PostAnvilParser::Rule_Context *context) = 0;
 
     virtual std::any visitFilter_rule(PostAnvilParser::Filter_ruleContext *context) = 0;
 
     virtual std::any visitAttr_rule(PostAnvilParser::Attr_ruleContext *context) = 0;
+
+    virtual std::any visitGroup_rule(PostAnvilParser::Group_ruleContext *context) = 0;
+
+    virtual std::any visitAppend_rule(PostAnvilParser::Append_ruleContext *context) = 0;
+
+    virtual std::any visitSort_rule(PostAnvilParser::Sort_ruleContext *context) = 0;
+
+    virtual std::any visitFunc_rule(PostAnvilParser::Func_ruleContext *context) = 0;
 
     virtual std::any visitAttr_def(PostAnvilParser::Attr_defContext *context) = 0;
 
@@ -49,37 +65,31 @@ public:
 
     virtual std::any visitClassAttrDef(PostAnvilParser::ClassAttrDefContext *context) = 0;
 
-    virtual std::any visitFunc_rule(PostAnvilParser::Func_ruleContext *context) = 0;
-
     virtual std::any visitTyped_params(PostAnvilParser::Typed_paramsContext *context) = 0;
 
     virtual std::any visitTyped_param(PostAnvilParser::Typed_paramContext *context) = 0;
 
-    virtual std::any visitFuncVarDef(PostAnvilParser::FuncVarDefContext *context) = 0;
+    virtual std::any visitStmtVarDef(PostAnvilParser::StmtVarDefContext *context) = 0;
 
-    virtual std::any visitFuncAssign(PostAnvilParser::FuncAssignContext *context) = 0;
+    virtual std::any visitStmtAssign(PostAnvilParser::StmtAssignContext *context) = 0;
 
-    virtual std::any visitFuncIfStmt(PostAnvilParser::FuncIfStmtContext *context) = 0;
+    virtual std::any visitStmtIf(PostAnvilParser::StmtIfContext *context) = 0;
 
-    virtual std::any visitFuncForStmt(PostAnvilParser::FuncForStmtContext *context) = 0;
+    virtual std::any visitStmtFor(PostAnvilParser::StmtForContext *context) = 0;
 
-    virtual std::any visitFuncExprStmt(PostAnvilParser::FuncExprStmtContext *context) = 0;
+    virtual std::any visitStmtExpr(PostAnvilParser::StmtExprContext *context) = 0;
 
-    virtual std::any visitFuncReturnStmt(PostAnvilParser::FuncReturnStmtContext *context) = 0;
+    virtual std::any visitStmtReturn(PostAnvilParser::StmtReturnContext *context) = 0;
 
     virtual std::any visitIfStmt(PostAnvilParser::IfStmtContext *context) = 0;
+
+    virtual std::any visitIfBranch(PostAnvilParser::IfBranchContext *context) = 0;
 
     virtual std::any visitElifBranch(PostAnvilParser::ElifBranchContext *context) = 0;
 
     virtual std::any visitElseBranch(PostAnvilParser::ElseBranchContext *context) = 0;
 
     virtual std::any visitForStmt(PostAnvilParser::ForStmtContext *context) = 0;
-
-    virtual std::any visitGroup_rule(PostAnvilParser::Group_ruleContext *context) = 0;
-
-    virtual std::any visitAppend_rule(PostAnvilParser::Append_ruleContext *context) = 0;
-
-    virtual std::any visitSort_rule(PostAnvilParser::Sort_ruleContext *context) = 0;
 
     virtual std::any visitSort_key(PostAnvilParser::Sort_keyContext *context) = 0;
 

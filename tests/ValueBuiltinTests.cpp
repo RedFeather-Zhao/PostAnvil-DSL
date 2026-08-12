@@ -42,9 +42,9 @@ PA_TEST(StringConcatenationAndGlobalReference)
 				self.arean > 0.01
 			}
 		)", make_scene({
-			Instance("OBJ", 10, 10, 60, 30, 0.5),
-			Instance("OBJ", 5, 5, 5, 5, 0.5),
-			Instance("OBJ", 0, 0, 200, 100, 0.5)
+			make_instance("OBJ", 10, 10, 60, 30, 0.5),
+			make_instance("OBJ", 5, 5, 5, 5, 0.5),
+			make_instance("OBJ", 0, 0, 200, 100, 0.5)
 		}, { 200, 100 }), { { "OBJ", 1 } });
 	}
 
@@ -70,9 +70,9 @@ PA_TEST(StringConcatenationAndGlobalReference)
 				self.conf > 0.7
 			}
 		)", make_scene({
-			Instance("ANIMAL", 0, 0, 10, 10, 0.9),
-			Instance("ANIMAL", 0, 0, 10, 10, 0.5),
-			Instance("CAR", 0, 0, 10, 10, 0.9)
+			make_instance("ANIMAL", 0, 0, 10, 10, 0.9),
+			make_instance("ANIMAL", 0, 0, 10, 10, 0.5),
+			make_instance("CAR", 0, 0, 10, 10, 0.9)
 		}), { { "ANIMAL", 1 }, { "CAR", 1 } });
 	}
 
@@ -86,9 +86,9 @@ PA_TEST(StringConcatenationAndGlobalReference)
 				self.w > min_w
 			}
 		)", make_scene({
-			Instance("A", 0, 0, 20, 20, 0.7),
-			Instance("A", 0, 0, 20, 20, 0.5),
-			Instance("A", 0, 0, 10, 20, 0.7)
+			make_instance("A", 0, 0, 20, 20, 0.7),
+			make_instance("A", 0, 0, 20, 20, 0.5),
+			make_instance("A", 0, 0, 10, 20, 0.7)
 		}), { { "A", 1 } });
 	}
 
@@ -116,17 +116,17 @@ PA_TEST(StringConcatenationAndGlobalReference)
 				"box".clamped = _CLAMP(12, 0, 10)
 				"box".intersection = _INTER_AREA(first, second)
 				"box".iou = _IOU(first, second)
-				"box".over_a = _OVERLAP_A(first, second)
-				"box".over_b = _OVERLAP_B(first, second)
+				"box".iof = _IOF(first, second)
+				"box".ios = _IOS(first, second)
 				"box".distance = _DISTANCE(first, second)
 				"box".overlapping = _OVERLAPS(first, second)
 				"box".contained = _CONTAINS(inner, first)
 				"box".nearby = _NEARBY(first, second, 10)
 			}
 		)", make_scene({
-			Instance("BOX", 0, 0, 10, 10, 0.9),
-			Instance("BOX", 5, 0, 20, 10, 0.8),
-			Instance("BOX", 2, 2, 2, 2, 0.7)
+			make_instance("BOX", 0, 0, 10, 10, 0.9),
+			make_instance("BOX", 5, 0, 20, 10, 0.8),
+			make_instance("BOX", 2, 2, 2, 2, 0.7)
 		}));
 
 		expect_class_num(output, "BOX", "MATH", 23.0);
@@ -135,8 +135,8 @@ PA_TEST(StringConcatenationAndGlobalReference)
 		expect_class_num(output, "BOX", "CLAMPED", 10.0);
 		expect_class_num(output, "BOX", "INTERSECTION", 50.0);
 		expect_class_num(output, "BOX", "IOU", 0.2);
-		expect_class_num(output, "BOX", "OVER_A", 0.5);
-		expect_class_num(output, "BOX", "OVER_B", 0.25);
+		expect_class_num(output, "BOX", "IOF", 0.5);
+		expect_class_num(output, "BOX", "IOS", 0.25);
 		expect_class_num(output, "BOX", "DISTANCE", 10.0);
 		expect_class_bool(output, "BOX", "OVERLAPPING", true);
 		expect_class_bool(output, "BOX", "CONTAINED", true);

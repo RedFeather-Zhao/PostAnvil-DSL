@@ -17,6 +17,22 @@
 			}
 		},
 		{
+			"name": "android-base",
+			"hidden": true,
+			"generator": "Ninja",
+			"toolchainFile": "${sourceDir}/cmake/PostAnvilAndroidToolchain.cmake",
+			"cacheVariables": {
+				"CMAKE_CXX_STANDARD": "20",
+				"ANDROID_PLATFORM": "android-32",
+				"ANDROID_STL": "c++_static",
+				"POSTANVIL_BUILD_STATIC": "ON",
+				"POSTANVIL_BUILD_SHARED": "OFF",
+				"POSTANVIL_BUILD_TESTS": "OFF",
+				"POSTANVIL_BUILD_PYTHON": "OFF",
+				"POSTANVIL_BUILD_ANDROID_JNI": "ON"
+			}
+		},
+		{
 			"name": "vs2026-x64",
 			"displayName": "Visual Studio 2026 x64",
 			"description": "生成可在 Visual Studio 中打开的多配置解决方案",
@@ -52,6 +68,54 @@
 				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/release",
 				"POSTANVIL_BUILD_TESTS": "OFF"
 			}
+		},
+		{
+			"name": "android-arm64-debug",
+			"displayName": "Android arm64-v8a Debug",
+			"description": "使用 Android NDK 构建 arm64-v8a JNI 调试库",
+			"inherits": "android-base",
+			"binaryDir": "${sourceDir}/out/build/android-arm64-debug",
+			"cacheVariables": {
+				"ANDROID_ABI": "arm64-v8a",
+				"CMAKE_BUILD_TYPE": "Debug",
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/android-debug/arm64-v8a"
+			}
+		},
+		{
+			"name": "android-arm64-release",
+			"displayName": "Android arm64-v8a Release",
+			"description": "使用 Android NDK 构建 arm64-v8a JNI 发布库",
+			"inherits": "android-base",
+			"binaryDir": "${sourceDir}/out/build/android-arm64-release",
+			"cacheVariables": {
+				"ANDROID_ABI": "arm64-v8a",
+				"CMAKE_BUILD_TYPE": "Release",
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/android-release/arm64-v8a"
+			}
+		},
+		{
+			"name": "android-armv7-debug",
+			"displayName": "Android armeabi-v7a Debug",
+			"description": "使用 Android NDK 构建 armeabi-v7a JNI 调试库",
+			"inherits": "android-base",
+			"binaryDir": "${sourceDir}/out/build/android-armv7-debug",
+			"cacheVariables": {
+				"ANDROID_ABI": "armeabi-v7a",
+				"CMAKE_BUILD_TYPE": "Debug",
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/android-debug/armeabi-v7a"
+			}
+		},
+		{
+			"name": "android-armv7-release",
+			"displayName": "Android armeabi-v7a Release",
+			"description": "使用 Android NDK 构建 armeabi-v7a JNI 发布库",
+			"inherits": "android-base",
+			"binaryDir": "${sourceDir}/out/build/android-armv7-release",
+			"cacheVariables": {
+				"ANDROID_ABI": "armeabi-v7a",
+				"CMAKE_BUILD_TYPE": "Release",
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/android-release/armeabi-v7a"
+			}
 		}
 	],
 	"buildPresets": [
@@ -84,6 +148,44 @@
 			"name": "ninja-release",
 			"displayName": "Ninja Release - 编译",
 			"configurePreset": "ninja-release"
+		},
+		{
+			"name": "android-arm64-debug",
+			"displayName": "Android arm64-v8a Debug - 编译 JNI",
+			"configurePreset": "android-arm64-debug",
+			"targets": [ "postanvil_jni" ]
+		},
+		{
+			"name": "android-arm64-release",
+			"displayName": "Android arm64-v8a Release - 编译 JNI",
+			"configurePreset": "android-arm64-release",
+			"targets": [ "postanvil_jni" ]
+		},
+		{
+			"name": "android-arm64-release-install",
+			"displayName": "Android arm64-v8a Release - 编译并安装精简产物",
+			"description": "剥离调试符号并安装到 out/install/android-release/arm64-v8a",
+			"configurePreset": "android-arm64-release",
+			"targets": [ "install/strip" ]
+		},
+		{
+			"name": "android-armv7-debug",
+			"displayName": "Android armeabi-v7a Debug - 编译 JNI",
+			"configurePreset": "android-armv7-debug",
+			"targets": [ "postanvil_jni" ]
+		},
+		{
+			"name": "android-armv7-release",
+			"displayName": "Android armeabi-v7a Release - 编译 JNI",
+			"configurePreset": "android-armv7-release",
+			"targets": [ "postanvil_jni" ]
+		},
+		{
+			"name": "android-armv7-release-install",
+			"displayName": "Android armeabi-v7a Release - 编译并安装精简产物",
+			"description": "剥离调试符号并安装到 out/install/android-release/armeabi-v7a",
+			"configurePreset": "android-armv7-release",
+			"targets": [ "install/strip" ]
 		},
 		{
 			"name": "ninja-debug-rebuild",

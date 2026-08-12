@@ -54,9 +54,9 @@ class FakeResult:
 program = postanvil.compile(
     '''
     IMPORT NUM min_conf
-    RULE FILTER "global":
+    RULE FILTER "global" {
         self.conf >= min_conf
-    RULEEND
+    }
     '''
 )
 
@@ -75,9 +75,12 @@ assert tracked.boxes.data.values == [[1.0, 2.0, 6.0, 8.0, 42.0, 0.8, 0.0]]
 
 group_program = postanvil.compile(
     '''
-    RULE GROUP "selected" FROM "person":
+    RULE GROUP "selected" FROM "person" {
         TRUE
-    RULEEND
+    }
+	RULE FILTER "person" {
+		FALSE
+	}
     '''
 )
 new_class_result = FakeResult([[1, 2, 6, 8, 0.8, 0]])

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <exception>
 #include <functional>
 #include <iostream>
@@ -22,21 +23,22 @@
 
 namespace postanvil::test::framework {
 
+inline bool no_color_requested() noexcept {
+#ifdef _WIN32
+	char* value = nullptr;
+	std::size_t size = 0;
+	const auto error = _dupenv_s(&value, &size, "NO_COLOR");
+	const auto requested = error == 0 && value && value[0] != '\0';
+	std::free(value);
+	return requested;
+#else
+	const auto* value = std::getenv("NO_COLOR");
+	return value && value[0] != '\0';
+#endif
+}
+
 inline bool should_use_color() {
-	static bool init = false;
-	static bool use = false;
-	if (!init) {
-		init = true;
-		// 若 NO_COLOR 环境变量存在，则禁用颜色
-		const char* no_color = std::getenv("NO_COLOR");
-		if (no_color && no_color[0] != '\0') {
-			use = false;
-		}
-		else {
-			// 检查 stdout 是否为终端
-			use = isatty(fileno(stdout)) != 0;
-		}
-	}
+	static const bool use = !no_color_requested() && isatty(fileno(stdout)) != 0;
 	return use;
 }
 

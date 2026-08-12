@@ -1,5 +1,5 @@
 ﻿/**
- * @file   value.hpp
+ * @file   type.hpp
  * @brief  PostAnvil 类型系统、值类型及表达式闭包定义
  *
  * @author RedFeather-Zhao
@@ -10,11 +10,13 @@
 #pragma once
 
 #include <functional>
-#include <variant>
-#include <string>
-#include <stdexcept>
 #include <compare>
-#include <memory>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <variant>
 
 #include "error.hpp"
 
@@ -22,6 +24,27 @@ namespace postanvil {
 
 class Instance;
 struct Scene;
+
+using InstanceId = std::size_t;
+
+/**
+ * @brief Scene 内实例的轻量句柄
+ * @details id 用于定位实例；cls_name 表示本次访问的类别上下文。
+ *          按 ID 查询的句柄没有 cls_name。
+ */
+struct InstanceHandle {
+	InstanceId id = 0;
+	std::optional<std::string> cls_name;
+
+	[[nodiscard]]
+	explicit operator bool() const noexcept {
+		return id != 0;
+	}
+
+	bool operator==(const InstanceHandle& other) const noexcept {
+		return id == other.id;
+	}
+};
 
 /**
  * @brief DSL 编译期类型掩码枚举，描述表达式值类型
@@ -137,21 +160,18 @@ template<typename T>
 concept ValAllowedType = std::is_same_v<std::decay_t<T>, double>
 					  || std::is_same_v<std::decay_t<T>, bool>
 					  || std::is_same_v<std::decay_t<T>, std::string>
-					  || std::is_same_v<std::decay_t<T>, std::shared_ptr<Instance>>
+					  || std::is_same_v<std::decay_t<T>, InstanceHandle>
 					  || std::is_same_v<std::decay_t<T>, const char*>;
 
 /**
- * @brief 运行时多态值，可承载数值、字符串或布尔三种类型
+ * @brief 运行时多态值，可承载数值、字符串、布尔或实例句柄
  * @details 提供类型查询和安全转换方法，类型不匹配时抛出 PARuntimeError
  */
 struct Val {
 
-	std::variant<double, std::string, bool, std::shared_ptr<Instance>> data;
+	std::variant<double, std::string, bool, InstanceHandle> data;
 
 	Val() : data(0.0) {}
-	Val(const Instance& inst) 
-		: data(std::make_shared<Instance>(inst))
-	{}
 
 	template<ValAllowedType T>
 	Val(T&& arg) noexcept(std::is_nothrow_constructible_v<decltype(data), T>)
@@ -172,16 +192,22 @@ struct Val {
 			double a = as_num();
 			double b = other.as_num();
 			double diff = a - b;
-			if (std::abs(diff) < eps)
+			if (std::abs(diff) < eps) {
 				return std::partial_ordering::equivalent;
-			if (diff < 0)
+			}
+			if (diff < 0) {
 				return std::partial_ordering::less;
+			}
 			return std::partial_ordering::greater;
 		}
-		case T_BOOL: return as_bool() <=> other.as_bool();
-		case T_STR:  return as_str() <=> other.as_str();
-		case T_INST: throw PARuntimeError("INST values cannot be compared directly");
-		default:	 throw PARuntimeError("Unknown type");
+		case T_BOOL:
+			return as_bool() <=> other.as_bool();
+		case T_STR:
+			return as_str() <=> other.as_str();
+		case T_INST:
+			throw PARuntimeError("INST values cannot be compared directly");
+		default:
+			throw PARuntimeError("Unknown type");
 		}
 	}
 
@@ -205,7 +231,10 @@ struct Val {
 				if constexpr (std::is_same_v<A, double> && std::is_same_v<B, double>) {
 					return a + b;
 				}
-				else if constexpr (std::is_same_v<A, std::string> && std::is_same_v<B, std::string>) {
+				else if constexpr (
+					std::is_same_v<A, std::string>
+					&& std::is_same_v<B, std::string>)
+				{
 					return a + b;
 				}
 				else {
@@ -243,24 +272,29 @@ struct Val {
 
 	/**
 	 * @brief 获取当前值的数据类型
+	 *
 	 * @return Type 枚举值
 	 */
 	Type type() const {
 		using enum postanvil::Type;
-		if (std::holds_alternative<double>(data))		return T_NUM;
-		if (std::holds_alternative<std::string>(data))	return T_STR;
-		if (std::holds_alternative<bool>(data))			return T_BOOL;
-		if (std::holds_alternative<std::shared_ptr<Instance>>(data)) return T_INST;
+		if (std::holds_alternative<double>(data))			return T_NUM;
+		if (std::holds_alternative<std::string>(data))		return T_STR;
+		if (std::holds_alternative<bool>(data))				return T_BOOL;
+		if (std::holds_alternative<InstanceHandle>(data))	return T_INST;
 		return T_ERROR;
 	}
 
 	/**
 	 * @brief 转换为数值类型
+	 *
 	 * @return double 值
 	 * @throws PARuntimeError 当前值非数值类型时抛出
 	 */
 	double as_num() const {
-		if (auto* p = std::get_if<double>(&data)) return *p;
+		if (const auto* value = std::get_if<double>(&data)) {
+			return *value;
+		}
+
 		throw PARuntimeError("Expected NUM, got " + std::string(type_name(type())));
 	}
 
@@ -270,29 +304,42 @@ struct Val {
 	 * @throws PARuntimeError 当前值非字符串类型时抛出
 	 */
 	std::string as_str() const {
-		if (auto* p = std::get_if<std::string>(&data)) return *p;
+		if (const auto* value = std::get_if<std::string>(&data)) {
+			return *value;
+		}
+
 		throw PARuntimeError("Expected STR, got " + std::string(type_name(type())));
 	}
 
 	/**
 	 * @brief 转换为布尔类型
+	 *
 	 * @return bool 值
 	 * @details 若当前为数值，按非零为真进行转换；若当前为字符串则抛出异常
 	 * @throws PARuntimeError 当前值非数值且非布尔类型时抛出
 	 */
 	bool as_bool() const {
-		if (auto* p = std::get_if<bool>(&data)) return *p;
-		if (auto* pn = std::get_if<double>(&data)) return *pn != 0.0;
+		if (const auto* value = std::get_if<bool>(&data)) {
+			return *value;
+		}
+		if (const auto* number = std::get_if<double>(&data)) {
+			return *number != 0.0;
+		}
+
 		throw PARuntimeError("Expected BOOL, got " + std::string(type_name(type())));
 	}
 
 	/**
-	 * @brief 获取实例快照
-	 * @return 指向不可变实例快照的共享指针
-	 * @throws PARuntimeError 当前值不是 INST 或实例为空时抛出
+	 * @brief 获取实例句柄
+	 *
+	 * @return const InstanceHandle&	- 实例句柄
+	 * @throws PARuntimeError			- 当前值不是 INST 时抛出
 	 */
-	std::shared_ptr<const Instance> as_inst() const {
-		if (auto* p = std::get_if<std::shared_ptr<Instance>>(&data); p && *p) return *p;
+	const InstanceHandle& as_inst() const {
+		if (const auto* handle = std::get_if<InstanceHandle>(&data)) {
+			return *handle;
+		}
+
 		throw PARuntimeError("Expected INST, got " + std::string(type_name(type())));
 	}
 };
@@ -302,6 +349,7 @@ struct EvaluationContext;	// 评估环境前向声明
 
 /**
  * @brief 带类型的表达式闭包函数类型
+ *
  * @param instance 当前求值的实例
  * @param scene 当前场景上下文
  * @return 表达式求值结果

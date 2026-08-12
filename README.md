@@ -1,6 +1,6 @@
 ﻿# PostAnvil CMake 工程
 
-这是 PostAnvil 0.7 的跨平台工程根目录，可独立完成构建、测试、安装、打包以及
+这是 PostAnvil 0.8 的跨平台工程根目录，可独立完成构建、测试、安装、打包以及
 Python、Android 绑定构建。0.6 及更早版本的 Visual Studio 工程仍可从 Git 历史获取。
 
 ## 当前迁移结构
@@ -15,7 +15,7 @@ PostAnvil/
 │  ├─ antlr4-runtime/src/   直接参与构建的 Runtime 4.13.2 源码
 │  └─ licenses/             第三方许可证
 ├─ tools/antlr/             ANTLR JAR 与 Runtime 原始源码 ZIP
-├─ tests/                   49 项跨平台测试与预编译头
+├─ tests/                   62 项跨平台测试与预编译头
 ├─ bindings/python/         pybind11 扩展
 ├─ bindings/android/        Android JNI 适配层
 ├─ packaging/               本地原生包构建脚本
@@ -254,13 +254,13 @@ python -m pip install "postanvil[ultralytics]"
 如果拿到的是本地 wheel 文件，在 **目标 Python 环境** 中执行：
 
 ```bash
-python -m pip install /path/to/postanvil-0.7.0-cp314-cp314-linux_x86_64.whl
+python -m pip install /path/to/postanvil-0.8.0-cp314-cp314-linux_x86_64.whl
 ```
 
 Windows PowerShell 示例：
 
 ```powershell
-python -m pip install .\downloads\postanvil-0.7.0-cp314-cp314-win_amd64.whl
+python -m pip install .\downloads\postanvil-0.8.0-cp314-cp314-win_amd64.whl
 ```
 
 wheel 文件名中的 Python ABI 和平台必须与用户环境匹配。例如，`cp314-cp314-win_amd64`
@@ -275,12 +275,18 @@ wheel 文件名中的 Python ABI 和平台必须与用户环境匹配。例如�
 ```bash
 conda create -n postanvil-build python=3.14 pip -y
 conda activate postanvil-build
-python -m pip install -U build scikit-build-core pybind11 cmake ninja
+python -m pip install -U build scikit-build-core pybind11
 ```
 
 Windows 还需要安装带“使用 C++ 的桌面开发”组件的 Visual Studio 2022 或更高版本，
 并在对应的 **x64 Native Tools Command Prompt/Developer PowerShell** 中运行构建命令。
-Linux 和 macOS 需要可用的 C++20 编译器及 Ninja。
+Windows 构建推荐直接使用 Visual Studio 自带的 CMake、Ninja 和 MSVC，不必把
+`cmake`、`ninja` 安装到 Conda 环境。Linux 和 macOS 需要可用的 C++20 编译器及 Ninja；
+若系统未提供 CMake/Ninja，可以在隔离的 Conda 构建环境中安装：
+
+```bash
+python -m pip install -U cmake ninja
+```
 
 ### 方式三：从源码构建 wheel
 
@@ -297,10 +303,43 @@ python -m build --wheel
 python -m build --wheel --no-isolation
 ```
 
+Windows 如果要求 C++ 构建完全使用 Visual Studio 自带工具，请先激活 Conda 环境，
+再打开 Visual Studio 的 **Developer PowerShell**，在工程根目录执行：
+
+```powershell
+$vsCmake = Join-Path $env:VSINSTALLDIR 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
+$vsNinja = Join-Path $env:VSINSTALLDIR 'Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe'
+$compiler = (Get-Command cl.exe -ErrorAction Stop).Source
+$mt = (Get-Command mt.exe -ErrorAction Stop).Source
+$rc = (Get-Command rc.exe -ErrorAction Stop).Source
+
+$env:PYTHONNOUSERSITE = '1'
+$env:CMAKE_EXECUTABLE = $vsCmake
+$env:CMAKE_MAKE_PROGRAM = $vsNinja
+$env:CMAKE_GENERATOR = 'Ninja'
+$env:CXX = $compiler
+$env:CC = $compiler
+$env:CMAKE_BUILD_PARALLEL_LEVEL = '1'
+$env:SKBUILD_BUILD_DIR = 'out/build/wheel-vs-release'
+
+$ninjaArg = $vsNinja.Replace('\', '/')
+$mtArg = $mt.Replace('\', '/')
+$rcArg = $rc.Replace('\', '/')
+$env:CMAKE_ARGS = "-DCMAKE_MAKE_PROGRAM=`"$ninjaArg`" -DCMAKE_MT:FILEPATH=`"$mtArg`" -DCMAKE_RC_COMPILER:FILEPATH=`"$rcArg`""
+
+python -c "import sys; print(sys.executable)"
+python -m build --wheel --no-isolation
+```
+
+`PYTHONNOUSERSITE=1` 防止构建后端读取用户级 Python 包；`python`、`build`、
+`scikit-build-core` 和 `pybind11` 仍来自当前 Conda 环境。显式设置原生工具路径可以避免
+机器上其他 Python/Conda 环境中的 CMake 或 Ninja 被误选。首次 Release 编译较慢；
+`SKBUILD_BUILD_DIR` 会保留构建目录，后续未改变工具链时可增量构建。
+
 产物位于 `dist/`，例如：
 
 ```text
-dist/postanvil-0.7.0-cp314-cp314-win_amd64.whl
+dist/postanvil-0.8.0-cp314-cp314-win_amd64.whl
 ```
 
 `python -m build` 只负责生成发布文件，不会自动把它安装到当前环境。构建结束后仍需执行
@@ -312,7 +351,7 @@ dist/postanvil-0.7.0-cp314-cp314-win_amd64.whl
 
 ```bash
 python -m pip install --force-reinstall --no-deps \
-  dist/postanvil-0.7.0-cp314-cp314-win_amd64.whl
+  dist/postanvil-0.8.0-cp314-cp314-win_amd64.whl
 python -m pip check
 python -c "import postanvil; print(postanvil.__version__); print(postanvil.__file__)"
 ```
@@ -320,19 +359,21 @@ python -c "import postanvil; print(postanvil.__version__); print(postanvil.__fil
 Windows PowerShell 可以写成一行：
 
 ```powershell
-python -m pip install --force-reinstall --no-deps .\dist\postanvil-0.7.0-cp314-cp314-win_amd64.whl
+python -m pip install --force-reinstall --no-deps .\dist\postanvil-0.8.0-cp314-cp314-win_amd64.whl
 ```
 
 从工程根目录运行仓库自带的冒烟测试：
 
 ```bash
-python -c "p='bindings/python/smoke_test.py'; exec(compile(open(p, encoding='utf-8').read(), p, 'exec'))"
-python -I bindings/python/compile_error_smoke_test.py
+python -c "import runpy; runpy.run_path('bindings/python/smoke_test.py', run_name='__main__')"
+python -c "import runpy; runpy.run_path('bindings/python/compile_error_smoke_test.py', run_name='__main__')"
+python -c "import runpy; runpy.run_path('bindings/python/ultralytics_smoke_test.py', run_name='__main__')"
 ```
 
 不要直接运行 `python bindings/python/smoke_test.py`。直接运行时，脚本目录中的源码包
 可能优先于环境中安装的 wheel，导致测试对象不是刚安装的产物。
-第二条命令使用 Python 隔离模式验证编译错误的源码行、插入符和提示文本。
+这些命令不把 `bindings/python` 加入模块搜索路径，因此会测试当前环境中实际安装的 wheel，
+并分别验证基础绑定、编译错误诊断和无需安装 Ultralytics 的适配层替身测试。
 
 也可以手工验证主要功能：
 
@@ -340,17 +381,63 @@ python -I bindings/python/compile_error_smoke_test.py
 import postanvil
 
 source = '''
-RULE FILTER "global":
+RULE FILTER "global" {
 	self.conf >= 0.5
-RULEEND
+}
 '''
 
-scene = postanvil.Scene(postanvil.Image(640, 640), [
-	postanvil.Instance("person", 10, 20, 100, 200, 0.9),
-	postanvil.Instance("person", 30, 40, 80, 120, 0.2),
-])
+scene = postanvil.Scene(postanvil.Image(640, 640))
+scene.add("person", postanvil.Instance(10, 20, 100, 200, 0.9))
+scene.add("person", postanvil.Instance(30, 40, 80, 120, 0.2))
 result = postanvil.compile(source).evaluate(scene)
 assert result.count("PERSON") == 1
+```
+
+`Instance` 只保存检测框、置信度和动态属性，不保存类别。类别关系由
+`Scene.add(cls_name, instance)` 建立；同一实例 ID 可以属于多个类别，但始终对应
+Scene 中同一个实例对象。
+
+`Scene.add()` 返回一个 `InstanceHandle`，句柄包含 Scene 内稳定 `id`和当前
+类别上下文 `cls_name`。可以用句柄将同一实例加入其他类别，不会复制检测框：
+
+```python
+scene = postanvil.Scene(postanvil.Image(640, 640))
+person = scene.add("person", postanvil.Instance(10, 20, 100, 200, 0.9))
+scene.append_to_class("foreground", person)
+
+assert person.id == 1
+assert scene.instance_ids("PERSON") == [1]
+assert scene.instance_ids("FOREGROUND") == [1]
+assert scene.instance_count == 1
+```
+
+`Scene.handles(cls_name)` 返回带该类别上下文的句柄；`get_by_id(id)` 返回不带类别
+上下文的句柄；`get_by_index(cls_name, index)` 使用从 1 开始的类别内位置。
+`append_id_to_class()` 适用于已有 ID，`replace_class_ids()` 用一组 ID 整体替换类别
+成员。这些操作只修改类别成员关系，不改变实例本身。
+
+Python 也支持用 `InstanceHandle` 交换 DSL `INST` 值：
+
+```python
+scene.add_import("ANCHOR", person)
+result = postanvil.compile("IMPORT INST anchor\nEXPORT anchor AS selected").evaluate(scene)
+selected = result.get_export("selected")
+assert isinstance(selected, postanvil.InstanceHandle)
+assert selected.id == person.id
+```
+
+编译失败时，`PACompileError` 除了可读的 `str(error)`，还提供 `kind`、`message`、
+`line`、`column`、`source_line`、`hint` 和 `raw_message` 属性。`kind` 是
+`CompileErrorKind.SYNTAX`、`SEMANTIC` 或 `INTERNAL`：
+
+```python
+try:
+    postanvil.compile(source)
+except postanvil.PACompileError as error:
+    print(error.kind, error.line, error.column)
+    print(error.message)
+    if error.hint:
+        print("help:", error.hint)
 ```
 
 ### 从 GitHub Actions 下载多平台 wheel
@@ -426,7 +513,7 @@ python -m pip install "postanvil[ultralytics]"
 对本地 wheel 安装可选依赖：
 
 ```bash
-python -m pip install "./dist/postanvil-0.7.0-<python>-<abi>-<platform>.whl[ultralytics]"
+python -m pip install "./dist/postanvil-0.8.0-<python>-<abi>-<platform>.whl[ultralytics]"
 ```
 
 编译一次规则，然后复用于每个 `Results`：
@@ -437,9 +524,9 @@ import postanvil
 
 model = YOLO("model.pt")
 program = postanvil.compile('''
-RULE FILTER "global":
+RULE FILTER "global" {
 	self.conf >= 0.5
-RULEEND
+}
 ''')
 
 for detection in model("image.jpg"):
@@ -464,8 +551,9 @@ print(output.count("PERSON"))
 关键点、OBB、分类结果、语义掩码或深度数据的 `Results` 不允许写回。PostAnvil
 动态属性和类别属性没有对应的 YOLO 张量字段，只保留在 `Scene` 中。若 `GROUP`、
 `APPEND` 或类别修改产生模型名称表之外的新类别，默认会报错；确认需要分配新类别 ID
-时显式传入 `allow_new_classes=True`。写回时以 `Scene` 的类别容器作为 YOLO 类别；
-这是因为 YOLO 的单个框只有一个类别字段，无法同时保存源类别与派生分组。
+时显式传入 `allow_new_classes=True`。一个 PostAnvil 实例可以同时属于多个类别，而 YOLO
+单个框只有一个类别字段；写回时优先使用实例仍然所属的原始标签类别。原始类别成员关系
+已被移除时，实例必须只剩一个候选类别，否则适配器会报告类别歧义，避免静默复制检测框。
 
 Ultralytics `Results` 和 `Boxes` 的字段定义见其
 [官方 Results API](https://docs.ultralytics.com/reference/engine/results/)。
@@ -492,18 +580,250 @@ python -m pip check
 
 ## Android JNI
 
-Gradle `externalNativeBuild` 的 CMake 路径指向本目录的 `CMakeLists.txt`，并传入：
+当前 Android 预设面向 **API 32 及以上**，支持 `arm64-v8a` 和 `armeabi-v7a`，
+使用 Android NDK、CMake 和 Ninja 交叉编译。项目不会把开发者本机的 NDK
+绝对路径写入公共预设。构建时可通过 `POSTANVIL_ANDROID_NDK` 指定 NDK，或将
+`ANDROID_NDK_HOME` 指向 NDK 根目录。项目的 Android toolchain 入口同时兼容
+真正的 NDK 根目录，以及其下只有一个 NDK 版本子目录的外层目录。
+
+### 一次构建两个 ABI
+
+Android 的 ABI 是 CMake 配置期参数，不能在同一个 CMake 缓存中同时设置两个值。
+项目因此为每个 ABI 使用独立的构建目录，并由脚本依次完成配置、编译和安装：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+    -File ./packaging/build-android.ps1 `
+    -NdkPath 'D:\Android\Sdk\ndk\29.0.14206865'
+```
+
+`ExecutionPolicy Bypass` 只作用于本次子进程，不修改系统或用户的 PowerShell
+执行策略。请在 Visual Studio Developer PowerShell 中运行，或先确保当前终端可以
+找到 `cmake` 和 `ninja`。
+
+默认同时构建 `arm64-v8a` 和 `armeabi-v7a`。也可只构建指定 ABI：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+    -File ./packaging/build-android.ps1 `
+    -NdkPath 'D:\Android\Sdk\ndk\29.0.14206865' `
+    -Abis arm64-v8a
+```
+
+双 ABI SDK 安装目录如下，可直接按 `${ANDROID_ABI}` 选取：
 
 ```text
+out/install/android-release/
+├── arm64-v8a/
+│   ├── include/
+│   └── lib/
+└── armeabi-v7a/
+    ├── include/
+    └── lib/
+```
+
+每个 ABI 目录都包含 `lib/libpostanvil_static.a`、公开头文件和
+`lib/cmake/PostAnvil`；启用 Android JNI 构建时还包含
+`lib/libpostanvil_jni.so`。
+
+### 单独使用 CMake 预设
+
+下列示例使用 `arm64-v8a`。`POSTANVIL_ANDROID_NDK` 可以指向真正的 NDK 根目录，
+也可以指向仅包含一个版本子目录的外层目录：
+
+```powershell
+cmake --fresh --preset android-arm64-release `
+    -DPOSTANVIL_ANDROID_NDK='D:/Android/Sdk/ndk/29.0.14206865'
+cmake --build --preset android-arm64-release-install --parallel 4
+```
+
+构建 `armeabi-v7a` 时，将两个预设名替换为：
+
+```powershell
+cmake --fresh --preset android-armv7-release `
+    -DPOSTANVIL_ANDROID_NDK='D:/Android/Sdk/ndk/29.0.14206865'
+cmake --build --preset android-armv7-release-install --parallel 4
+```
+
+也可以先为当前终端设置环境变量，此后省略命令行中的 NDK 参数：
+
+```powershell
+$env:ANDROID_NDK_HOME = 'D:\Android\Sdk\ndk\29.0.14206865'
+
+cmake --preset android-arm64-release
+cmake --build --preset android-arm64-release-install
+```
+
+在 Visual Studio 中选择 Android 预设前，应确保启动 Visual Studio 的进程环境中
+存在 `ANDROID_NDK_HOME`；环境变量在 Visual Studio 启动后才设置时，需要重启
+Visual Studio。旧配置已经出现 `CMAKE_CXX_COMPILER not set` 时，应使用 `--fresh`
+重新配置，或在 Visual Studio 中删除对应预设的缓存后重新生成。项目 toolchain 会将
+解析后的 NDK 路径传给 CMake 的编译器探测子配置，避免编译器探测阶段丢失 NDK。
+
+Release 预设固定为 `ANDROID_PLATFORM=android-32` 和 `ANDROID_STL=c++_static`，
+各 ABI 预设分别设置 `ANDROID_ABI`。`c++_static` 使 JNI 库不需要额外随 APK 分发
+`libc++_shared.so`。若应用的其他原生库已统一使用 `c++_shared`，应在所有
+原生库之间保持一致，而不是在同一进程中混用两套 C++ 运行时。
+
+`arm64-v8a` 可部署产物位于：
+
+```text
+out/install/android-release/arm64-v8a/lib/libpostanvil_jni.so
+```
+
+未剥离符号的构建产物位于
+`out/build/android-arm64-release/bindings/android/libpostanvil_jni.so`，用于本地符号化和
+原生崩溃排查。日常 JNI 调试可改用：
+
+```powershell
+cmake --preset android-arm64-debug
+cmake --build --preset android-arm64-debug
+```
+
+### 在现有 C++ Android 工程中使用静态库
+
+如果宿主只使用 C++，不从 Java 或 Kotlin 调用 PostAnvil，就不需要 JNI bridge。
+将对应 ABI 的安装目录复制到应用工程后，可以直接消费随 SDK 导出的 CMake 包：
+
+```cmake
+set(PostAnvil_DIR
+    "${CMAKE_SOURCE_DIR}/postanvil-android-release/${ANDROID_ABI}/lib/cmake/PostAnvil")
+find_package(PostAnvil CONFIG REQUIRED)
+
+target_link_libraries(yolo11_jni PRIVATE PostAnvil::static)
+```
+
+`PostAnvil::static` 会同时提供头文件搜索路径和静态库链接信息，不需要手工
+`add_library(... IMPORTED)`。最终生成 `.so` 的页面对齐仍由宿主工程负责；`.a`
+本身不决定 APK 中动态库的页面大小。
+
+### 将预编译 JNI 库放入 Android 应用
+
+将 Release 产物放入应用的 ABI 目录：
+
+```text
+app/src/main/jniLibs/arm64-v8a/libpostanvil_jni.so
+```
+
+将 `bindings/android/java/org/postanvil/NativeBridge.java` 复制到应用的
+`app/src/main/java/org/postanvil/NativeBridge.java`。不要更改其包名，因为当前 JNI 导出
+符号与 `org.postanvil.NativeBridge` 类名绑定。Android 模块至少需要：
+
+```kotlin
+android {
+    compileSdk = 32 // 或更高
+
+    defaultConfig {
+        minSdk = 32
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+}
+```
+
+如果 Release 构建启用 R8/ProGuard，在应用的保留规则中加入：
+
+```proguard
+-keep class org.postanvil.NativeBridge { *; }
+-keep class org.postanvil.NativeBridge$* { *; }
+```
+
+否则混淆后的类名可能与 JNI 导出符号不一致。
+
+### 由 Gradle externalNativeBuild 直接构建
+
+如果应用希望在 Gradle 构建期直接编译本仓库，`externalNativeBuild` 的 CMake
+路径指向项目根目录的 `CMakeLists.txt`，并传入：
+
+```text
+-DANDROID_PLATFORM=android-32
+-DANDROID_STL=c++_static
 -DPOSTANVIL_BUILD_STATIC=ON
 -DPOSTANVIL_BUILD_SHARED=OFF
 -DPOSTANVIL_BUILD_TESTS=OFF
+-DPOSTANVIL_BUILD_PYTHON=OFF
 -DPOSTANVIL_BUILD_ANDROID_JNI=ON
 ```
 
-生成 `libpostanvil_jni.so`。Java 示例位于
-`bindings/android/java/org/postanvil/NativeBridge.java`。`Program` 会缓存编译结果，
-应在页面或模型生命周期内复用，并在结束时调用 `close()`。
+Gradle 中同样应显式声明需要的 ABI，并使用 NDK 29.0.14206865 或后续已验证版本。
+
+### 真机最小验证
+
+Java 示例位于 `bindings/android/java/org/postanvil/NativeBridge.java`。先在真机上
+验证动态库加载和基本执行：
+
+```java
+if (!"0.8.0".equals(NativeBridge.version())) {
+    throw new AssertionError("Unexpected PostAnvil native version");
+}
+
+try (NativeBridge.Program program = new NativeBridge.Program(
+        "RULE FILTER \"person\" {\n    self.conf >= 0.5\n}")) {
+    NativeBridge.SceneResult result = program.evaluate(
+        640,
+        480,
+        new String[] {"person", "person"},
+        new double[] {
+            10, 20, 100, 200, 0.90,
+            30, 40, 80, 120, 0.20
+        });
+    if (result.count("PERSON") != 1) {
+        throw new AssertionError("Unexpected filtered instance count");
+    }
+}
+```
+
+`Program` 会缓存编译结果，应在页面或模型生命周期内复用，并在结束时
+调用 `close()`。真机出现 `UnsatisfiedLinkError` 时，先解压 APK 确认
+`lib/arm64-v8a/libpostanvil_jni.so` 存在，再确认类包名和 R8 保留规则。
+安装 Android SDK Platform-Tools 后，可在连接设备时先确认系统版本和 ABI：
+
+```bash
+adb shell getprop ro.build.version.sdk
+adb shell getprop ro.product.cpu.abilist
+```
+
+第一条命令应返回 `32` 或更高，第二条应包含 `arm64-v8a`。
+
+### Java 调用方式
+
+Android 绑定接收扁平化的检测输入：`classes[i]` 是第 `i` 个框的类别，
+`boxes` 每 5 个数表示一个 `[x, y, width, height, confidence]`。两个数组必须
+满足 `boxes.length == classes.length * 5`。
+
+```java
+String source = "RULE FILTER \"person\" {\n    self.conf >= 0.5\n}";
+String[] classes = {"person", "person"};
+double[] boxes = {
+    10, 20, 100, 200, 0.90,
+    30, 40, 80, 120, 0.20
+};
+
+try (NativeBridge.Program program = new NativeBridge.Program(source)) {
+    NativeBridge.SceneResult result = program.evaluate(640, 480, classes, boxes);
+    long kept = result.count("PERSON");
+    for (int i = 0; i < result.size(); ++i) {
+        String clsName = result.className(i);
+        long instanceId = result.instanceId(i);
+        double[] box = result.box(i);
+    }
+}
+```
+
+`SceneResult` 是执行后 Scene 的不可变类别成员快照，每行包含类别名、稳定实例 ID
+和 5 个框数值。如果一个实例同时属于多个类别，结果中会出现多行，但这些行使用
+同一个 `instanceId`；这表示多个类别成员关系，不表示实例被复制。`classNames()`、
+`instanceIds()` 和 `boxes()` 返回防御性副本。
+
+只需类别数量时可使用 `evaluateCounts(..., outputClasses)`。应显式传入要查询的
+`outputClasses`，这样才能读取 `GROUP` 或 `APPEND` 新建类别的数量。不带
+`outputClasses` 的重载仅查询输入 `classes` 中出现过的类别。
+
+DSL 编译失败在 Java 层映射为 `IllegalArgumentException`；输入数组无效也使用
+`IllegalArgumentException`；DSL 执行错误映射为 `IllegalStateException`；其他原生异常映射为
+`RuntimeException`。当前 Android 轻量绑定专注检测框输入和类别成员输出，尚未暴露
+`IMPORT` / `EXPORT`、动态属性和类别属性；需要这些能力时应使用 C++ 或 Python API。
 
 ## 构建产物
 

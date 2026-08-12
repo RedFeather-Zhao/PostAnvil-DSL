@@ -1,5 +1,5 @@
 
-// Generated from D:/UserProject/vsstudio/PostAnvil DSL/grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -51,6 +51,22 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitCondition_block(PostAnvilParser::Condition_blockContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAttr_block(PostAnvilParser::Attr_blockContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitSort_block(PostAnvilParser::Sort_blockContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitStmt_block(PostAnvilParser::Stmt_blockContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitRule_(PostAnvilParser::Rule_Context *ctx) override {
     return visitChildren(ctx);
   }
@@ -60,6 +76,22 @@ public:
   }
 
   virtual std::any visitAttr_rule(PostAnvilParser::Attr_ruleContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitGroup_rule(PostAnvilParser::Group_ruleContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAppend_rule(PostAnvilParser::Append_ruleContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitSort_rule(PostAnvilParser::Sort_ruleContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitFunc_rule(PostAnvilParser::Func_ruleContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -75,10 +107,6 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitFunc_rule(PostAnvilParser::Func_ruleContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitTyped_params(PostAnvilParser::Typed_paramsContext *ctx) override {
     return visitChildren(ctx);
   }
@@ -87,31 +115,35 @@ public:
     return visitChildren(ctx);
   }
 
-  virtual std::any visitFuncVarDef(PostAnvilParser::FuncVarDefContext *ctx) override {
+  virtual std::any visitStmtVarDef(PostAnvilParser::StmtVarDefContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitFuncAssign(PostAnvilParser::FuncAssignContext *ctx) override {
+  virtual std::any visitStmtAssign(PostAnvilParser::StmtAssignContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitFuncIfStmt(PostAnvilParser::FuncIfStmtContext *ctx) override {
+  virtual std::any visitStmtIf(PostAnvilParser::StmtIfContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitFuncForStmt(PostAnvilParser::FuncForStmtContext *ctx) override {
+  virtual std::any visitStmtFor(PostAnvilParser::StmtForContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitFuncExprStmt(PostAnvilParser::FuncExprStmtContext *ctx) override {
+  virtual std::any visitStmtExpr(PostAnvilParser::StmtExprContext *ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual std::any visitFuncReturnStmt(PostAnvilParser::FuncReturnStmtContext *ctx) override {
+  virtual std::any visitStmtReturn(PostAnvilParser::StmtReturnContext *ctx) override {
     return visitChildren(ctx);
   }
 
   virtual std::any visitIfStmt(PostAnvilParser::IfStmtContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitIfBranch(PostAnvilParser::IfBranchContext *ctx) override {
     return visitChildren(ctx);
   }
 
@@ -124,18 +156,6 @@ public:
   }
 
   virtual std::any visitForStmt(PostAnvilParser::ForStmtContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitGroup_rule(PostAnvilParser::Group_ruleContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitAppend_rule(PostAnvilParser::Append_ruleContext *ctx) override {
-    return visitChildren(ctx);
-  }
-
-  virtual std::any visitSort_rule(PostAnvilParser::Sort_ruleContext *ctx) override {
     return visitChildren(ctx);
   }
 

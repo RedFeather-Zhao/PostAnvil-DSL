@@ -35,15 +35,16 @@ PA_TEST(FalseLiteralFiltersEverything)
 				self.index <= 1
 			}
 		)", make_scene({
-			Instance("PERSON", 0, 0, 10, 10, 0.5),
-			Instance("PERSON", 0, 0, 20, 20, 0.5),
-			Instance("PERSON", 0, 0, 30, 30, 0.5)
+			make_instance("PERSON", 0, 0, 10, 10, 0.5),
+			make_instance("PERSON", 0, 0, 20, 20, 0.5),
+			make_instance("PERSON", 0, 0, 30, 30, 0.5)
 		}), { { "PERSON", 1 } });
 
 		const auto& first = instance_at(output, "PERSON");
 		Assert::AreEqual(900.0, first.area());
 		Assert::AreEqual<std::size_t>(3, first.id());
-		Assert::AreEqual<std::size_t>(1, first.index());
+		Assert::AreEqual<std::size_t>(1,
+			output.index_of_class(InstanceHandle{ first.id(), "PERSON" }));
 	}
 
 	PA_TEST(StableMultiKeySort)
@@ -54,18 +55,19 @@ PA_TEST(FalseLiteralFiltersEverything)
 				self.conf DESC
 			}
 		)", make_scene({
-			Instance("PERSON", 0, 0, 10, 10, 0.5),
-			Instance("PERSON", 10, 0, 10, 10, 0.9),
-			Instance("PERSON", 20, 0, 20, 20, 0.8),
-			Instance("PERSON", 30, 0, 10, 10, 0.5)
+			make_instance("PERSON", 0, 0, 10, 10, 0.5),
+			make_instance("PERSON", 10, 0, 10, 10, 0.9),
+			make_instance("PERSON", 20, 0, 20, 20, 0.8),
+			make_instance("PERSON", 30, 0, 10, 10, 0.5)
 		}));
 
-		const auto& people = output.objects.at("PERSON");
+		const auto& people = output.get_inst_ids("PERSON");
 		const std::vector<std::size_t> expected_ids{ 2, 1, 4, 3 };
 		Assert::AreEqual(expected_ids.size(), people.size());
 		for (std::size_t i = 0; i < people.size(); ++i) {
-			Assert::AreEqual(expected_ids[i], people[i].id());
-			Assert::AreEqual(i + 1, people[i].index());
+			Assert::AreEqual(expected_ids[i], people[i]);
+			Assert::AreEqual(i + 1,
+				output.index_of_class(InstanceHandle{ people[i], "PERSON" }));
 		}
 	}
 
@@ -89,8 +91,8 @@ PA_TEST(FalseLiteralFiltersEverything)
 				always_true()
 			}
 		)", make_scene({
-			Instance("A", 0, 0, 10, 10, 0.9),
-			Instance("B", 0, 0, 10, 10, 0.3)
+			make_instance("A", 0, 0, 10, 10, 0.9),
+			make_instance("B", 0, 0, 10, 10, 0.3)
 		}), { { "A", 1 }, { "B", 1 } });
 	}
 
@@ -104,8 +106,8 @@ PA_TEST(FalseLiteralFiltersEverything)
 				always_false()
 			}
 		)", make_scene({
-			Instance("A", 0, 0, 10, 10, 0.9),
-			Instance("B", 0, 0, 10, 10, 0.3)
+			make_instance("A", 0, 0, 10, 10, 0.9),
+			make_instance("B", 0, 0, 10, 10, 0.3)
 		}), { { "A", 0 }, { "B", 0 } });
 	}
 

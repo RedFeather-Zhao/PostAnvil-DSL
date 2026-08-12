@@ -43,9 +43,9 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 				self.density < 0.5
 			}
 		)", make_scene({
-			Instance("PERSON", 0, 0, 20, 30, 0.9),
-			Instance("PERSON", 0, 0, 10, 10, 0.5),
-			Instance("PERSON", 0, 0, 1, 1, 0.9)
+			make_instance("PERSON", 0, 0, 20, 30, 0.9),
+			make_instance("PERSON", 0, 0, 10, 10, 0.5),
+			make_instance("PERSON", 0, 0, 1, 1, 0.9)
 		}), { { "PERSON", 2 } });
 	}
 
@@ -60,9 +60,9 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 				SELF.W > 10
 			}
 		)", make_scene({
-			Instance("X", 0, 0, 20, 20, 0.9),
-			Instance("X", 0, 0, 5, 5, 0.9),
-			Instance("X", 0, 0, 20, 20, 0.3)
+			make_instance("X", 0, 0, 20, 20, 0.9),
+			make_instance("X", 0, 0, 5, 5, 0.9),
+			make_instance("X", 0, 0, 20, 20, 0.3)
 		}), { { "X", 1 } });
 	}
 
@@ -73,8 +73,8 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 				self.area_calc = self.w * self.h
 			}
 		)", make_scene({
-			Instance("CAT", 0, 0, 10, 20, 0.5),
-			Instance("DOG", 0, 0, 30, 40, 0.5)
+			make_instance("CAT", 0, 0, 10, 20, 0.5),
+			make_instance("DOG", 0, 0, 30, 40, 0.5)
 		}));
 
 		expect_num_prop(output, "CAT", 0, "AREA_CALC", 200.0);
@@ -88,9 +88,9 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 				self.area > 5000
 			}
 		)", make_scene({
-			Instance("CAR", 0, 0, 100, 60, 0.5),
-			Instance("CAR", 0, 0, 50, 50, 0.5),
-			Instance("CAR", 0, 0, 80, 80, 0.5)
+			make_instance("CAR", 0, 0, 100, 60, 0.5),
+			make_instance("CAR", 0, 0, 50, 50, 0.5),
+			make_instance("CAR", 0, 0, 80, 80, 0.5)
 		}), { { "CAR", 3 }, { "LARGE_CAR", 2 } });
 	}
 
@@ -114,9 +114,9 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 				self.h > 20
 			}
 		)", make_scene({
-			Instance("ITEM", 0, 0, 40, 30, 0.5),
-			Instance("ITEM", 0, 0, 35, 15, 0.5),
-			Instance("ITEM", 0, 0, 20, 40, 0.5)
+			make_instance("ITEM", 0, 0, 40, 30, 0.5),
+			make_instance("ITEM", 0, 0, 35, 15, 0.5),
+			make_instance("ITEM", 0, 0, 20, 40, 0.5)
 		}), { { "ITEM", 3 }, { "BIG", 1 } });
 	}
 
@@ -130,8 +130,8 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 				"person".count > 0
 			}
 		)", make_scene({
-			Instance("PERSON", 0, 0, 40, 30, 0.5),
-			Instance("PERSON", 0, 0, 20, 20, 0.5)
+			make_instance("PERSON", 0, 0, 40, 30, 0.5),
+			make_instance("PERSON", 0, 0, 20, 20, 0.5)
 		}), { { "PERSON", 2 }, { "BIG", 1 } });
 	}
 

@@ -1,5 +1,5 @@
 
-// Generated from D:/UserProject/vsstudio/PostAnvil DSL/grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -41,6 +41,18 @@ public:
   virtual void enterType(PostAnvilParser::TypeContext *ctx) = 0;
   virtual void exitType(PostAnvilParser::TypeContext *ctx) = 0;
 
+  virtual void enterCondition_block(PostAnvilParser::Condition_blockContext *ctx) = 0;
+  virtual void exitCondition_block(PostAnvilParser::Condition_blockContext *ctx) = 0;
+
+  virtual void enterAttr_block(PostAnvilParser::Attr_blockContext *ctx) = 0;
+  virtual void exitAttr_block(PostAnvilParser::Attr_blockContext *ctx) = 0;
+
+  virtual void enterSort_block(PostAnvilParser::Sort_blockContext *ctx) = 0;
+  virtual void exitSort_block(PostAnvilParser::Sort_blockContext *ctx) = 0;
+
+  virtual void enterStmt_block(PostAnvilParser::Stmt_blockContext *ctx) = 0;
+  virtual void exitStmt_block(PostAnvilParser::Stmt_blockContext *ctx) = 0;
+
   virtual void enterRule_(PostAnvilParser::Rule_Context *ctx) = 0;
   virtual void exitRule_(PostAnvilParser::Rule_Context *ctx) = 0;
 
@@ -49,6 +61,18 @@ public:
 
   virtual void enterAttr_rule(PostAnvilParser::Attr_ruleContext *ctx) = 0;
   virtual void exitAttr_rule(PostAnvilParser::Attr_ruleContext *ctx) = 0;
+
+  virtual void enterGroup_rule(PostAnvilParser::Group_ruleContext *ctx) = 0;
+  virtual void exitGroup_rule(PostAnvilParser::Group_ruleContext *ctx) = 0;
+
+  virtual void enterAppend_rule(PostAnvilParser::Append_ruleContext *ctx) = 0;
+  virtual void exitAppend_rule(PostAnvilParser::Append_ruleContext *ctx) = 0;
+
+  virtual void enterSort_rule(PostAnvilParser::Sort_ruleContext *ctx) = 0;
+  virtual void exitSort_rule(PostAnvilParser::Sort_ruleContext *ctx) = 0;
+
+  virtual void enterFunc_rule(PostAnvilParser::Func_ruleContext *ctx) = 0;
+  virtual void exitFunc_rule(PostAnvilParser::Func_ruleContext *ctx) = 0;
 
   virtual void enterAttr_def(PostAnvilParser::Attr_defContext *ctx) = 0;
   virtual void exitAttr_def(PostAnvilParser::Attr_defContext *ctx) = 0;
@@ -59,35 +83,35 @@ public:
   virtual void enterClassAttrDef(PostAnvilParser::ClassAttrDefContext *ctx) = 0;
   virtual void exitClassAttrDef(PostAnvilParser::ClassAttrDefContext *ctx) = 0;
 
-  virtual void enterFunc_rule(PostAnvilParser::Func_ruleContext *ctx) = 0;
-  virtual void exitFunc_rule(PostAnvilParser::Func_ruleContext *ctx) = 0;
-
   virtual void enterTyped_params(PostAnvilParser::Typed_paramsContext *ctx) = 0;
   virtual void exitTyped_params(PostAnvilParser::Typed_paramsContext *ctx) = 0;
 
   virtual void enterTyped_param(PostAnvilParser::Typed_paramContext *ctx) = 0;
   virtual void exitTyped_param(PostAnvilParser::Typed_paramContext *ctx) = 0;
 
-  virtual void enterFuncVarDef(PostAnvilParser::FuncVarDefContext *ctx) = 0;
-  virtual void exitFuncVarDef(PostAnvilParser::FuncVarDefContext *ctx) = 0;
+  virtual void enterStmtVarDef(PostAnvilParser::StmtVarDefContext *ctx) = 0;
+  virtual void exitStmtVarDef(PostAnvilParser::StmtVarDefContext *ctx) = 0;
 
-  virtual void enterFuncAssign(PostAnvilParser::FuncAssignContext *ctx) = 0;
-  virtual void exitFuncAssign(PostAnvilParser::FuncAssignContext *ctx) = 0;
+  virtual void enterStmtAssign(PostAnvilParser::StmtAssignContext *ctx) = 0;
+  virtual void exitStmtAssign(PostAnvilParser::StmtAssignContext *ctx) = 0;
 
-  virtual void enterFuncIfStmt(PostAnvilParser::FuncIfStmtContext *ctx) = 0;
-  virtual void exitFuncIfStmt(PostAnvilParser::FuncIfStmtContext *ctx) = 0;
+  virtual void enterStmtIf(PostAnvilParser::StmtIfContext *ctx) = 0;
+  virtual void exitStmtIf(PostAnvilParser::StmtIfContext *ctx) = 0;
 
-  virtual void enterFuncForStmt(PostAnvilParser::FuncForStmtContext *ctx) = 0;
-  virtual void exitFuncForStmt(PostAnvilParser::FuncForStmtContext *ctx) = 0;
+  virtual void enterStmtFor(PostAnvilParser::StmtForContext *ctx) = 0;
+  virtual void exitStmtFor(PostAnvilParser::StmtForContext *ctx) = 0;
 
-  virtual void enterFuncExprStmt(PostAnvilParser::FuncExprStmtContext *ctx) = 0;
-  virtual void exitFuncExprStmt(PostAnvilParser::FuncExprStmtContext *ctx) = 0;
+  virtual void enterStmtExpr(PostAnvilParser::StmtExprContext *ctx) = 0;
+  virtual void exitStmtExpr(PostAnvilParser::StmtExprContext *ctx) = 0;
 
-  virtual void enterFuncReturnStmt(PostAnvilParser::FuncReturnStmtContext *ctx) = 0;
-  virtual void exitFuncReturnStmt(PostAnvilParser::FuncReturnStmtContext *ctx) = 0;
+  virtual void enterStmtReturn(PostAnvilParser::StmtReturnContext *ctx) = 0;
+  virtual void exitStmtReturn(PostAnvilParser::StmtReturnContext *ctx) = 0;
 
   virtual void enterIfStmt(PostAnvilParser::IfStmtContext *ctx) = 0;
   virtual void exitIfStmt(PostAnvilParser::IfStmtContext *ctx) = 0;
+
+  virtual void enterIfBranch(PostAnvilParser::IfBranchContext *ctx) = 0;
+  virtual void exitIfBranch(PostAnvilParser::IfBranchContext *ctx) = 0;
 
   virtual void enterElifBranch(PostAnvilParser::ElifBranchContext *ctx) = 0;
   virtual void exitElifBranch(PostAnvilParser::ElifBranchContext *ctx) = 0;
@@ -97,15 +121,6 @@ public:
 
   virtual void enterForStmt(PostAnvilParser::ForStmtContext *ctx) = 0;
   virtual void exitForStmt(PostAnvilParser::ForStmtContext *ctx) = 0;
-
-  virtual void enterGroup_rule(PostAnvilParser::Group_ruleContext *ctx) = 0;
-  virtual void exitGroup_rule(PostAnvilParser::Group_ruleContext *ctx) = 0;
-
-  virtual void enterAppend_rule(PostAnvilParser::Append_ruleContext *ctx) = 0;
-  virtual void exitAppend_rule(PostAnvilParser::Append_ruleContext *ctx) = 0;
-
-  virtual void enterSort_rule(PostAnvilParser::Sort_ruleContext *ctx) = 0;
-  virtual void exitSort_rule(PostAnvilParser::Sort_ruleContext *ctx) = 0;
 
   virtual void enterSort_key(PostAnvilParser::Sort_keyContext *ctx) = 0;
   virtual void exitSort_key(PostAnvilParser::Sort_keyContext *ctx) = 0;

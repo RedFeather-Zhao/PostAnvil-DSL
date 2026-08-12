@@ -1,9 +1,9 @@
 ﻿# PostAnvil DSL 用户手册
 
-> 适用版本：**PostAnvil 0.7.x**  
-> 文档更新日期：**2026-08-03**
+> 适用版本：**PostAnvil 0.8.x**
+> 文档更新日期：**2026-08-11**
 
-本文档面向使用 PostAnvil 编写后处理规则，以及通过公开 C++ 或 Python API 执行规则的用户。
+本文档面向使用 PostAnvil 编写后处理规则，以及通过公开 C++、Python 或 Android API 执行规则的用户。
 构建、安装、打包和平台支持信息请参阅项目根目录的 `README.md`。
 
 **注意**，本文档描述的 DSL 语法正在快速迭代期，可能与未来版本不兼容；未来也不保证对旧语法的向前兼容，一切以简化实际应用场景而更改；请以实际发布版本为准。
@@ -12,7 +12,7 @@
 
 PostAnvil 是用于目标检测结果后处理的领域特定语言（DSL）。它可以按规则过滤检测实例、计算实例或类别属性、创建和扩充类别，并通过函数、条件分支与循环封装较复杂的统计逻辑。
 
-PostAnvil 0.7.x 提供以下主要能力：
+PostAnvil 0.8.x 提供以下主要能力：
 
 - 关键字、DSL 标识符、类别名和属性名大小写不敏感；`EXPORT ... AS` 的宿主导出名保留原始拼写。
 - `FILTER`、`ATTR`、`GROUP`、`APPEND`、`SORT` 规则按书写顺序组成执行管道。
@@ -20,7 +20,7 @@ PostAnvil 0.7.x 提供以下主要能力：
 - 函数内支持 `IF` / `ELIF` / `ELSE`、嵌套 `FOR`、局部变量声明与赋值、`RETURN`。
 - 内置 `self`、`img`、类别属性和原地稳定 `SORT` 规则。
 - 提供原生数学、检测框空间关系和实例查询函数，并支持稳定 `id` 与实时 `index`。
-- 通过 `IMPORT` / `EXPORT` 与 C++ 宿主交换值。
+- 通过 `IMPORT` / `EXPORT` 与 C++ 或 Python 宿主交换值。
 
 ## 2. 快速开始
 
@@ -29,32 +29,29 @@ PostAnvil 0.7.x 提供以下主要能力：
 ```postanvil
 IMPORT NUM min_conf
 
-RULE FUNC risk_level(conf: NUM) -> NUM:
-    IF conf > 0.8
+RULE FUNC risk_level(conf: NUM) -> NUM {
+    IF conf > 0.8 {
         RETURN 3
-    ELIF conf > 0.5
+    } ELIF conf > 0.5 {
         RETURN 2
-    ELSE
+    } ELSE {
         RETURN 1
-    IFEND
-RULEEND
-
-RULE ATTR "person":
+    }
+}
+RULE ATTR "person" {
     self.risk = risk_level(self.conf)
-RULEEND
-
-RULE FILTER "person":
+}
+RULE FILTER "person" {
     self.conf > min_conf
     self.risk >= 2
-RULEEND
-
+}
 EXPORT "person".count AS person_count
 ```
 
 基本约定：
 
-- 每个 `RULE` 块以 `RULEEND` 结束。
-- 冒号只出现在规则头部；`IF`、`ELIF`、`ELSE`、`FOR` 后不写冒号。
+- 规则、函数、条件分支和循环统一使用 `{ ... }` 定义块，不使用 `XXXEND` 结束关键字。
+- `{` 可以与块头写在同一行，也可以放在下一行；块头后不写冒号。
 - 换行是语句分隔符。
 - `FILTER`、`GROUP`、`APPEND` 中不同行条件自动按 `AND` 连接。
 - `#` 和 `//` 均可开始行注释。
@@ -73,8 +70,8 @@ EXPORT "person".count AS person_count
 | `RULE FILTER` | 过滤类别中的实例 |
 | `RULE ATTR` | 设置实例属性或类别属性 |
 | `RULE FUNC` | 定义自定义函数 |
-| `RULE GROUP` | 从源类别复制满足条件的实例，形成目标类别 |
-| `RULE APPEND` | 将满足条件的实例追加到目标类别 |
+| `RULE GROUP` | 从源类别选择满足条件的实例，以同一身份形成目标类别 |
+| `RULE APPEND` | 将满足条件的实例身份合并到目标类别 |
 | `RULE SORT` | 按一个或多个键原地稳定排序类别实例 |
 
 声明和规则按源文件中的顺序形成算子管道。后续规则可以读取前面规则产生的属性或类别；`EXPORT` 读取的是执行到该位置时的值，因此通常放在程序末尾。
@@ -90,7 +87,7 @@ IMPORT NUM threshold, BOOL debug, STR host_name AS local_name
 IMPORT INST host_anchor AS anchor
 ```
 
-每个导入项为 `类型 宿主名 [AS DSL本地名]`。执行前，C++ 侧使用 DSL 本地名（无别名时即宿主名）的大写形式注入值，例如 `scene.add_import("MIN_CONF", 0.6)`。
+每个导入项为 `类型 宿主名 [AS DSL本地名]`。执行前，宿主使用 DSL 本地名（无别名时即宿主名）注入值。C++ 侧建议使用大写形式，例如 `scene.add_import("MIN_CONF", 0.6)`；Python 绑定会自动规范化名称大小写。
 
 ### 4.2 导出
 
@@ -100,7 +97,7 @@ EXPORT "car".avg_conf AS carAverage
 EXPORT 3.14159 AS pi
 ```
 
-一个 `EXPORT` 可用逗号包含多项。C++ 侧用 `result.get_export("person_count")` 读取；名称必须与 `AS` 后的拼写一致。
+一个 `EXPORT` 可用逗号包含多项。C++ 和 Python 均用 `result.get_export("person_count")` 读取；名称必须与 `AS` 后的拼写一致。
 
 ### 4.3 全局变量
 
@@ -117,30 +114,31 @@ threshold = 0.8
 
 ### 4.4 实例变量（INST）
 
-`INST` 表示一个检测实例快照。`self` 是 `INST` 表达式，普通类别 `FOR` 循环中的循环变量也是 `INST`，因此都可以赋给变量、传入函数或作为返回值：
+`INST` 是 Scene 内实例的轻量句柄。句柄保存实例 `id`；从类别规则或类别遍历中产生时，还保存当前 `cls_name`，以便解析 `cls` 和 `index`。句柄不复制、也不拥有 `Instance`。`self` 和普通类别 `FOR` 循环变量都是 `INST`，可以赋给变量、传入函数或作为返回值：
 
 ```postanvil
-RULE FUNC confidence(item: INST) -> NUM:
+RULE FUNC confidence(item: INST) -> NUM {
     RETURN item.conf
-RULEEND
-
-RULE FUNC first_inst(cls: STR) -> INST:
-    FOR obj IN cls
+}
+RULE FUNC first_inst(cls: STR) -> INST {
+    FOR obj IN cls {
         INST selected = obj
         RETURN selected
-    FOREND
+    }
     RETURN self
-RULEEND
+}
 ```
 
-实例变量通过 `<变量>.<属性>` 读取属性，例如 `selected.area`。`INST` 使用快照语义：赋值或传参时保留当时的实例值，不持有场景容器中的裸指针；后续过滤、分组或追加不会令该值悬空。
+实例变量通过 `<变量>.<属性>` 读取属性，例如 `selected.area`。句柄通过所属 Scene 和 `id` 查找实例；`FILTER`、`GROUP`、`APPEND` 和 `SORT` 只修改类别中的 ID 列表，不会使句柄悬空。句柄不能跨 Scene 使用。
 
-每个输入实例在构造 `Scene` 时都会按传入顺序获得从 `1` 开始、场景内稳定的 `id`。`GROUP` / `APPEND` 产生的副本保留源实例 `id`，用于表示同一个逻辑检测结果。`index` 是实例在当前类别中的从 `1` 开始的位置；过滤、分组或追加后会自动重建。
+Scene 内部的实例表按 ID 存放：第 `0` 项是 dummy，不属于任何用户类别；真实实例按插入顺序获得从 `1` 开始的 ID。类别索引 `Scene::m_class_index` 中每个 `cls_name` 对应一个有序、去重的 ID 列表。同一 Scene 内，同一 ID 在不同类别中始终指向同一个 `Instance`；对坐标、置信度或动态属性的修改会在所有包含该 ID 的类别中可见。复制 Scene 时会深复制实例，新 Scene 与原 Scene 不共享可变实例。
+
+`self.cls` 表示当前句柄的 `cls_name`，`self.index` 表示该 ID 在当前类别中的 1-based 位置。按 ID 查询得到的句柄不带类别上下文，因此 `cls` 和 `index` 均不可用并会产生运行时错误。`Instance` 本身不保存类别归属，DSL 也不另外定义 `label` 或 `category` 属性。
 
 ```postanvil
 NUM stable_id = self.id
 NUM current_position = self.index
-STR class_name = self.cls
+STR cls_name = self.cls
 
 INST by_id = _INST_ID(12)
 INST by_position = _INST_INDEX("person", 3)
@@ -160,21 +158,21 @@ INST by_position = _INST_INDEX("person", 3)
 语法结构如下，由规则名、类别名、规则块和若干并列的布尔表达式组成
 
 ```postanvil
-RULE FILTER <类别表达式>:
+RULE FILTER <类别表达式> {
     <布尔表达式>
     ...
-RULEEND
+}
 ```
 
 类别表达式只能是字符串字面量或字符串变量。`"global"` 表示对所有类别应用条件过滤。
 当且仅当一个实例满足所有条件表达式为真，则该实例保留。
 
 ```postanvil
-RULE FILTER "person":
+RULE FILTER "person" {
     self.conf >= 0.7
     (self.w > 100 OR self.h > 100)
     NOT self.area < 500
-RULEEND
+}
 ```
 
 `FILTER` 中只允许条件表达式，不允许赋值。
@@ -182,13 +180,13 @@ RULEEND
 ### 5.2 ATTR
 
 ```postanvil
-RULE ATTR "car":
+RULE ATTR "car" {
     self.density = self.conf / self.area
     "car".quality = 0.8
-RULEEND
+}
 ```
 
-- `self.name = expr`：逐实例设置动态属性；写入 `w`、`h`、`x1`、`y1`、`conf`、`cls` 时会同步修改对应内置值。
+- `self.name = expr`：逐实例设置动态属性；写入 `w`、`h`、`x1`、`y1`、`conf` 时会同步修改对应内置值。`cls` 是句柄的只读类别上下文，修改类别关系应使用 `GROUP` 或 `APPEND`。
 - `"class".name = expr`：设置类别共享属性。
 - 目标写法必须是 `self.<属性>` 或字符串字面量类别的 `<类别>.<属性>`。
 - `ATTR` 规则体只接受属性赋值；需要条件计算时，将控制流写入函数，再从 `ATTR` 调用该函数。
@@ -197,9 +195,9 @@ RULEEND
 ### 5.3 FUNC
 
 ```postanvil
-RULE FUNC <函数名>(参数: 类型, ...) -> 返回类型:
+RULE FUNC <函数名>(参数: 类型, ...) -> 返回类型 {
     <函数语句>
-RULEEND
+}
 ```
 
 返回类型可省略；类型可为 `NUM`、`STR`、`BOOL`、`INST` 或 `ANY`。函数体支持：
@@ -214,9 +212,9 @@ RETURN total        // 返回并结束函数
 简单函数仍可直接用最后一个表达式作为结果：
 
 ```postanvil
-RULE FUNC is_large(w: NUM, h: NUM) -> BOOL:
+RULE FUNC is_large(w: NUM, h: NUM) -> BOOL {
     w * h > 1000
-RULEEND
+}
 ```
 
 函数定义应先于调用它的规则或函数。当前不提供递归、`BREAK`、`CONTINUE` 或用户自定义重载。
@@ -224,90 +222,90 @@ RULEEND
 ### 5.4 GROUP
 
 ```postanvil
-RULE GROUP "large_person" FROM "person":
+RULE GROUP "large_person" FROM "person" {
     self.area > 1000
     self.conf > 0.8
-RULEEND
+}
 ```
 
-从源类别选择满足全部条件的实例，复制到目标类别；源类别不受影响。目标和源均可使用字符串变量。
+从源类别选择满足全部条件的实例，用同一批实例 ID 替换目标类别成员；不会复制实例，源类别不受影响。目标和源均可使用字符串变量。同一 ID 在目标中只保留一次。
 
 ### 5.5 APPEND
 
 ```postanvil
-RULE APPEND "vip" FROM "person":
+RULE APPEND "vip" FROM "person" {
     self.conf > 0.95
-RULEEND
+}
 ```
 
-将源类别中满足条件的实例追加到目标类别，目标不存在时会创建。
+将源类别中满足条件的实例 ID 合并到目标类别，目标不存在时会创建。追加是幂等操作：目标中已经存在的 ID 不会重复插入。
 
 ## 6. 函数控制流
 
-块结束关键字统一使用“块声明关键字 + `END`”的顺序：规则块使用 `RULEEND`，条件块使用 `IFEND`，循环块使用 `FOREND`。旧写法 `ENDIF` 和 `ENDFOR` 不再接受。
+规则、函数、条件分支和循环统一使用花括号定界。`ELIF` 与 `ELSE` 既可以紧跟前一分支的 `}`，也可以另起一行；缩进只用于排版，不参与语法分析。
 
 ### 6.1 IF / ELIF / ELSE
 
 ```postanvil
-IF condition
+IF condition {
     statements
-ELIF other_condition
+} ELIF other_condition {
     statements
-ELSE
+} ELSE {
     statements
-IFEND
+}
 ```
 
 支持零个或多个 `ELIF` 和可选的 `ELSE`，也可以嵌套。分支内声明的局部变量只在该分支作用域内有效。
 
 ```postanvil
-RULE FUNC level(conf: NUM) -> NUM:
-    IF conf > 0.8
+RULE FUNC level(conf: NUM) -> NUM {
+    IF conf > 0.8 {
         RETURN 3
-    ELIF conf > 0.5
+    } ELIF conf > 0.5 {
         RETURN 2
-    ELSE
+    } ELSE {
         RETURN 1
-    IFEND
-RULEEND
+    }
+}
 ```
 
 ### 6.2 FOR
 
 ```postanvil
-FOR obj IN <类别表达式>
+FOR obj IN <类别表达式> {
     statements
-FOREND
+}
 ```
 
 普通类别循环中，循环变量的类型为 `INST`，可读取 `obj.conf`、`obj.area` 等属性，也可赋给其他 `INST` 变量或传入函数：
 
 ```postanvil
-RULE FUNC avg_conf(cls: STR) -> NUM:
+RULE FUNC avg_conf(cls: STR) -> NUM {
     NUM total = 0
-    FOR obj IN cls
+    FOR obj IN cls {
         total = total + obj.conf
-    FOREND
-    IF cls.count == 0
+    }
+    IF cls.count == 0 {
         RETURN 0
-    ELSE
+    } ELSE {
         RETURN total / cls.count
-    IFEND
-RULEEND
+    }
+}
 ```
 
 `FOR cls IN "global"` 遍历类别名，因此可以嵌套遍历全部实例：
 
 ```postanvil
-RULE FUNC total_area() -> NUM:
+RULE FUNC total_area() -> NUM {
     NUM total = 0
-    FOR cls IN "global"
-        FOR obj IN cls
+    FOR cls IN "global" {
+        FOR obj IN cls {
             total = total + obj.area
-        FOREND
-    FOREND
+        }
+    }
     RETURN total
-RULEEND
+}
 ```
 
 循环体拥有独立作用域；`RETURN` 会立即结束循环和函数。空类别和不存在的类别均视为空集合，循环执行零次。
@@ -358,14 +356,13 @@ img.(prop_name)
 以下函数可以按属性名计算类别实例的数值平均值：
 
 ```postanvil
-RULE FUNC fn_avg(_cls: STR, _prop: STR) -> NUM:
+RULE FUNC fn_avg(_cls: STR, _prop: STR) -> NUM {
     NUM _sum = 0
-    FOR _inst IN _cls
+    FOR _inst IN _cls {
         _sum = _sum + _inst.(_prop)
-    FOREND
+    }
     RETURN _sum / _cls.count
-RULEEND
-
+}
 NUM avg_conf = fn_avg("person", "conf")
 NUM avg_area = fn_avg("person", "area")
 ```
@@ -397,7 +394,7 @@ NUM avg_area = fn_avg("person", "area")
 | `x1`、`y1` | 左上角坐标 | 是 |
 | `w`、`h` | 宽、高 | 是 |
 | `conf` | 置信度 | 是 |
-| `cls` | 类别名 | 是 |
+| `cls` | 句柄的当前类别上下文 | 否 |
 | `id` | Scene 为输入实例分配的稳定编号，从 1 开始 | 否 |
 | `index` | 当前类别中的实时位置，从 1 开始 | 否 |
 | `x2`、`y2` | 右下角坐标 | 否，派生值 |
@@ -447,31 +444,31 @@ NUM avg_area = fn_avg("person", "area")
 |---|---|---|
 | `_INTER_AREA(a, b)` | `NUM` | 两个 `INST` 检测框的交集面积 |
 | `_IOU(a, b)` | `NUM` | 交集面积除以并集面积 |
-| `_OVERLAP_A(a, b)` | `NUM` | 交集面积除以第一个实例 `a` 的面积 |
-| `_OVERLAP_B(a, b)` | `NUM` | 交集面积除以第二个实例 `b` 的面积 |
+| `_IOF(a, b)` | `NUM` | 交集面积除以第一个实例 `a` 的面积 |
+| `_IOS(a, b)` | `NUM` | 交集面积除以第二个实例 `b` 的面积 |
 | `_OVERLAPS(a, b)` | `BOOL` | 交集面积是否大于零 |
 | `_CONTAINS(inner, outer)` | `BOOL` | `inner` 是否完全位于 `outer` 内，边界相等也算包含 |
 | `_DISTANCE(a, b)` | `NUM` | 两个检测框中心点的欧氏距离 |
 | `_NEARBY(a, b, threshold)` | `BOOL` | 中心距离是否不大于非负阈值；内部使用距离平方比较 |
 
-当参与比值的分母面积为零时，`_IOU`、`_OVERLAP_A`、`_OVERLAP_B` 返回 `0`。
+当参与比值的分母面积为零时，`_IOU`、`_IOF`、`_IOS` 返回 `0`。
 
 #### 实例查询函数
 
 | 函数 | 返回类型 | 说明 |
 |---|---|---|
-| `_INST_ID(id)` | `INST` | 按 Scene 稳定编号获取实例快照 |
-| `_INST_INDEX(class, index)` | `INST` | 按类别和当前 1-based 位置获取实例快照 |
+| `_INST_ID(id)` | `INST` | 按 Scene 稳定编号获取无类别上下文的实例句柄 |
+| `_INST_INDEX(class, index)` | `INST` | 按类别和当前 1-based 位置获取带类别上下文的实例句柄 |
 
 `_INST_ID` 和 `_INST_INDEX` 的数字参数必须是 DSL `NUM` 可精确表示的正整数。`_INST_INDEX` 的类别名不区分大小写；实例不存在或索引越界时会产生运行时错误。
 
 ## 9. SORT 排序规则
 
 ```postanvil
-RULE SORT <类别表达式>:
+RULE SORT <类别表达式> {
     <键表达式> ASC|DESC
     ...
-RULEEND
+}
 ```
 
 - `SORT` 会直接改变目标类别中的实例顺序，不再作为表达式返回键值。
@@ -486,25 +483,23 @@ RULEEND
 按面积降序、置信度降序排列，然后精确保留前三个实例：
 
 ```postanvil
-RULE SORT "person":
+RULE SORT "person" {
     self.area DESC
     self.conf DESC
     self.id ASC
-RULEEND
-
-RULE FILTER "person":
+}
+RULE FILTER "person" {
     self.index <= 3
-RULEEND
+}
 ```
 
 取得综合得分最高的实例：
 
 ```postanvil
-RULE SORT "spike":
+RULE SORT "spike" {
     self.comprehensive_score DESC
     self.id ASC
-RULEEND
-
+}
 INST best_spike = _INST_INDEX("spike", 1)
 ```
 
@@ -522,39 +517,34 @@ using namespace postanvil;
 
 std::string source = R"(
     IMPORT NUM min_conf
-    RULE FILTER "person":
+    RULE FILTER "person" {
         self.conf > min_conf
-    RULEEND
+    }
     EXPORT "person".count AS kept
 )";
 
 Compiler compiler;
 Program program = compiler.compile(source);
 
-Scene scene(
-    Image{640, 480},
-    {
-        Instance("person", 10, 20, 80, 120, 0.90),
-        Instance("person", 30, 40, 60, 100, 0.40)
-    }
-);
+Scene scene(Image{640, 480});
+scene.add("person", Instance(10, 20, 80, 120, 0.90));
+scene.add("person", Instance(30, 40, 60, 100, 0.40));
 scene.add_import("MIN_CONF", 0.60);
 
 Scene result = program.evaluate(scene);
 double kept = result.get_export("kept").as_num();
 ```
 
-C++ 可直接构造和读取 `INST` 值：
+C++ 可向 Scene 添加实例，再导入、导出轻量 `INST` 句柄：
 
 ```cpp
-scene.add_import(
-    "ANCHOR",
-    Val(Instance("person", 10, 20, 80, 120, 0.75))
-);
+InstanceHandle anchor = scene.add(
+	"anchor", Instance(10, 20, 80, 120, 0.75));
+scene.add_import("ANCHOR", Val(anchor));
 
 Val selected = result.get_export("selected_anchor");
-std::shared_ptr<const Instance> snapshot = selected.as_inst();
-double confidence = snapshot->conf();
+InstanceId id = selected.as_inst().id;
+double confidence = result.inst(id).conf();
 ```
 
 - `compile()` 在词法、语法或静态检查失败时抛出 `PACompileError`；通过
@@ -567,27 +557,23 @@ double confidence = snapshot->conf();
 ## 11. Python 宿主用法
 
 安装与当前 Python 版本和平台匹配的 wheel 后，可以直接导入 `postanvil`。Python 绑定提供
-`Compiler`、`Program`、`Image`、`Instance`、`Scene` 以及对应的异常类型。
+`Compiler`、`Program`、`Image`、`Instance`、`InstanceHandle`、`Scene` 以及对应的异常类型。
 
 ```python
 import postanvil
 
 source = '''
 IMPORT NUM min_conf
-RULE FILTER "person":
+RULE FILTER "person" {
     self.conf > min_conf
-RULEEND
+}
 EXPORT "person".count AS kept
 '''
 
 program = postanvil.Compiler().compile(source)
-scene = postanvil.Scene(
-    postanvil.Image(640, 480),
-    [
-        postanvil.Instance("person", 10, 20, 80, 120, 0.90),
-        postanvil.Instance("person", 30, 40, 60, 100, 0.40),
-    ],
-)
+scene = postanvil.Scene(postanvil.Image(640, 480))
+scene.add("person", postanvil.Instance(10, 20, 80, 120, 0.90))
+scene.add("person", postanvil.Instance(30, 40, 60, 100, 0.40))
 scene.add_import("MIN_CONF", 0.60)
 
 result = program.evaluate(scene)
@@ -603,7 +589,54 @@ program = postanvil.compile(source)
 
 `postanvil.__version__` 返回原生模块版本。发布包的元数据版本与原生模块版本应保持一致。
 
-### 11.1 Ultralytics YOLO 集成
+### 11.1 实例句柄与类别成员
+
+`Scene.add()` 会创建一个 Scene 内实例，建立初始类别成员关系，并返回
+`InstanceHandle`。句柄的 `id` 在该 Scene 内稳定；`cls_name` 是句柄的当前类别上下文，
+不是 `Instance` 的字段。
+
+```python
+scene = postanvil.Scene(postanvil.Image(640, 480))
+person = scene.add("person", postanvil.Instance(10, 20, 80, 120, 0.90))
+scene.append_to_class("foreground", person)
+
+assert person.id == 1
+assert person.cls_name == "PERSON"
+assert scene.instance_ids("PERSON") == [1]
+assert scene.instance_ids("FOREGROUND") == [1]
+assert scene.instance_count == 1
+```
+
+`append_to_class(cls_name, handle)` 和 `append_id_to_class(cls_name, id)` 都是幂等操作。
+`replace_class_ids(cls_name, ids)` 用给定 ID 列表整体替换类别成员。`instance_ids()`
+返回 ID 列表；`instances()` 返回实例引用；`handles()` 返回带该类别上下文的句柄。
+`get_by_id()` 的句柄无类别上下文，`get_by_index()` 的 `index` 从 1 开始。
+
+Python 的 `add_import()` 接受 `bool`、数字、字符串和 `InstanceHandle`；DSL 导出
+`INST` 时，`get_export()` 也返回 `InstanceHandle`。句柄只能在其所属 Scene 中使用。
+
+### 11.2 结构化编译错误
+
+`PACompileError` 的 `str(error)` 是面向人的完整诊断。如需构建 CLI、编辑器插件或
+自定义界面，可以直接读取结构化属性：
+
+```python
+try:
+    postanvil.compile(source)
+except postanvil.PACompileError as error:
+    assert error.kind in (
+        postanvil.CompileErrorKind.SYNTAX,
+        postanvil.CompileErrorKind.SEMANTIC,
+        postanvil.CompileErrorKind.INTERNAL,
+    )
+    print(error.message)
+    print(error.line, error.column)       # 未知时为 -1
+    print(error.source_line or "")
+    print(error.hint or "")
+    print(error.raw_message)              # 仅建议用于诊断工具
+```
+
+### 11.3 Ultralytics YOLO 集成
 
 Ultralytics 是可选依赖；不使用 YOLO 集成时无需安装。需要集成时执行：
 
@@ -622,9 +655,9 @@ import postanvil
 model = YOLO("model.pt")
 program = postanvil.compile('''
 IMPORT NUM min_conf
-RULE FILTER "global":
+RULE FILTER "global" {
     self.conf >= min_conf
-RULEEND
+}
 ''')
 
 for detection in model("image.jpg"):
@@ -643,14 +676,50 @@ for detection in model("image.jpg"):
 当前适配器只允许把普通轴对齐检测框写回 YOLO。分割、姿态、OBB、分类、语义掩码和
 深度结果包含与框逐项关联的额外数据，单独更新框会造成不同步，因此会被明确拒绝。
 动态属性、类别属性和导出值只保留在 `Scene`。新类别默认不写入 YOLO 名称表；确需新增
-类别时传入 `allow_new_classes=True`。写回时以 `Scene` 的类别容器作为 YOLO 类别；
-YOLO 单个检测框只有一个类别字段，无法同时表达实例的源类别和 `GROUP/APPEND` 派生分组。
+类别时传入 `allow_new_classes=True`。一个 PostAnvil 实例可以属于多个类别，但 YOLO 单个
+检测框只有一个类别字段。写回时优先使用实例仍然所属的原始标签类别；若该成员关系已被
+移除，则实例必须只剩一个候选类别，否则适配器会报告歧义而不会静默复制检测框。
 
-## 12. 关键字
+## 12. Android 宿主用法
 
-`RULE`、`RULEEND`、`FILTER`、`ATTR`、`FUNC`、`GROUP`、`APPEND`、`SORT`、`ASC`、`DESC`、`FROM`、`AND`、`OR`、`NOT`、`SELF`、`NUM`、`STR`、`BOOL`、`INST`、`ANY`、`RETURN`、`IMPORT`、`EXPORT`、`AS`、`IF`、`ELIF`、`ELSE`、`IFEND`、`FOR`、`IN`、`FOREND`、`TRUE`、`FALSE`。
+Android 绑定提供 `org.postanvil.NativeBridge`。`Program` 在构造时编译 DSL，应在页面、
+模型或处理器的生命周期内复用，并通过 `try-with-resources` 或显式 `close()` 释放。
+当前公开 CMake 预设构建 API 32 及以上的 `arm64-v8a` 和 `armeabi-v7a` JNI 库；
+NDK 设置、双 ABI 构建脚本、静态库接入、`jniLibs` 目录和 R8 规则详见根目录
+`README.md` 的“Android JNI”章节。
 
-## 13. 编译错误诊断
+```java
+String[] classes = {"person", "person"};
+double[] boxes = {
+    10, 20, 80, 120, 0.90,
+    30, 40, 60, 100, 0.40
+};
+
+try (NativeBridge.Program program = new NativeBridge.Program(source)) {
+    NativeBridge.SceneResult result = program.evaluate(640, 480, classes, boxes);
+    long kept = result.count("PERSON");
+    for (int i = 0; i < result.size(); ++i) {
+        String clsName = result.className(i);
+        long stableId = result.instanceId(i);
+        double[] box = result.box(i); // [x, y, width, height, confidence]
+    }
+}
+```
+
+`classes` 与检测框一一对应，`boxes.length` 必须等于 `classes.length * 5`。
+`SceneResult` 是执行后的类别成员快照；同一实例属于多个类别时会出现多行，但
+`instanceId` 相同。需要 `GROUP` / `APPEND` 产生的新类别数量时，使用
+`evaluateCounts(..., outputClasses)` 并显式列出要查询的类别。
+
+编译错误映射为 `IllegalArgumentException`，DSL 执行错误映射为
+`IllegalStateException`。当前 Android 轻量绑定尚未暴露 `IMPORT` / `EXPORT`、动态属性
+和类别属性。
+
+## 13. 关键字
+
+`RULE`、`FILTER`、`ATTR`、`FUNC`、`GROUP`、`APPEND`、`SORT`、`ASC`、`DESC`、`FROM`、`AND`、`OR`、`NOT`、`SELF`、`NUM`、`STR`、`BOOL`、`INST`、`ANY`、`RETURN`、`IMPORT`、`EXPORT`、`AS`、`IF`、`ELIF`、`ELSE`、`FOR`、`IN`、`TRUE`、`FALSE`。
+
+## 14. 编译错误诊断
 
 `Compiler::compile()` 遇到词法、语法或语义错误时会抛出 `PACompileError`。错误文本默认包含
 错误阶段、从 1 开始的行列号、对应源码行、插入符以及可执行的修复提示。例如，把 `OR`
@@ -687,18 +756,20 @@ catch (const postanvil::PACompileError& error) {
 }
 ```
 
-Python API 与 C++ 使用相同的异常名称。捕获 `postanvil.PACompileError` 后使用 `str(error)` 即可取得
-同样的人类可读文本。
-`raw_message()` 面向 CLI、编辑器集成和编译器维护者，不建议直接展示给普通用户。
+Python API 与 C++ 使用相同的异常名称。捕获 `postanvil.PACompileError` 后，
+`str(error)` 返回同样的人类可读文本；`kind`、`message`、`line`、`column`、
+`source_line`、`hint` 和 `raw_message` 是属性，其中 `kind` 使用
+`postanvil.CompileErrorKind`。C++ 的 `raw_message()` 和 Python 的 `raw_message` 面向
+CLI、编辑器集成和编译器维护者，不建议直接展示给普通用户。
 
-## 14. 常见问题
+## 15. 常见问题
 
 **如何删除某类别的全部实例？**
 
 ```postanvil
-RULE FILTER "person":
+RULE FILTER "person" {
     FALSE
-RULEEND
+}
 ```
 
 **多行条件是 AND 还是 OR？**
@@ -723,6 +794,6 @@ RULEEND
 
 ---
 
-本手册描述 PostAnvil 0.7.x 的公开行为。若文档与具体补丁版本存在差异，请以该发布版本的
+本手册描述 PostAnvil 0.8.x 的公开行为。若文档与具体补丁版本存在差异，请以该发布版本的
 `grammar/PostAnvil.g4`、公开头文件、Python 绑定和测试结果为准；内部头文件和实现细节不属于
 兼容性承诺。

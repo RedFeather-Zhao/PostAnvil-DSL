@@ -12,107 +12,18 @@
 #include <memory>
 #include <format>
 
-#include "antlr4-runtime.h"
 #include "PostAnvilLexer.h"
 #include "PostAnvilParser.h"
 #include "PostAnvilBaseListener.h"
+
+#include "compiler_error.hpp"
+#include "error_listener.hpp"
 
 #include "program.hpp"
 #include "expr_compiler.hpp"
 #include "builtins.hpp"
 
 namespace postanvil {
-
-// ====================== ANTLR4 Error Listener ======================
-
-/**
- * @brief 自定义 ANTLR4 错误监听器，用于收集语法分析过程中的错误信息
- */
-struct PostAnvilErrorListener : public antlr4::BaseErrorListener {
-	struct Error {
-		int line;				// 错误所在行号
-		int column;				// 从 1 开始的错误列号
-		std::string offending_text;
-		std::string raw_message;
-	};
-	struct FriendlyError {
-		std::string message;
-		std::string hint;
-	};
-
-	std::vector<Error> errors;	// 收集到的所有错误
-
-	void syntaxError		(antlr4::Recognizer* /*recognizer*/,
-							 antlr4::Token* offendingSymbol,
-							 size_t line, size_t charPositionInLine,
-							 const std::string& msg, std::exception_ptr /*e*/) override
-	{
-		errors.push_back({
-			static_cast<int>(line),
-			static_cast<int>(charPositionInLine) + 1,
-			offendingSymbol ? offendingSymbol->getText() : std::string{},
-			msg
-		});
-	}
-
-	bool hasErrors() const { return !errors.empty(); }
-
-	static FriendlyError explain(const Error& error) {
-		const auto& token = error.offending_text;
-		const auto& raw = error.raw_message;
-		auto normalized_token = token;
-		utils::to_upper_inplace(normalized_token);
-
-		if (normalized_token == "OR" || normalized_token == "AND") {
-			return {
-				std::format("Logical operator '{}' cannot start a new statement.", token),
-				"Move the operator to the previous line, or end the previous line with '\\' to continue the expression."
-			};
-		}
-		if (normalized_token == "ENDIF") {
-			return { "Unexpected token 'ENDIF'.", "PostAnvil closes an IF block with IFEND." };
-		}
-		if (normalized_token == "ENDFOR") {
-			return { "Unexpected token 'ENDFOR'.", "PostAnvil closes a FOR block with FOREND." };
-		}
-		if (token == "<EOF>") {
-			return {
-				"Unexpected end of input.",
-				"Check for a missing ')', IFEND, FOREND, or RULEEND before the end of the script."
-			};
-		}
-
-		const bool is_newline = token == "\n" || token == "\r\n";
-		if (is_newline && raw.find("':'") != std::string::npos) {
-			return { "Expected ':' before the end of the line.", "Add ':' after the rule header." };
-		}
-		if (is_newline) {
-			return {
-				"Unexpected end of line.",
-				"Complete the statement on this line, or use '\\' at the end of the line to continue it."
-			};
-		}
-		if (raw.find("token recognition error") != std::string::npos) {
-			return {
-				"The input contains an unrecognized character or token.",
-				"Check spelling, quotes, and supported PostAnvil operators near the marked column."
-			};
-		}
-
-		std::string hint = "Check the statement structure and keyword spelling near the marked token.";
-		if (raw.find("RULEEND") != std::string::npos) {
-			hint = "Close each RULE block with RULEEND and keep statements inside the block.";
-		}
-		else if (raw.find("NEWLINE") != std::string::npos) {
-			hint = "Put each declaration or statement on its own line.";
-		}
-
-		if (!token.empty()) {
-			return { std::format("Unexpected token '{}'.", token), std::move(hint) };
-		}
-		return { "The source cannot be parsed near this position.", std::move(hint) };
-	}
-};
 
 // ====================== PostAnvilCompiler =========================
 
@@ -128,115 +39,17 @@ struct PostAnvilErrorListener : public antlr4::BaseErrorListener {
  *
  * 算子类型对应六种 DSL 规则：
  * - FILTER：条件过滤
- * - ATTR：属性计算
- * - GROUP：创建新类别
+ * - ATTR：  属性计算
+ * - GROUP： 创建新类别
  * - APPEND：追加实例
- * - SORT：按多关键字原地稳定排序
- * - FUNC：自定义函数
+ * - SORT：  按多关键字原地稳定排序
+ * - FUNC：  自定义函数
  *
  * 类型系统：
  * - 编译期使用 Type 枚举推导表达式类型
  * - 运行时使用 Val 多态值传递数据
  */
 class PostAnvilCompiler : public ::PostAnvilBaseListener {
-	/**
-	 * @brief 报告语法错误，抛出 PACompileError-Syntax 异常
-	 *
-	 * @param source - DSL 源代码文本
-	 * @param errors - 收集到的语法错误列表，仅对首个错误进行源码定位，后续错误仅附加提示
-	 */
-	[[noreturn]] static inline void
-	report_syntax_error				(std::string_view source,
-									 const std::vector<PostAnvilErrorListener::Error>& errors)
-	{
-		std::string combined_msg;
-		std::string combined_hint;
-		SourceLocation first_loc;
-		bool first = true;
-
-		for (const auto& err : errors) {
-			auto friendly = PostAnvilErrorListener::explain(err);
-			auto loc = PostAnvilError::locate_source(source, err.line, err.column);
-
-			if (first) {
-				first_loc = loc;
-				combined_hint = friendly.hint;
-				first = false;
-			}
-
-			combined_msg += std::format(
-				"Error at line {}, column {}: {}\n  {}\n",
-				err.line, err.column,
-				friendly.message,
-				friendly.hint
-			);
-		}
-
-		if (errors.size() > 1) {
-			combined_msg += std::format(
-				"Total {} parser errors. Fix the first error first.\n",
-				errors.size()
-			);
-			combined_hint += std::format(
-				" Fix this first error before reviewing the {} following parser error(s).",
-				errors.size() - 1
-			);
-		}
-
-		throw PACompileError(
-			PACompileError::Kind::Syntax,
-			std::move(combined_msg),
-			first_loc,
-			std::move(combined_hint),
-			errors.front().raw_message
-		);
-	}
-
-	[[noreturn]] static inline void
-	throw_compile_error				(PACompileError::Kind kind,
-									 std::string_view msg,
-									 const ::antlr4::ParserRuleContext* ctx = nullptr)
-	{
-		if (!ctx) {
-			throw PACompileError(kind, std::string(msg));
-		}
-		auto start = ctx->getStart();
-		throw PACompileError(
-			kind,
-			std::string(msg),
-			SourceLocation{
-				static_cast<int>(start->getLine()),
-				static_cast<int>(start->getCharPositionInLine()) + 1,
-				std::nullopt
-			}
-		);
-	}
-
-	/**
-	 * @brief 报告语义错误，抛出 PACompileError-Semantic 异常
-	 *
-	 * @param msg - 错误消息
-	 * @param ctx - 解析树上下文
-	 */
-	[[noreturn]] static inline void
-	report_semantic_error			(std::string_view msg,
-									 const ::antlr4::ParserRuleContext* ctx)
-	{
-		throw_compile_error(PACompileError::Kind::Semantic, msg, ctx);
-	}
-
-	/**
-	 * @brief 报告内部错误，抛出 PACompileError-Internal 异常
-	 *
-	 * @param msg - 错误消息
-	 */
-	[[noreturn]] static inline void
-	report_internal_error			(std::string_view msg,
-									 const ::antlr4::ParserRuleContext* ctx)
-	{
-		throw_compile_error(PACompileError::Kind::Internal, msg, ctx);
-	}
-
 public:
 	PostAnvilCompiler() = default;
 
@@ -275,24 +88,14 @@ public:
 
 		::PostAnvilParser::ProgramContext* tree = parser.program();
 
-		if (error_listener.hasErrors()) {
-			report_syntax_error(source, error_listener.errors);
-		}
+		error_listener.throw_if_error(source);
 
 		// 遍历 ParseTree 构建算子管道
 		try {
 			antlr4::tree::ParseTreeWalker::DEFAULT.walk(this, tree);
 		}
 		catch (const PACompileError& error) {
-			if (error.line() > 0 && !error.has_source_line()) {
-				throw PACompileError(
-					error.kind(),
-					error.message(),
-					PostAnvilError::locate_source(source, error.line(), error.column()),
-					error.hint(),
-					error.raw_message());
-			}
-			throw;	// 转发编译错误，统一补充源码定位信息
+			rethrow_compile_error(source, error);
 		}
 
 		return std::move(m_program);
@@ -342,7 +145,7 @@ private: // Listener 回调实现
 	 *			: type IDENTIFIER '=' expr NEWLINE
 	 *			| IDENTIFIER '=' expr NEWLINE
 	 *			;
-	 * 
+	 *
 	 * @param ctx
 	 */
 	void enterGlobalDef(::PostAnvilParser::GlobalDefContext* ctx) override {
@@ -402,7 +205,8 @@ private: // Listener 回调实现
 	void enterFilter_rule(::PostAnvilParser::Filter_ruleContext* ctx) override {
 		m_current_kind = RuleKind::FILTER;
 		m_current_filter = std::make_unique<FilterOperator>();
-		m_current_filter->target = m_expr_compiler.compileClassExpr(ctx->class_expr());
+		m_current_filter->target_cls_expr =
+			m_expr_compiler.compileClassExpr(ctx->class_expr());
 	}
 
 	void exitFilter_rule(::PostAnvilParser::Filter_ruleContext* /*ctx*/) override {
@@ -434,7 +238,8 @@ private: // Listener 回调实现
 	void enterAttr_rule(::PostAnvilParser::Attr_ruleContext* ctx) override {
 		m_current_kind = RuleKind::ATTR;
 		m_current_attr = std::make_unique<AttributeOperator>();
-		m_current_attr->target = m_expr_compiler.compileClassExpr(ctx->class_expr());
+		m_current_attr->target_cls_expr =
+			m_expr_compiler.compileClassExpr(ctx->class_expr());
 	}
 
 	void exitAttr_rule(::PostAnvilParser::Attr_ruleContext* /*ctx*/) override {
@@ -448,16 +253,22 @@ private: // Listener 回调实现
 	 * @details 区分实例属性 self.xxx 和类别属性 "cls".xxx
 	 */
 	void enterAttr_def(::PostAnvilParser::Attr_defContext* ctx) override {
-		if (!m_current_attr) return;
+		if (!m_current_attr) {
+			return;
+		}
 
 		auto* lvalue = ctx->attr_lvalue();
-		if (!lvalue) return;
+		if (!lvalue) {
+			return;
+		}
 
 		std::string attr_name;
 		bool is_class_attr = false;
 		std::string cls_name;
 
-		if (auto* inst_def = dynamic_cast<::PostAnvilParser::InstanceAttrDefContext*>(lvalue)) {
+		if (auto* inst_def =
+			dynamic_cast<::PostAnvilParser::InstanceAttrDefContext*>(lvalue))
+		{
 			attr_name = utils::get_upper_text(inst_def->IDENTIFIER());
 		}
 		else if (auto* cls_def = dynamic_cast<::PostAnvilParser::ClassAttrDefContext*>(lvalue)) {
@@ -486,8 +297,9 @@ private: // Listener 回调实现
 		m_current_group = std::make_unique<GroupOperator>();
 		auto class_exprs = ctx->class_expr();
 		if (class_exprs.size() >= 2) {
-			m_current_group->new_class = m_expr_compiler.compileClassExpr(class_exprs[0]);
-			m_current_group->source_class = m_expr_compiler.compileClassExpr(class_exprs[1]);
+			m_current_group->new_cls_expr = m_expr_compiler.compileClassExpr(class_exprs[0]);
+			m_current_group->source_cls_expr =
+				m_expr_compiler.compileClassExpr(class_exprs[1]);
 		}
 	}
 
@@ -504,8 +316,10 @@ private: // Listener 回调实现
 		m_current_append = std::make_unique<AppendOperator>();
 		auto class_exprs = ctx->class_expr();
 		if (class_exprs.size() >= 2) {
-			m_current_append->dest_class = m_expr_compiler.compileClassExpr(class_exprs[0]);
-			m_current_append->source_class = m_expr_compiler.compileClassExpr(class_exprs[1]);
+			m_current_append->dest_cls_expr =
+				m_expr_compiler.compileClassExpr(class_exprs[0]);
+			m_current_append->source_cls_expr =
+				m_expr_compiler.compileClassExpr(class_exprs[1]);
 		}
 	}
 
@@ -519,14 +333,16 @@ private: // Listener 回调实现
 
 	/**
 	 * @brief 编译原地稳定排序规则
+	 *
 	 * @details 排序键允许 NUM、STR、BOOL 或运行时可比较的 ANY；INST 必须改为其具体属性。
 	 */
 	void enterSort_rule(::PostAnvilParser::Sort_ruleContext* ctx) override {
 		m_current_kind = RuleKind::SORT;
 		m_current_sort = std::make_unique<SortOperator>();
-		m_current_sort->target = m_expr_compiler.compileClassExpr(ctx->class_expr());
+		m_current_sort->target_cls_expr =
+			m_expr_compiler.compileClassExpr(ctx->class_expr());
 
-		for (auto* key_ctx : ctx->sort_key()) {
+		for (auto* key_ctx : ctx->sort_block()->sort_key()) {
 			auto typed = m_expr_compiler.compile(key_ctx->expr());
 			if (type_strict_equal(typed.type, Type::T_INST) ||
 				type_strict_equal(typed.type, Type::T_ERROR)) {
@@ -580,7 +396,7 @@ private: // Listener 回调实现
 		}
 
 		// 编译函数体语句
-		auto statements = ctx->func_statement();
+		auto statements = ctx->stmt_block()->statement();
 		std::vector<StatementFunc> body_stmts;
 		for (size_t i = 0; i < statements.size(); ++i) {
 			body_stmts.emplace_back(compileFuncStatement(statements[i], i + 1 == statements.size()));
@@ -627,13 +443,15 @@ private: // Listener 回调实现
 		m_type_scope.pop();
 	}
 
+	// =========================== Statement ===========================
+
 	/**
 	 * @brief 编译函数体变量定义语句闭包
 	 *
-	 * @param ctx				- FuncVarDefContext 标签
+	 * @param ctx				- StmtVarDefContext 标签
 	 * @return StatementFunc	- 语句闭包
 	 */
-	StatementFunc compileFuncVarDef(::PostAnvilParser::FuncVarDefContext* ctx) {
+	StatementFunc compileFuncVarDef(::PostAnvilParser::StmtVarDefContext* ctx) {
 		std::string name = utils::get_upper_text(ctx->IDENTIFIER());
 		auto typed = m_expr_compiler.compile(ctx->expr());
 		Type declared = parseType(ctx->type());
@@ -648,7 +466,7 @@ private: // Listener 回调实现
 		m_type_scope.set_local(name, declared);
 
 		return [name, func = std::move(typed.func)](EvaluationContext& ctx) {
-			Val val = func(ctx.curr_inst ? *ctx.curr_inst : Scene::make_dummy(), ctx);
+			Val val = func(*ctx.curr_inst, ctx);
 			ctx.set_var(name, val);
 		};
 	}
@@ -656,13 +474,13 @@ private: // Listener 回调实现
 	/**
 	 * @brief 编译函数体变量赋值语句闭包
 	 *
-	 * @param ctx				- FuncAssignContext 标签
+	 * @param ctx				- StmtAssignContext 标签
 	 * @return StatementFunc	- 语句闭包
 	 */
-	StatementFunc compileFuncAssign(::PostAnvilParser::FuncAssignContext* ctx) {
+	StatementFunc compileFuncAssign(::PostAnvilParser::StmtAssignContext* ctx) {
 		std::string name = utils::get_upper_text(ctx->IDENTIFIER());
 		auto typed = m_expr_compiler.compile(ctx->expr());
-		
+
 		Type existing;
 		if (!m_type_scope.lookup(name, existing)) {
 			report_semantic_error("Assignment to undeclared variable '" + name + "'", ctx);
@@ -675,7 +493,7 @@ private: // Listener 回调实现
 		// 赋值并不改变变量类型
 
 		return [name, func = std::move(typed.func)](EvaluationContext& ctx) {
-			Val val = func(ctx.curr_inst ? *ctx.curr_inst : Scene::make_dummy(), ctx);
+			Val val = func(*ctx.curr_inst, ctx);
 			ctx.set_var(name, val);
 		};
 	}
@@ -694,21 +512,25 @@ private: // Listener 回调实现
 		std::vector<Branch> branches;
 
 		// IF
-		m_type_scope.push();
-		auto if_cond = m_expr_compiler.compileAsBool(ctx->expr()->or_expr());
-		std::vector<StatementFunc> if_stmts;
-		for (auto* stmt : ctx->func_statement()) {
-			if_stmts.emplace_back(compileFuncStatement(stmt));
+		if (auto* if_ctx = ctx->ifBranch()) {
+			m_type_scope.push();
+
+			auto if_cond = m_expr_compiler.compileAsBool(if_ctx->expr()->or_expr());
+			std::vector<StatementFunc> if_stmts;
+			for (auto* stmt : if_ctx->stmt_block()->statement()) {
+				if_stmts.emplace_back(compileFuncStatement(stmt));
+			}
+			branches.emplace_back(std::move(if_cond), std::move(if_stmts));
+
+			m_type_scope.pop();
 		}
-		branches.emplace_back(std::move(if_cond), std::move(if_stmts));
-		m_type_scope.pop();
 
 		// ELIF
 		for (auto* elif_ctx : ctx->elifBranch()) {
 			m_type_scope.push();
 			auto cond = m_expr_compiler.compileAsBool(elif_ctx->expr()->or_expr());
 			std::vector<StatementFunc> stmts;
-			for (auto* stmt : elif_ctx->func_statement()) {
+			for (auto* stmt : elif_ctx->stmt_block()->statement()) {
 				stmts.emplace_back(compileFuncStatement(stmt));
 			}
 			branches.emplace_back(std::move(cond), std::move(stmts));
@@ -719,7 +541,7 @@ private: // Listener 回调实现
 		std::vector<StatementFunc> else_stmts;
 		if (auto* else_ctx = ctx->elseBranch()) {
 			m_type_scope.push();
-			for (auto* stmt : else_ctx->func_statement()) {
+			for (auto* stmt : else_ctx->stmt_block()->statement()) {
 				else_stmts.emplace_back(compileFuncStatement(stmt));
 			}
 			m_type_scope.pop();
@@ -766,75 +588,74 @@ private: // Listener 回调实现
 		m_type_scope.set_local(loop_var, loop_type);
 
 		std::vector<StatementFunc> body_stmts;
-		for (auto* stmt : ctx->func_statement()) {
+		for (auto* stmt : ctx->stmt_block()->statement()) {
 			body_stmts.emplace_back(compileFuncStatement(stmt));
 		}
 		m_type_scope.pop();
 
 		return [loop_var, class_expr, body_stmts](EvaluationContext& ctx) {
-			std::string cls_name = class_expr(Scene::make_dummy(), ctx);
-			const Instance* previous_inst = ctx.curr_inst;
+			std::string cls_name = class_expr(ctx.scene.inst_dummy(), ctx);
 
 			// 特殊处理 "GLOBAL"：遍历所有类别
 			if (cls_name == "GLOBAL") {
 				// TODO: "GLOBAL"视为所有类别的分组，未来支持若干类合并为一组，同样支持循环
-				for (const auto& [category, _] : ctx.scene.objects) {
+				for (const auto& [global_cls_name, _] : ctx.scene.class_index()) {
 					ctx.push_scope();
-					ctx.set_var(loop_var, category);
-					ctx.curr_inst = previous_inst;
+					ctx.set_var(loop_var, global_cls_name);
 					for (auto& stmt : body_stmts) {
 						if (ctx.is_returned) {
 							break;
 						}
 						stmt(ctx);
 					}
-					ctx.curr_inst = previous_inst;
 					ctx.pop_scope();
 					if (ctx.is_returned) {
 						break;
 					}
 				}
-				ctx.curr_inst = previous_inst;
 				return;
 			}
 
 			// 普通类别
-			auto it = ctx.scene.objects.find(cls_name);
-			if (it == ctx.scene.objects.end()) {
-				ctx.curr_inst = previous_inst;
+			const auto& class_index = ctx.scene.class_index();
+			auto it = class_index.find(cls_name);
+			if (it == class_index.end()) {
 				return;
 			}
 
-			for (const Instance& inst : it->second) {
+			for (const auto id : it->second) {
 				ctx.push_scope();
-				ctx.set_var(loop_var, Val(inst));
-				ctx.curr_inst = &inst;
+				auto current = ctx.enter_instance(InstanceHandle{ id, cls_name });
+				ctx.set_var(loop_var, Val(ctx.curr_handle));
 				for (auto& stmt : body_stmts) {
 					if (ctx.is_returned) {
 						break;
 					}
 					stmt(ctx);
 				}
-				ctx.curr_inst = previous_inst;
 				ctx.pop_scope();
 				if (ctx.is_returned) {
 					break;
 				}
 			}
-			ctx.curr_inst = previous_inst;
 		};
 	}
 
 	/**
 	 * @brief 编译函数体表达式语句闭包，支持可能有副作用的语句
-	 * 
-	 * @param ctx				- FuncExprStmtContext 标签
+	 *
+	 * @param ctx				- StmtExprContext 标签
 	 * @return StatementFunc	- 语句闭包
 	 */
-	StatementFunc compileExprStmt(::PostAnvilParser::FuncExprStmtContext* ctx, bool implicit_return) {
+	StatementFunc compileExprStmt(
+		::PostAnvilParser::StmtExprContext* ctx,
+		bool implicit_return)
+	{
 		auto typed = m_expr_compiler.compile(ctx->expr());
 		if (implicit_return) {
-			if (auto it = m_program.functions.find(m_current_func->name); it != m_program.functions.end()) {
+			if (auto it = m_program.functions.find(m_current_func->name);
+				it != m_program.functions.end())
+			{
 				Type declared = it->second.ret_type;
 				if (!type_compatible(declared, typed.type)) {
 					auto err = std::format("Return type mismatch: function declared {}, but returns {}",
@@ -843,24 +664,26 @@ private: // Listener 回调实现
 				}
 			}
 			return [func = std::move(typed.func)](EvaluationContext& ctx) {
-				Val val = func(ctx.curr_inst ? *ctx.curr_inst : Scene::make_dummy(), ctx);
+				Val val = func(*ctx.curr_inst, ctx);
 				ctx.do_return(std::move(val));
 			};
 		}
 		return [func = std::move(typed.func)](EvaluationContext& ctx) {
-			(void)func(ctx.curr_inst ? *ctx.curr_inst : Scene::make_dummy(), ctx);
+			(void)func(*ctx.curr_inst, ctx);
 		};
 	}
 
 	/**
 	 * @brief 编译返回语句闭包
-	 * 
-	 * @param ctx				- FuncReturnStmtContext 标签
+	 *
+	 * @param ctx				- StmtReturnContext 标签
 	 * @return StatementFunc	- 状态闭包
 	 */
-	StatementFunc compileFuncReturn(::PostAnvilParser::FuncReturnStmtContext* ctx) {
+	StatementFunc compileFuncReturn(::PostAnvilParser::StmtReturnContext* ctx) {
 		auto typed = m_expr_compiler.compile(ctx->expr());
-		if (auto it = m_program.functions.find(m_current_func->name); it != m_program.functions.end()) {
+		if (auto it = m_program.functions.find(m_current_func->name);
+			it != m_program.functions.end())
+		{
 			Type declared = it->second.ret_type;
 			if (!type_compatible(declared, typed.type)) {
 				auto err = std::format("Return type mismatch: function declared {}, but returns {}",
@@ -870,36 +693,38 @@ private: // Listener 回调实现
 		}
 
 		return [func = std::move(typed.func)](EvaluationContext& ctx) {
-			Val val = func(ctx.curr_inst ? *ctx.curr_inst : Scene::make_dummy(), ctx);
+			Val val = func(*ctx.curr_inst, ctx);
 			ctx.do_return(std::move(val));
 		};
 	}
 
 	// 编译单条语句
-	StatementFunc compileFuncStatement(::PostAnvilParser::Func_statementContext* ctx, bool implicit_return = false) {
-		if (auto* varDef = dynamic_cast<::PostAnvilParser::FuncVarDefContext*>(ctx)) {
+	StatementFunc compileFuncStatement(
+		::PostAnvilParser::StatementContext* ctx,
+		bool implicit_return = false)
+	{
+		if (auto* varDef = dynamic_cast<::PostAnvilParser::StmtVarDefContext*>(ctx)) {
 			return compileFuncVarDef(varDef);
 		}
-		if (auto* assign = dynamic_cast<::PostAnvilParser::FuncAssignContext*>(ctx)) {
+		if (auto* assign = dynamic_cast<::PostAnvilParser::StmtAssignContext*>(ctx)) {
 			return compileFuncAssign(assign);
 		}
-		if (auto* ifStmt = dynamic_cast<::PostAnvilParser::FuncIfStmtContext*>(ctx)) {
+		if (auto* ifStmt = dynamic_cast<::PostAnvilParser::StmtIfContext*>(ctx)) {
 			return compileIfStmt(ifStmt->ifStmt());		// 编译通用if语句
 		}
-		if (auto* forStmt = dynamic_cast<::PostAnvilParser::FuncForStmtContext*>(ctx)) {
+		if (auto* forStmt = dynamic_cast<::PostAnvilParser::StmtForContext*>(ctx)) {
 			return compileForStmt(forStmt->forStmt());	// 编译通用for语句
 		}
-		if (auto* exprStmt = dynamic_cast<::PostAnvilParser::FuncExprStmtContext*>(ctx)) {
+		if (auto* exprStmt = dynamic_cast<::PostAnvilParser::StmtExprContext*>(ctx)) {
 			return compileExprStmt(exprStmt, implicit_return);
 		}
-		if (auto* retStmt = dynamic_cast<::PostAnvilParser::FuncReturnStmtContext*>(ctx)) {
+		if (auto* retStmt = dynamic_cast<::PostAnvilParser::StmtReturnContext*>(ctx)) {
 			return compileFuncReturn(retStmt);
 		}
 		report_internal_error("Unknown func_statement type", ctx);
 	}
 
 	// ======================== Helpers ============================
-
 
 	/**
 	 * @brief 解析类型节点为 Type 枚举
@@ -916,7 +741,7 @@ private: // Listener 回调实现
 	}
 
 private:
-	//====================== 编译算子 ======================//
+	//====================== Operators ======================//
 
 	std::unique_ptr<FilterOperator>		m_current_filter;
 	std::unique_ptr<AttributeOperator>	m_current_attr;
@@ -926,13 +751,13 @@ private:
 	std::unique_ptr<FuncOperator>		m_current_func;
 	std::unique_ptr<VarDefOperator>		m_current_vardef;
 
-	//====================== 编译上下文 ======================//
+	//====================== Context ======================//
 
 	detail::ScopeChain<Type>			m_type_scope;						// 变量类型作用域，局部变量、全局变量、函数参数
 	RuleKind							m_current_kind = RuleKind::FILTER;	// 当前编译的规则类型
 	CompiledProgram						m_program;							// 编译程序
 
-	//====================== 子编译器 ======================//
+	//====================== SubCompiler ======================//
 	TreeExprCompiler					m_expr_compiler;
 };
 

@@ -1,9 +1,11 @@
 """Python interface for the PostAnvil DSL runtime."""
 
 from ._postanvil import (  # noqa: F401
+    CompileErrorKind,
     Compiler,
     Image,
     Instance,
+    InstanceHandle,
     PACompileError,
     PAParseError,
     PARuntimeError,
@@ -19,9 +21,11 @@ from .ultralytics import (  # noqa: F401
 )
 
 __all__ = [
+    "CompileErrorKind",
     "Compiler",
     "Image",
     "Instance",
+    "InstanceHandle",
     "PACompileError",
     "PAParseError",
     "PARuntimeError",

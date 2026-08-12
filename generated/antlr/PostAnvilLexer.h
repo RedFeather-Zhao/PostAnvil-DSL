@@ -1,5 +1,5 @@
 
-// Generated from D:/UserProject/vsstudio/PostAnvil DSL/grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -12,14 +12,14 @@
 class  PostAnvilLexer : public antlr4::Lexer {
 public:
   enum {
-    T__0 = 1, RULE = 2, FILTER = 3, ATTR = 4, FUNC = 5, GROUP = 6, APPEND = 7, 
-    FROM = 8, AND = 9, OR = 10, NOT = 11, SELF = 12, NUM = 13, STR = 14, 
-    BOOL = 15, INST = 16, ANY = 17, RETURN = 18, IMPORT = 19, EXPORT = 20, 
-    AS = 21, IF = 22, ELIF = 23, ELSE = 24, FOR = 25, IN = 26, SORT = 27, 
-    ASC = 28, DESC = 29, LCURLY = 30, RCURLY = 31, BOOL_LIT = 32, ARROW = 33, 
-    PLUS = 34, MINUS = 35, STAR = 36, SLASH = 37, LT = 38, GT = 39, LE = 40, 
-    GE = 41, EQ = 42, NE = 43, DOT = 44, LPAREN = 45, RPAREN = 46, COMMA = 47, 
-    ASSIGN = 48, NUMBER = 49, STRING = 50, IDENTIFIER = 51, WS = 52, LINE_CONTINUATION = 53, 
+    T__0 = 1, RULE = 2, FILTER = 3, ATTR = 4, FUNC = 5, SORT = 6, GROUP = 7, 
+    APPEND = 8, FROM = 9, IMPORT = 10, EXPORT = 11, AS = 12, AND = 13, OR = 14, 
+    NOT = 15, BOOL_LIT = 16, SELF = 17, NUM = 18, STR = 19, BOOL = 20, INST = 21, 
+    ANY = 22, RETURN = 23, IF = 24, ELIF = 25, ELSE = 26, FOR = 27, IN = 28, 
+    ASC = 29, DESC = 30, LCURLY = 31, RCURLY = 32, ARROW = 33, PLUS = 34, 
+    MINUS = 35, STAR = 36, SLASH = 37, LT = 38, GT = 39, LE = 40, GE = 41, 
+    EQ = 42, NE = 43, DOT = 44, LPAREN = 45, RPAREN = 46, COMMA = 47, ASSIGN = 48, 
+    NUMBER = 49, STRING = 50, IDENTIFIER = 51, WS = 52, LINE_CONTINUATION = 53, 
     NEWLINE = 54, COMMENT = 55
   };
 

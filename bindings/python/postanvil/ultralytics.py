@@ -11,10 +11,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ._postanvil import Image, Instance, Scene
+from ._postanvil import Image, Instance, PARuntimeError, Scene
 
 
 _TRACK_ID_PROPERTY = "YOLO_TRACK_ID"
+_CLASS_ID_PROPERTY = "YOLO_CLASS_ID"
 _UNSUPPORTED_RESULT_FIELDS = (
     "masks",
     "keypoints",
@@ -58,12 +59,17 @@ def from_ultralytics(result: Any) -> Scene:
 
     Coordinates are read from ``boxes.xyxy`` because PostAnvil stores the
     top-left corner plus width and height.  Tracking IDs, when present, are
-    retained as the numeric dynamic property ``YOLO_TRACK_ID``.
+    retained as the numeric dynamic property ``YOLO_TRACK_ID``.  The original
+    YOLO class ID is retained as ``YOLO_CLASS_ID`` so that a scene in which one
+    instance belongs to multiple PostAnvil classes can still be written back
+    to YOLO deterministically.
     """
 
     _require_detection_result(result)
     height, width = result.orig_shape
-    scene = Scene(Image(float(width), float(height), str(result.path or "")))
+    scene = Scene(
+        Image(float(width), float(height), str(getattr(result, "path", "") or ""))
+    )
 
     if result.boxes is None:
         return scene
@@ -95,16 +101,16 @@ def from_ultralytics(result: Any) -> Scene:
 
         x1, y1, x2, y2 = (float(value) for value in xyxy)
         instance = Instance(
-            names[class_id],
             x1,
             y1,
             x2 - x1,
             y2 - y1,
             float(confidence),
         )
+        instance.set_property(_CLASS_ID_PROPERTY, float(class_id))
         if track_ids is not None:
             instance.set_property(_TRACK_ID_PROPERTY, float(track_ids[index]))
-        scene.add(instance)
+        scene.add(names[class_id], instance)
 
     return scene
 
@@ -147,23 +153,68 @@ def update_ultralytics(
     tracked = bool(getattr(result.boxes, "is_track", False))
     rows: list[list[float]] = []
 
-    for container_name in scene.class_names():
-        for instance in scene.instances(container_name):
-            # Scene category membership is canonical here. GROUP and APPEND
-            # intentionally retain the source Instance.cls value while placing
-            # the copy in another category; a YOLO row has only one class field.
-            class_name = str(container_name)
-            lookup_name = class_name.casefold()
+    # PostAnvil 允许同一实例 ID 出现在多个类别中，YOLO 的一行结果则只能属于
+    # 一个类别。优先保留适配器记录的原始 YOLO 类别；若该关系已被过滤，必须
+    # 只剩一个输出类别。
+    # 按选中类别的列表输出，以保留 SORT 顺序并避免 GROUP/APPEND 重复输出。
+    instances_by_class = {
+        str(cls_name): list(scene.instances(cls_name))
+        for cls_name in sorted(scene.class_names(), key=str.casefold)
+    }
+    instances_by_id: dict[int, Any] = {}
+    cls_names_by_id: dict[int, list[str]] = {}
+    for cls_name, instances in instances_by_class.items():
+        for instance in instances:
+            instance_id = int(instance.id)
+            instances_by_id.setdefault(instance_id, instance)
+            cls_names_by_id.setdefault(instance_id, []).append(cls_name)
+
+    selected_cls_name: dict[int, str] = {}
+    for instance_id, cls_names in cls_names_by_id.items():
+        instance = instances_by_id[instance_id]
+        try:
+            original_class_id = int(instance.get_property(_CLASS_ID_PROPERTY))
+        except PARuntimeError:
+            original_class_id = None
+        original_cls_name = names.get(original_class_id)
+        original_match = next(
+            (
+                cls_name
+                for cls_name in cls_names
+                if original_cls_name is not None
+                and cls_name.casefold() == original_cls_name.casefold()
+            ),
+            None,
+        )
+        if original_match is not None:
+            selected_cls_name[instance_id] = original_match
+        elif len(cls_names) == 1:
+            selected_cls_name[instance_id] = cls_names[0]
+        else:
+            rendered = ", ".join(repr(cls_name) for cls_name in cls_names)
+            raise ValueError(
+                f"PostAnvil instance id {instance_id} belongs to multiple derived "
+                f"classes ({rendered}), but YOLO can store only one class; keep "
+                "the original YOLO-class membership or reduce it to one output class"
+            )
+
+    for cls_name, instances in instances_by_class.items():
+        for instance in instances:
+            instance_id = int(instance.id)
+            if selected_cls_name[instance_id] != cls_name:
+                continue
+
+            lookup_name = cls_name.casefold()
             class_id = name_to_id.get(lookup_name)
             if class_id is None:
                 if not allow_new_classes:
                     raise ValueError(
-                        f"PostAnvil produced class {class_name!r}, which is absent "
+                        f"PostAnvil produced class {cls_name!r}, which is absent "
                         "from result.names; pass allow_new_classes=True to assign an ID"
                     )
                 class_id = next_class_id
                 next_class_id += 1
-                names[class_id] = class_name
+                names[class_id] = cls_name
                 name_to_id[lookup_name] = class_id
 
             row = [
@@ -175,7 +226,7 @@ def update_ultralytics(
             if tracked:
                 try:
                     track_id = float(instance.get_property(_TRACK_ID_PROPERTY))
-                except Exception as error:
+                except PARuntimeError as error:
                     raise ValueError(
                         "A tracked Ultralytics result contains an instance without "
                         f"the {_TRACK_ID_PROPERTY} property"

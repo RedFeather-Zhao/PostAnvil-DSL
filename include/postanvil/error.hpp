@@ -278,7 +278,12 @@ struct PARuntimeError : public PostAnvilError {
 	 * @param op_type	算子类型
 	 */
 	PARuntimeError(const std::string& msg, int op_idx, const std::string& op_type)
-		: PostAnvilError(std::format("PostAnvil error while running: operation index = {}, operation type = {} : {}\n", op_idx, op_type, msg))
+		: PostAnvilError(std::format(
+			"PostAnvil error while running: operation index = {}, "
+			"operation type = {} : {}\n",
+			op_idx,
+			op_type,
+			msg))
 	{
 	}
 };

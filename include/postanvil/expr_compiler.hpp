@@ -19,6 +19,7 @@
 #include "utils.hpp"
 #include "type.hpp"
 #include "scene.hpp"
+#include "compiler_error.hpp"
 
 namespace postanvil {
 
@@ -31,59 +32,25 @@ namespace postanvil {
  *          支持的表达式层级：expr → or/and/not/cmp/add/mul/unary → primary
  */
 class TreeExprCompiler {
-
-	[[noreturn]] static inline void
-	throw_compile_error					(PACompileError::Kind kind,
-										 std::string_view msg,
-										 const ::antlr4::ParserRuleContext* ctx = nullptr) {
-		if (!ctx) {
-			throw PACompileError(kind, std::string(msg));
-		}
-		auto start = ctx->getStart();
-		throw PACompileError(
-			kind,
-			std::string(msg),
-			SourceLocation{
-				static_cast<int>(start->getLine()),
-				static_cast<int>(start->getCharPositionInLine()) + 1,
-				std::nullopt
-			}
-		);
-	}
-
-	[[noreturn]] static inline void
-	report_semantic_error			(std::string_view msg,
-									 const ::antlr4::ParserRuleContext* ctx)
-	{
-		throw_compile_error(PACompileError::Kind::Semantic, msg, ctx);
-	}
-
-	[[noreturn]] static inline void
-	report_internal_error			(std::string_view msg,
-									 const ::antlr4::ParserRuleContext* ctx = nullptr)
-	{
-		throw_compile_error(PACompileError::Kind::Internal, msg, ctx);
-	}
-
 public:
-	static const inline char* OBJECT_SELF = "SELF";
-	static const inline char* OBJECT_IMAGE = "IMG";
+	static inline constexpr std::string_view OBJECT_SELF = "SELF";
+	static inline constexpr std::string_view OBJECT_IMAGE = "IMG";
 
 	TreeExprCompiler() = default;
 
-	void set_functions(detail::str_map<FunctionInfo>* functions) {
-		this->functions = functions;
+	void set_functions(detail::str_map<FunctionInfo>* function_table) noexcept {
+		m_functions = function_table;
 	}
 
-	void set_type_scope(detail::ScopeChain<Type>* type_scope) {
-		this->m_type_scope = type_scope;
+	void set_type_scope(detail::ScopeChain<Type>* type_scope) noexcept {
+		m_type_scope = type_scope;
 	}
 
 public: // public method:
 
 	/**
 	 * @brief 编译表达式为闭包的入口方法
-	 * 
+	 *
 	 * @param ctx			- ANTLR4 ExprContext 节点
 	 * @return TypedExpr	- 带类型的表达式闭包
 	 * @throw PACompileError	- 编译错误，包含编译信息
@@ -97,14 +64,16 @@ public: // public method:
 
 	/**
 	 * @brief 编译布尔表达式闭包
-	 * 
+	 *
 	 * @param ctx			- ANTLR4 Or_exprContext 节点
 	 * @return BoolFunc		- 布尔类型的表达式闭包
 	 */
 	BoolFunc compileAsBool(::PostAnvilParser::Or_exprContext* ctx) {
 		auto typed = compileOr(ctx);
 		if (!type_compatible(typed.type, Type::T_BOOL)) {
-			auto err = std::format("Bool-expr must be BOOL or ANY(runtime bool), got {}", type_name(typed.type));
+			auto err = std::format(
+				"Bool-expr must be BOOL or ANY(runtime bool), got {}",
+				type_name(typed.type));
 			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
@@ -115,14 +84,16 @@ public: // public method:
 
 	/**
 	 * @brief 编译数值表达式闭包
-	 * 
+	 *
 	 * @param ctx			- ANTLR4 ExprContext 节点
 	 * @return NumFunc		- 数值类型的表达式闭包
 	 */
 	NumFunc compileAsNum(::PostAnvilParser::ExprContext* ctx) {
 		auto typed = compile(ctx);
 		if (!type_compatible(typed.type, Type::T_NUM)) {
-			auto err = std::format("Num-expr must be NUM or ANY(runtime NUM), got {}", type_name(typed.type));
+			auto err = std::format(
+				"Num-expr must be NUM or ANY(runtime NUM), got {}",
+				type_name(typed.type));
 			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
@@ -140,7 +111,9 @@ public: // public method:
 	StrFunc compileAsStr(::PostAnvilParser::ExprContext* ctx) {
 		auto typed = compile(ctx);
 		if (!type_compatible(typed.type, Type::T_STR)) {
-			auto err = std::format("Str-expr must be STR or ANY(runtime STR), got {}", type_name(typed.type));
+			auto err = std::format(
+				"Str-expr must be STR or ANY(runtime STR), got {}",
+				type_name(typed.type));
 			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
@@ -152,7 +125,7 @@ public: // public method:
 
 	/**
 	 * @brief 编译类别字串表达式闭包
-	 * 
+	 *
 	 * @param ctx			- ANTLR4 ClassExprContext 节点
 	 * @return StrFunc		- 类别名闭包，支持两种形式
 	 *						  1.字符串字面量："person"
@@ -194,7 +167,7 @@ private:
 
 	/**
 	 * @brief 编译逻辑或表达式
-	 * 
+	 *
 	 * @param ctx			- Or_exprContext 节点
 	 * @return TypedExpr	- 若存在 OR 运算符，返回布尔类型的表达式闭包
 	 *						  若不存在，则透传任意类型的表达式闭包
@@ -211,7 +184,9 @@ private:
 
 		// 左式类别检查
 		if (!type_compatible(left.type, Type::T_BOOL)) {
-			auto err = std::format("Left OR-expr must be BOOL or ANY(runtime bool), got {}", type_name(left.type));
+			auto err = std::format(
+				"Left OR-expr must be BOOL or ANY(runtime bool), got {}",
+				type_name(left.type));
 			report_semantic_error(err, ctx);
 		}
 
@@ -219,7 +194,9 @@ private:
 		for (size_t i = 0; i < or_count; i++) {
 			auto right = compileAnd(and_exprs[i + 1]);
 			if (!type_compatible(right.type, Type::T_BOOL)) {
-				auto err = std::format("Right OR-expr must be BOOL or ANY(runtime bool), got {}", type_name(right.type));
+				auto err = std::format(
+					"Right OR-expr must be BOOL or ANY(runtime bool), got {}",
+					type_name(right.type));
 				report_semantic_error(err, ctx);
 			}
 			left = {
@@ -236,7 +213,7 @@ private:
 
 	/**
 	 * @brief 编译逻辑与表达式
-	 * 
+	 *
 	 * @param ctx			- And_exprContext 节点
 	 * @return TypedExpr	- 若存在 AND 运算符，返回布尔类型的表达式闭包
 	 * 						  若不存在，则透传任意类型的表达式闭包
@@ -253,7 +230,9 @@ private:
 
 		// 左式类别检查
 		if (!type_compatible(left.type, Type::T_BOOL)) {
-			auto err = std::format("Left AND-expr must be BOOL or ANY(runtime bool), got {}", type_name(left.type));
+			auto err = std::format(
+				"Left AND-expr must be BOOL or ANY(runtime bool), got {}",
+				type_name(left.type));
 			report_semantic_error(err, ctx);
 		}
 
@@ -261,7 +240,9 @@ private:
 		for (size_t i = 0; i < and_count; i++) {
 			auto right = compileNot(not_exprs[i + 1]);
 			if (!type_compatible(right.type, Type::T_BOOL)) {
-				auto err = std::format("Right AND-expr must be BOOL or ANY(runtime bool), got {}", type_name(right.type));
+				auto err = std::format(
+					"Right AND-expr must be BOOL or ANY(runtime bool), got {}",
+					type_name(right.type));
 				report_semantic_error(err, ctx);
 			}
 			left = { [l = std::move(left.func), r = std::move(right.func)]
@@ -276,7 +257,7 @@ private:
 
 	/**
 	 * @brief 编译逻辑非表达式
-	 * 
+	 *
 	 * @param ctx			- Not_exprContext 节点
 	 * @return TypedExpr	- 若存在 NOT 运算符，返回布尔类型的表达式闭包
 	 * 						  若不存在，则透传任意类型的表达式闭包
@@ -290,7 +271,9 @@ private:
 		// 右式类型检查
 		auto rhs = compileNot(ctx->not_expr());
 		if (!type_compatible(rhs.type, Type::T_BOOL)) {
-			auto err = std::format("NOT-expr must be BOOL or ANY(runtime bool), got {}", type_name(rhs.type));
+			auto err = std::format(
+				"NOT-expr must be BOOL or ANY(runtime bool), got {}",
+				type_name(rhs.type));
 			report_semantic_error(err, ctx);
 		}
 		return { [r = std::move(rhs.func)]
@@ -303,7 +286,7 @@ private:
 
 	/**
 	 * @brief 编译比较表达式
-	 * 
+	 *
 	 * @param ctx			- Cmp_exprContext 节点
 	 * @return TypedExpr	- 若存在比较运算符，返回布尔类型的表达式闭包
 	 * 						  若不存在，则透传任意类型的表达式闭包
@@ -326,7 +309,10 @@ private:
 		Type res_type = left.type & right.type;
 
 		if (type_strict_equal(res_type, Type::T_ERROR)) {
-			auto err = std::format("Comparison type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
+			auto err = std::format(
+				"Comparison type mismatch: {} vs {}",
+				type_name(left.type),
+				type_name(right.type));
 			report_semantic_error(err, ctx);
 		}
 
@@ -336,7 +322,9 @@ private:
 			report_semantic_error(err, ctx);
 		}
 		if (type_strict_equal(res_type, Type::T_INST)) {
-			report_semantic_error("INST values cannot be compared directly; compare their properties instead", ctx);
+			report_semantic_error(
+				"INST values cannot be compared directly; compare their properties instead",
+				ctx);
 		}
 
 		return { [l = std::move(left.func), r = std::move(right.func), op = std::move(op)]
@@ -357,7 +345,7 @@ private:
 
 	/**
 	 * @brief 编译加法/减法表达式
-	 * 
+	 *
 	 * @param ctx			- Add_exprContext 节点
 	 * @return TypedExpr	- 若存在加减级别运算符，返回数值/字串类型的表达式闭包
 	 * 						  若不存在，则透传任意类型的表达式闭包
@@ -380,7 +368,10 @@ private:
 
 			// 左右式类别检查
 			if (!type_compatible(left.type, right.type)) {
-				auto err = std::format("Add/Sub type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
+				auto err = std::format(
+					"Add/Sub type mismatch: {} vs {}",
+					type_name(left.type),
+					type_name(right.type));
 				report_semantic_error(err, ctx);
 			}
 			Type res_type = left.type & right.type;	// 获取运算结果类别
@@ -440,7 +431,10 @@ private:
 
 			// 左右式类别检查
 			if (!type_compatible(left.type, right.type)) {
-				auto err = std::format("Mul/Div type mismatch: {} vs {}", type_name(left.type), type_name(right.type));
+				auto err = std::format(
+					"Mul/Div type mismatch: {} vs {}",
+					type_name(left.type),
+					type_name(right.type));
 				report_semantic_error(err, ctx);
 			}
 			Type res_type = left.type & right.type; // 获取运算结果类别
@@ -467,7 +461,7 @@ private:
 
 	/**
 	 * @brief 编译一元表达式，当前仅支持负号
-	 * 
+	 *
 	 * @param ctx			- Unary_exprContext 节点
 	 * @return TypedExpr	- 若存在一元表达式，则返回数值类型的表达式闭包
 	 *						  否则透传任意类型的表达式闭包
@@ -500,7 +494,7 @@ private:
 
 	/**
 	 * @brief 编译基本表达式，处理字面量、变量引用、函数调用、属性访问和括号表达式等
-	 * 
+	 *
 	 * @param ctx			- PrimaryContext 节点
 	 * @return TypedExpr	- 表达式解析闭包
 	 */
@@ -523,11 +517,11 @@ private:
 		// SELF 当前实例值
 		if (ctx->SELF()) {
 			return {
-				[](const Instance& self, EvaluationContext&) -> Val {
-					if (self.cls() == "__DUMMY") {
+				[](const Instance&, EvaluationContext& eval_ctx) -> Val {
+					if (!eval_ctx.curr_handle) {
 						throw PARuntimeError("SELF is unavailable outside an instance context");
 					}
-					return Val(self);
+					return Val(eval_ctx.curr_handle);
 				},
 				Type::T_INST
 			};
@@ -559,7 +553,7 @@ private:
 
 	/**
 	 * @brief 编译数字终结符，返回数字常量闭包
-	 * 
+	 *
 	 * @param ctx			- PrimaryContext 节点
 	 * @return TypedExpr	- T_NUM 类型的闭包
 	 */
@@ -575,7 +569,7 @@ private:
 
 	/**
 	 * @brief 编译字串字面量终结符，返回字串字面量闭包
-	 * 
+	 *
 	 * @param ctx			- PrimaryContext 节点
 	 * @return TypedExpr	- T_STR 类型的闭包
 	 */
@@ -608,7 +602,7 @@ private:
 
 	/**
 	 * @brief 编译变量终结符，返回变量对应类型闭包
-	 * 
+	 *
 	 * @param ctx			- PrimaryContext 节点
 	 * @return	TypedExpr	- 变量对应类型的闭包
 	 */
@@ -639,7 +633,7 @@ private:
 	 *							对于 var 为循环实例的情况，将其解析为实例，即 1 的情况
 	 *							对于 var 为字串类型的情况，将其解析为类别，即 2 的情况
 	 *			4. object.(expr): 显式动态属性访问，expr 必须在运行时产生 STR 属性名
-	 * 
+	 *
 	 * @param ctx			- AttributeContext 节点
 	 * @return TypedExpr	- T_ANY 类型的闭包
 	 */
@@ -653,8 +647,8 @@ private:
 		if (auto* inst = dynamic_cast<::PostAnvilParser::InstanceAttrContext*>(ctx)) {
 			auto prop = utils::get_upper_text(inst->IDENTIFIER());
 			return {
-				[prop](const Instance& self, EvaluationContext& ctx) -> Val {
-					return ctx.scene.get_inst_prop(self, prop);
+				[prop](const Instance&, EvaluationContext& ctx) -> Val {
+					return ctx.scene.get_inst_prop(ctx.curr_handle, prop);
 				},
 				Type::T_ANY
 			};
@@ -681,7 +675,7 @@ private:
 
 			auto object = utils::get_upper_text(identifiers[0]);
 			auto prop = utils::get_upper_text(identifiers[1]);
-			
+
 			// 1. img.prop	: 预定义图像对象属性
 			if (object == OBJECT_IMAGE) {
 				return {
@@ -706,7 +700,7 @@ private:
 				[object, prop](const Instance&, EvaluationContext& ctx) -> Val {
 					Val object_val = ctx.get_var(object);
 					if (type_strict_equal(object_val.type(), Type::T_INST)) {
-						return ctx.scene.get_inst_prop(*object_val.as_inst(), prop);
+						return ctx.scene.get_inst_prop(object_val.as_inst(), prop);
 					}
 					if (type_strict_equal(object_val.type(), Type::T_STR)) {
 						std::string cls_name = object_val.as_str();
@@ -728,7 +722,7 @@ private:
 				[prop_expr = std::move(prop_expr), normalize_prop]
 				(const Instance& self, EvaluationContext& ctx) -> Val {
 					auto prop = normalize_prop(prop_expr(self, ctx));
-					return ctx.scene.get_inst_prop(self, prop);
+					return ctx.scene.get_inst_prop(ctx.curr_handle, prop);
 				},
 				Type::T_ANY
 			};
@@ -780,7 +774,7 @@ private:
 					auto prop = normalize_prop(prop_expr(self, ctx));
 					Val object_val = ctx.get_var(object);
 					if (type_strict_equal(object_val.type(), Type::T_INST)) {
-						return ctx.scene.get_inst_prop(*object_val.as_inst(), prop);
+						return ctx.scene.get_inst_prop(object_val.as_inst(), prop);
 					}
 					if (type_strict_equal(object_val.type(), Type::T_STR)) {
 						std::string cls_name = object_val.as_str();
@@ -801,7 +795,7 @@ private:
 
 	/**
 	 * @brief 编译函数调用表达式
-	 * 
+	 *
 	 * @param ctx			- Func_callContext 节点
 	 * @return TypedExpr	- 函数声明返回值类型的闭包，若未声明则为 T_ANY
 	 */
@@ -816,8 +810,8 @@ private:
 
 		// 查询函数返回类型
 		Type ret_type = Type::T_ANY;
-		auto it = functions->find(func_name);
-		if (it != functions->end()) {
+		auto it = m_functions->find(func_name);
+		if (it != m_functions->end()) {
 			ret_type = it->second.ret_type;
 			const auto& param_types = it->second.param_types;
 			if (arg_exprs.size() != param_types.size()) {
@@ -893,10 +887,9 @@ private:
 	}
 
 	/**
-	 * @brief 函数注册表指针，由主编译器设置
-	 * @details 用于编译函数调用时查找已定义的函数体
+	 * @brief 函数注册表指针，由主编译器设置，用于编译函数调用时查找已定义的函数体
 	 */
-	detail::str_map<FunctionInfo>* functions = nullptr;
+	detail::str_map<FunctionInfo>* m_functions = nullptr;
 
 	/**
 	 * @brief 变量符号表，由主编译器设置

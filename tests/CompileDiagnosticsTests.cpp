@@ -91,4 +91,14 @@ PA_TEST(FilterTypeDiagnosticPointsAtInvalidExpression)
 		contains(error.what(), "2 |     1"));
 }
 
+PA_TEST(UnescapedPhysicalNewlineCannotAppearInsideString)
+{
+	const auto error = compile_error_from(
+		"STR value = \"first\n"
+		"second\"\n");
+
+	Microsoft::VisualStudio::CppUnitTestFramework::Assert::IsTrue(
+		error.kind() == PACompileError::Kind::Syntax);
+}
+
 } // namespace UnitTest1Basic

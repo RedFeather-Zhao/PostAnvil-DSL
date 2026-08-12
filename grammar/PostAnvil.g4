@@ -1,18 +1,8 @@
 ﻿grammar PostAnvil;
 
 // ============================================================
-//  PostAnvil DSL 语法定义 (ANTLR4 / C++ target)
-//  版本 0.7  —  2026-08-07   (花括号块语法)
-// ============================================================
-//  功能概览：
-//    - 目标检测后处理 DSL
-//    - 规则块：FILTER、ATTR、FUNC、GROUP、APPEND、SORT
-//    - 内置对象：self (当前实例)、img (图像尺寸)
-//    - 类型：NUM、STR、BOOL、INST、ANY
-//    - 控制流：IF-ELSE、FOR 循环 (仅函数内)
-//    - 原地稳定排序规则：SORT
-//    - 与宿主交互：IMPORT、EXPORT
-//    - 大小写不敏感，支持 # 和 // 注释
+//  PostAnvil DSL 语法 (ANTLR4 / C++ target)
+//  版本 0.8.0  —  2026-08-10
 // ============================================================
 
 options {
@@ -20,46 +10,53 @@ options {
     caseInsensitive = true;
 }
 
-// ==================== 词法规则 (Lexer) ====================
+// ==================== Lexer ====================
 
-// ---------- 关键字 ----------
+// ---------- 规则 ----------
 RULE      : 'RULE';
 FILTER    : 'FILTER';
 ATTR      : 'ATTR';
 FUNC      : 'FUNC';
+SORT      : 'SORT';
 GROUP     : 'GROUP';
 APPEND    : 'APPEND';
 FROM      : 'FROM';
+
+// ---------- 交互 ----------
+IMPORT    : 'IMPORT';
+EXPORT    : 'EXPORT';
+AS        : 'AS';
+
+// ---------- 逻辑 ----------
 AND       : 'AND';
 OR        : 'OR';
 NOT       : 'NOT';
+BOOL_LIT  : 'TRUE' | 'FALSE';
+
 SELF      : 'SELF';
+
+// ---------- 类型 ----------
 NUM       : 'NUM';
 STR       : 'STR';
 BOOL      : 'BOOL';
 INST      : 'INST';
 ANY       : 'ANY';
+
+// ---------- 控制 ----------
 RETURN    : 'RETURN';
-IMPORT    : 'IMPORT';
-EXPORT    : 'EXPORT';
-AS        : 'AS';
 IF        : 'IF';
 ELIF      : 'ELIF';
 ELSE      : 'ELSE';
 FOR       : 'FOR';
 IN        : 'IN';
-SORT      : 'SORT';
 ASC       : 'ASC';
 DESC      : 'DESC';
 
-// ---------- 花括号（块定界符） ----------
+// ---------- 定界 ----------
 LCURLY    : '{';
 RCURLY    : '}';
 
-// ---------- 布尔字面量 ----------
-BOOL_LIT  : 'TRUE' | 'FALSE';
-
-// ---------- 运算符 ----------
+// ---------- 运算 ----------
 ARROW     : '->';
 PLUS      : '+';
 MINUS     : '-';
@@ -84,7 +81,7 @@ NUMBER
     ;
 
 STRING
-    : '"' ( ~["\\] | '\\' . )* '"'
+    : '"' ( ~["\\\r\n] | '\\' ~[\r\n] )* '"'
     ;
 
 IDENTIFIER
@@ -112,7 +109,10 @@ COMMENT
 // ==================== Parser ====================
 
 program
-    : ( declaration | rule_ | newlines )* EOF
+    : newlines*
+      ( (declaration | rule_) newlines+ )*
+      (declaration | rule_)?
+      EOF
     ;
 
 newlines
@@ -127,7 +127,7 @@ declaration
     ;
 
 importDef
-    : IMPORT importItem (',' importItem)* newlines
+    : IMPORT importItem (',' importItem)*
     ;
 
 importItem
@@ -135,7 +135,7 @@ importItem
     ;
 
 exportDef
-    : EXPORT exportItem (',' exportItem)* newlines
+    : EXPORT exportItem (',' exportItem)*
     ;
 
 exportItem
@@ -143,15 +143,44 @@ exportItem
     ;
 
 globalDef
-    : type IDENTIFIER '=' expr newlines
-    | IDENTIFIER '=' expr newlines
+    : type IDENTIFIER '=' expr
+    | IDENTIFIER '=' expr
     ;
 
 type
     : NUM | STR | BOOL | INST | ANY
     ;
 
-// ============ 规则块 ============
+// ============ 块 ============
+condition_block
+    : LCURLY
+      newlines?
+      ( bool_expr ( newlines bool_expr )* newlines? )?
+      RCURLY
+    ;
+
+attr_block
+    : LCURLY
+      newlines?
+      ( attr_def ( newlines attr_def )* newlines? )?
+      RCURLY
+    ;
+
+sort_block
+    : LCURLY
+      newlines?
+      sort_key ( newlines sort_key )* newlines?
+      RCURLY
+    ;
+
+stmt_block
+    : LCURLY
+      newlines?
+      ( statement ( newlines statement )* newlines? )?
+      RCURLY
+    ;
+
+// ============ 规则 ============
 rule_
     : filter_rule
     | attr_rule
@@ -163,21 +192,47 @@ rule_
 
 // FILTER 规则
 filter_rule
-    : RULE FILTER class_expr LCURLY
+    : RULE FILTER class_expr
       newlines?
-      ( bool_expr newlines )*
-      newlines?
-      RCURLY
+      condition_block
     ;
 
 // ATTR 规则
 attr_rule
-    : RULE ATTR class_expr LCURLY
+    : RULE ATTR class_expr
       newlines?
-      ( attr_def newlines )*
-      newlines?
-      RCURLY
+      attr_block
     ;
+
+// GROUP 规则
+group_rule
+    : RULE GROUP class_expr FROM class_expr
+      newlines?
+      condition_block
+    ;
+
+// APPEND 规则
+append_rule
+    : RULE APPEND class_expr FROM class_expr
+      newlines?
+      condition_block
+    ;
+
+// SORT 规则
+sort_rule
+    : RULE SORT class_expr
+      newlines?
+      sort_block
+    ;
+
+// FUNC 规则
+func_rule
+    : RULE FUNC name=IDENTIFIER '(' typed_params? ')' (ARROW return_type=type)?
+      newlines?
+      stmt_block
+    ;
+
+// ============ 规则子句 ============
 
 attr_def
     : attr_lvalue '=' expr
@@ -188,16 +243,6 @@ attr_lvalue
     | STRING '.' IDENTIFIER         # ClassAttrDef
     ;
 
-// FUNC 规则
-func_rule
-    : RULE FUNC name=IDENTIFIER '(' typed_params? ')' (ARROW return_type=type)?
-      LCURLY
-      newlines?
-      ( func_statement newlines )+
-      newlines?
-      RCURLY
-    ;
-
 typed_params
     : typed_param (',' typed_param)*
     ;
@@ -206,75 +251,44 @@ typed_param
     : param_name=IDENTIFIER ':' param_type=type
     ;
 
-func_statement
-    : type IDENTIFIER '=' expr      # FuncVarDef
-    | IDENTIFIER '=' expr           # FuncAssign
-    | ifStmt                        # FuncIfStmt
-    | forStmt                       # FuncForStmt
-    | expr                          # FuncExprStmt
-    | RETURN expr                   # FuncReturnStmt
+statement
+    : type IDENTIFIER '=' expr      # StmtVarDef
+    | IDENTIFIER '=' expr           # StmtAssign
+    | ifStmt                        # StmtIf
+    | forStmt                       # StmtFor
+    | expr                          # StmtExpr
+    | RETURN expr                   # StmtReturn
     ;
 
 // --- 控制流 ---
 ifStmt
-    : IF expr LCURLY
+    : ifBranch
+      ( newlines? elifBranch )*
+      ( newlines? elseBranch )?
+    ;
+
+ifBranch
+    : IF expr
       newlines?
-      ( func_statement newlines )*
-      newlines?
-      RCURLY
-      ( elifBranch )*
-      ( elseBranch )?
+      stmt_block
     ;
 
 elifBranch
-    : ELIF expr LCURLY
+    : ELIF expr
       newlines?
-      ( func_statement newlines )*
-      newlines?
-      RCURLY
+      stmt_block
     ;
 
 elseBranch
-    : ELSE LCURLY
+    : ELSE
       newlines?
-      ( func_statement newlines )*
-      newlines?
-      RCURLY
+      stmt_block
     ;
 
 forStmt
-    : FOR IDENTIFIER IN class_expr LCURLY
+    : FOR IDENTIFIER IN class_expr
       newlines?
-      ( func_statement newlines )*
-      newlines?
-      RCURLY
-    ;
-
-// GROUP 规则
-group_rule
-    : RULE GROUP class_expr FROM class_expr LCURLY
-      newlines?
-      ( bool_expr newlines )*
-      newlines?
-      RCURLY
-    ;
-
-// APPEND 规则
-append_rule
-    : RULE APPEND class_expr FROM class_expr LCURLY
-      newlines?
-      ( bool_expr newlines )*
-      newlines?
-      RCURLY
-    ;
-
-// SORT 规则
-sort_rule
-    : RULE SORT class_expr LCURLY
-      newlines?
-      ( sort_key newlines )+
-      newlines?
-      RCURLY
+      stmt_block
     ;
 
 sort_key
@@ -286,7 +300,7 @@ direction
     | DESC
     ;
 
-// ==================== 表达式系统 ====================
+// ==================== 表达式 ====================
 
 class_expr
     : STRING
