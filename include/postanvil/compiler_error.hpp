@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file   compiler_error.hpp
  * @brief  PostAnvil 编译器公共错误报告工具
  *
