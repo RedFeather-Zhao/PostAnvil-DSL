@@ -1,8 +1,17 @@
-# PostAnvil 实例身份与类别操作设计
+# 实例身份与类别成员设计
+
+[文档中心](../README.md) · [DSL 声明与规则](../dsl/language.md)
+
+## 本页目录
+
+- [核心概念](#核心概念)
+- [ID、类别和内存](#id类别和内存)
+- [已有类别操作](#已有类别操作)
+- [后续语法建议](#后续语法建议)
 
 > 状态：0.8.0 实例模型已落地；文末的新语法仅为后续候选，尚未实现。
 
-## 1. 核心概念
+## 核心概念
 
 PostAnvil 只使用一个数据对象名称：`Instance`。
 
@@ -13,7 +22,7 @@ PostAnvil 只使用一个数据对象名称：`Instance`。
 
 `m_instances` 使用 `std::vector<std::unique_ptr<Instance>>`。Scene 是实例生命周期的唯一管理者；vector 扩容只移动 `unique_ptr`，不会移动已有 `Instance`。Scene 复制时深复制实例，不会让两个 Scene 共享可变状态。
 
-## 2. ID、类别和内存
+## ID、类别和内存
 
 同一 Scene 内，同一 ID 始终对应同一个 `Instance` 和同一个内存地址。把某个 ID 加入另一个类别，只会修改类别索引，不会创建副本，也不会修改 ID。
 
@@ -33,25 +42,25 @@ DSL 中只暴露 `CLS / ID / INDEX`：
 `_INST_ID(id)` 返回不带 `cls_name` 的句柄，因此不能读取 `cls` 或 `index`。
 `_INST_INDEX(cls_name, index)` 返回带类别上下文的句柄。
 
-## 3. 已有类别操作
+## 已有类别操作
 
 ```postanvil
-# 用符合条件的 ID 替换目标类别，源类别不变
+// 用符合条件的 ID 替换目标类别，源类别不变
 RULE GROUP "vip" FROM "person" {
     self.conf >= 0.9
 }
 
-# 把符合条件的 ID 加入目标类别，已存在的 ID 不重复添加
+// 把符合条件的 ID 加入目标类别，已存在的 ID 不重复添加
 RULE APPEND "review" FROM "person" {
     self.id == selected.id
 }
 
-# 只改变 person 的 ID 列表，不删除 Instance
+// 只改变 person 的 ID 列表，不删除 Instance
 RULE FILTER "person" {
     self.conf >= 0.5
 }
 
-# 只重排 person 的 ID 列表
+// 只重排 person 的 ID 列表
 RULE SORT "person" {
     self.conf DESC
 }
@@ -59,7 +68,7 @@ RULE SORT "person" {
 
 当前把实例加入另一个类别应使用 `APPEND`。加入后 ID 不变，通过源类别和目标类别读写的都是同一个 `Instance`。
 
-## 4. 后续语法建议
+## 后续语法建议
 
 普通函数保持值计算，不加入 `_ADD_TO()` 或 `item.cls = ...` 这类隐式修改 Scene 的操作。类别变更继续使用顶层 `RULE`，执行顺序和影响范围更清楚。
 
@@ -71,3 +80,7 @@ RULE SORT "person" {
 4. `RULE DELETE ...`：删除 `Instance` 并从全部类别清理该 ID。为保持 ID 不变，需要墓碑位以及已有句柄失效规则，近期不建议实现。
 
 `MOVE` 建议先对源类别的 ID 快照计算全部条件，全部成功后再一次性修改两个 ID 列表。源类别和目标类别相同时为空操作；任何条件求值失败时，两个列表都不改变。
+
+---
+
+[返回文档中心](../README.md)

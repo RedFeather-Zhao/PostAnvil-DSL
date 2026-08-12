@@ -7,10 +7,14 @@
  */
 #pragma once
 
+#include <cstddef>
+#include <format>
+#include <functional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <format>
+#include <vector>
 
 namespace postanvil::detail {
 

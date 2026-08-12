@@ -1,27 +1,94 @@
 name: native
 
 on:
+  workflow_dispatch:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
+    name: ${{ matrix.platform }}-${{ matrix.build_type }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-        build_type: [Debug, Release]
+        include:
+          - os: windows-latest
+            platform: windows
+            build_type: Debug
+          - os: windows-latest
+            platform: windows
+            build_type: Release
+          - os: ubuntu-latest
+            platform: ubuntu
+            build_type: Debug
+          - os: ubuntu-latest
+            platform: ubuntu
+            build_type: Release
+          - os: macos-latest
+            platform: macos
+            build_type: Debug
+          - os: macos-latest
+            platform: macos
+            build_type: Release
     runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
-      - name: Configure
+
+      - name: Configure PostAnvil
         run: >-
-          cmake -S . -B out/build/ci -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake -S . -B out/build/native -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -DPOSTANVIL_BUILD_STATIC=ON -DPOSTANVIL_BUILD_SHARED=ON
           -DPOSTANVIL_BUILD_TESTS=ON
-      - name: Build
-        run: cmake --build out/build/ci --config ${{ matrix.build_type }} --parallel
-      - name: Test
-        run: ctest --test-dir out/build/ci -C ${{ matrix.build_type }} --output-on-failure
-      - name: Install
-        run: cmake --install out/build/ci --config ${{ matrix.build_type }} --prefix out/install
+          -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/out/install/native
+
+      - name: Build PostAnvil
+        run: cmake --build out/build/native --config ${{ matrix.build_type }} --parallel
+
+      - name: Run native tests
+        run: >-
+          ctest --test-dir out/build/native -C ${{ matrix.build_type }}
+          --output-on-failure
+
+      - name: Install SDK
+        run: >-
+          cmake --install out/build/native --config ${{ matrix.build_type }}
+          --prefix "${{ github.workspace }}/out/install/native"
+
+      - name: Configure installed-package consumer
+        run: >-
+          cmake -S tests/package_consumer -B out/build/package-consumer
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          "-DCMAKE_PREFIX_PATH=${{ github.workspace }}/out/install/native"
+
+      - name: Build installed-package consumer
+        run: >-
+          cmake --build out/build/package-consumer
+          --config ${{ matrix.build_type }} --parallel
+
+      - name: Test installed-package consumer
+        run: >-
+          ctest --test-dir out/build/package-consumer
+          -C ${{ matrix.build_type }} --output-on-failure
+
+      - name: Create platform SDK archive
+        working-directory: out/install
+        run: >-
+          cmake -E tar cfv
+          PostAnvil-${{ matrix.platform }}-${{ runner.arch }}-${{ matrix.build_type }}.zip
+          --format=zip native
+
+      - name: Upload platform SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PostAnvil-${{ matrix.platform }}-${{ runner.arch }}-${{ matrix.build_type }}
+          path: out/install/PostAnvil-${{ matrix.platform }}-${{ runner.arch }}-${{ matrix.build_type }}.zip
+          if-no-files-found: error
+          retention-days: 14

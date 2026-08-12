@@ -1,0 +1,169 @@
+name: android-sdk
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTANVIL_NDK_VERSION: 29.0.14206865
+
+jobs:
+  build:
+    name: android-${{ matrix.abi }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            preset: android-arm64-release
+            elf_class: ELF64
+            elf_machine: AArch64
+          - abi: armeabi-v7a
+            preset: android-armv7-release
+            elf_class: ELF32
+            elf_machine: ARM
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Locate Android NDK 29
+        shell: bash
+        run: |
+          ndk_path="$ANDROID_SDK_ROOT/ndk/$POSTANVIL_NDK_VERSION"
+          if [[ ! -f "$ndk_path/build/cmake/android.toolchain.cmake" ]]; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+              "ndk;$POSTANVIL_NDK_VERSION"
+          fi
+          echo "POSTANVIL_ANDROID_NDK=$ndk_path" >> "$GITHUB_ENV"
+
+      - name: Configure ${{ matrix.abi }}
+        shell: bash
+        run: >-
+          cmake --fresh --preset ${{ matrix.preset }}
+          -DPOSTANVIL_ANDROID_NDK="$POSTANVIL_ANDROID_NDK"
+
+      - name: Build and install ${{ matrix.abi }}
+        run: cmake --build --preset ${{ matrix.preset }}-install --parallel 4
+
+      - name: Compile Java binding
+        shell: bash
+        run: |
+          install_dir="out/install/android-release/${{ matrix.abi }}"
+          mkdir -p out/jni-headers out/java-classes
+          javac --release 8 -h out/jni-headers -d out/java-classes \
+            bindings/android/java/org/postanvil/NativeBridge.java
+          mkdir -p "$install_dir/share/PostAnvil/android"
+          jar --create \
+            --file "$install_dir/share/PostAnvil/android/postanvil-java.jar" \
+            -C out/java-classes .
+
+      - name: Verify Android binaries and JNI exports
+        shell: bash
+        run: |
+          tool_bin="$POSTANVIL_ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          install_dir="out/install/android-release/${{ matrix.abi }}"
+          shared="$install_dir/lib/libpostanvil_jni.so"
+          archive="$install_dir/lib/libpostanvil_static.a"
+
+          test -f "$shared"
+          test -f "$archive"
+          test -f "$install_dir/include/PostAnvil.h"
+          test -f "$install_dir/lib/cmake/PostAnvil/PostAnvilConfig.cmake"
+          test -f "$install_dir/share/PostAnvil/android/java/org/postanvil/NativeBridge.java"
+          test -f "$install_dir/share/PostAnvil/android/postanvil-java.jar"
+
+          "$tool_bin/llvm-readelf" -h "$shared" | grep -F "Class:" | grep -F "${{ matrix.elf_class }}"
+          "$tool_bin/llvm-readelf" -h "$shared" | grep -F "Machine:" | grep -F "${{ matrix.elf_machine }}"
+          "$tool_bin/llvm-nm" -D --defined-only "$shared" | grep -F "Java_org_postanvil_NativeBridge_version"
+          "$tool_bin/llvm-nm" -D --defined-only "$shared" | grep -F "Java_org_postanvil_NativeBridge_compile"
+          "$tool_bin/llvm-nm" -D --defined-only "$shared" | grep -F "Java_org_postanvil_NativeBridge_destroyProgram"
+          "$tool_bin/llvm-nm" -D --defined-only "$shared" | grep -F "Java_org_postanvil_NativeBridge_evaluate"
+
+          "$tool_bin/llvm-readobj" --file-headers "$archive" > out/archive-headers.txt
+          if [[ "${{ matrix.abi }}" == "arm64-v8a" ]]; then
+            grep -F "Format: elf64-littleaarch64" out/archive-headers.txt
+            expected_alignment="0x4000"
+          else
+            grep -F "Format: elf32-littlearm" out/archive-headers.txt
+            expected_alignment="0x1000"
+          fi
+          "$tool_bin/llvm-readelf" -l "$shared" | awk -v expected="$expected_alignment" '
+            $1 == "LOAD" { count += 1; if ($NF != expected) bad = 1 }
+            END { exit !(count > 0 && bad == 0) }
+          '
+
+      - name: Configure installed static-library consumer
+        run: >-
+          cmake -S tests/package_consumer
+          -B out/build/android-consumer-${{ matrix.abi }}
+          -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE=$POSTANVIL_ANDROID_NDK/build/cmake/android.toolchain.cmake
+          -DANDROID_ABI=${{ matrix.abi }}
+          -DANDROID_PLATFORM=android-32
+          -DANDROID_STL=c++_static
+          -DCMAKE_BUILD_TYPE=Release
+          -DPostAnvil_DIR=${{ github.workspace }}/out/install/android-release/${{ matrix.abi }}/lib/cmake/PostAnvil
+          -DPOSTANVIL_CONSUMER_BUILD_SHARED=OFF
+
+      - name: Build installed static-library consumer
+        run: >-
+          cmake --build out/build/android-consumer-${{ matrix.abi }}
+          --parallel 2
+
+      - name: Create Android SDK archive
+        working-directory: out/install/android-release
+        run: >-
+          cmake -E tar cfv
+          PostAnvil-android-${{ matrix.abi }}.zip
+          --format=zip ${{ matrix.abi }}
+
+      - name: Upload Android SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PostAnvil-android-${{ matrix.abi }}
+          path: out/install/android-release/PostAnvil-android-${{ matrix.abi }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  bundle:
+    name: android-all-abis
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download per-ABI SDK archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: PostAnvil-android-*
+          path: out/download
+          merge-multiple: true
+
+      - name: Combine Android ABIs
+        shell: bash
+        run: |
+          mkdir -p out/android-sdk
+          for archive in out/download/PostAnvil-android-*.zip; do
+            unzip -q "$archive" -d out/android-sdk
+          done
+          test -f out/android-sdk/arm64-v8a/lib/libpostanvil_static.a
+          test -f out/android-sdk/armeabi-v7a/lib/libpostanvil_static.a
+          cd out/android-sdk
+          cmake -E tar cfv ../../PostAnvil-android-all-abis.zip \
+            --format=zip -- arm64-v8a armeabi-v7a
+
+      - name: Upload combined Android SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PostAnvil-android-all-abis
+          path: PostAnvil-android-all-abis.zip
+          if-no-files-found: error
+          retention-days: 14

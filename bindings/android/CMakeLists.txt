@@ -9,3 +9,5 @@ set_target_properties(postanvil_jni PROPERTIES OUTPUT_NAME "postanvil_jni")
 
 install(TARGETS postanvil_jni
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(FILES java/org/postanvil/NativeBridge.java
+	DESTINATION "${CMAKE_INSTALL_DATADIR}/PostAnvil/android/java/org/postanvil")

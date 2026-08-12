@@ -1,4 +1,6 @@
-﻿# PostAnvil DSL 优化建议代办
+# 开发路线图
+
+[文档中心](../README.md) · [项目首页](../../README.md)
 
 > **评审日期**：2026-08-04  
 > **评审基线**：PostAnvil 0.8.x 当前源码、公开 C++/Python API 与测试
@@ -86,3 +88,7 @@ CONST (E1) ─────────────────→ 符号表只�
 > **性能基线**：建立 Scene 与 YOLO 转换性能基线 不承诺优化结果  
 > 前向引用、_NEARBY_EDGE、CONST 和结构化 trace。  
 > 所有新语法与内置函数保持大小写不敏感，并在 C++、Python、Android 绑定行为一致。  
+
+---
+
+[返回文档中心](../README.md)
