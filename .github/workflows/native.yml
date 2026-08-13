@@ -22,21 +22,33 @@ jobs:
           - os: windows-latest
             platform: windows
             build_type: Debug
+            parallel: 4
+            generator: ""
           - os: windows-latest
             platform: windows
             build_type: Release
+            parallel: 4
+            generator: ""
           - os: ubuntu-latest
             platform: ubuntu
             build_type: Debug
+            parallel: 4
+            generator: -G Ninja
           - os: ubuntu-latest
             platform: ubuntu
             build_type: Release
+            parallel: 4
+            generator: -G Ninja
           - os: macos-latest
             platform: macos
             build_type: Debug
+            parallel: 3
+            generator: -G Ninja
           - os: macos-latest
             platform: macos
             build_type: Release
+            parallel: 3
+            generator: -G Ninja
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -44,13 +56,16 @@ jobs:
 
       - name: Configure PostAnvil
         run: >-
-          cmake -S . -B out/build/native -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake -S . -B out/build/native ${{ matrix.generator }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -DPOSTANVIL_BUILD_STATIC=ON -DPOSTANVIL_BUILD_SHARED=ON
           -DPOSTANVIL_BUILD_TESTS=ON
           -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/out/install/native
 
       - name: Build PostAnvil
-        run: cmake --build out/build/native --config ${{ matrix.build_type }} --parallel
+        run: >-
+          cmake --build out/build/native --config ${{ matrix.build_type }}
+          --parallel ${{ matrix.parallel }}
 
       - name: Run native tests
         run: >-
@@ -65,13 +80,14 @@ jobs:
       - name: Configure installed-package consumer
         run: >-
           cmake -S tests/package_consumer -B out/build/package-consumer
+          ${{ matrix.generator }}
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           "-DCMAKE_PREFIX_PATH=${{ github.workspace }}/out/install/native"
 
       - name: Build installed-package consumer
         run: >-
           cmake --build out/build/package-consumer
-          --config ${{ matrix.build_type }} --parallel
+          --config ${{ matrix.build_type }} --parallel ${{ matrix.parallel }}
 
       - name: Test installed-package consumer
         run: >-
