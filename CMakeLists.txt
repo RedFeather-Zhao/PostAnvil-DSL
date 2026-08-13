@@ -76,7 +76,8 @@ if(POSTANVIL_BUILD_STATIC)
 	add_library(PostAnvil::static ALIAS postanvil_static)   # PostAnvil::static 别名
 	set_target_properties(postanvil_static PROPERTIES
 		OUTPUT_NAME postanvil_static
-		EXPORT_NAME static)
+		EXPORT_NAME static
+		POSITION_INDEPENDENT_CODE ON)
 	target_compile_definitions(postanvil_static
 		PRIVATE ANTLR4CPP_STATIC POSTANVIL_STATIC
 		INTERFACE POSTANVIL_STATIC)

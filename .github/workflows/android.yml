@@ -44,6 +44,8 @@ jobs:
               "ndk;$POSTANVIL_NDK_VERSION"
           fi
           echo "POSTANVIL_ANDROID_NDK=$ndk_path" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ndk_path" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ndk_path" >> "$GITHUB_ENV"
 
       - name: Configure ${{ matrix.abi }}
         shell: bash

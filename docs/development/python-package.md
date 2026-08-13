@@ -1,4 +1,4 @@
-# Python 包构建与发布
+﻿# Python 包构建与发布
 
 [文档中心](../README.md) · [Python 接入](../integration/python.md)
 
@@ -267,6 +267,10 @@ postanvil-wheels-macos-ARM64
 
 每个 wheel 都会先安装到 cibuildwheel 的隔离测试环境，然后验证包版本，并运行基础绑定、
 结构化编译错误和 Ultralytics 适配器替身测试。只有测试通过的 wheel 才会上传。
+
+当前 macOS 预编译 wheel 的最低系统版本为 macOS 14.0。核心使用的 C++20
+`std::format` 会依赖 Apple libc++ 的浮点 `std::to_chars`；该接口不能安全向后部署到
+macOS 13.2 及更早版本。Linux 和 Windows wheel 不受此项 macOS 限制。
 
 开发者可以在对应的工作流运行页面下载 artifact，解压后选择与 Python 版本、操作系统
 和 CPU 架构匹配的 `.whl`，再按“方式二”安装。已安装 GitHub CLI 时也可以执行：

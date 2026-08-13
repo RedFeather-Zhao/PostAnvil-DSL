@@ -4,14 +4,13 @@ set(_postanvil_ndk_candidates)
 
 if(POSTANVIL_ANDROID_NDK)
 	list(APPEND _postanvil_ndk_candidates "${POSTANVIL_ANDROID_NDK}")
-endif()
-if(CMAKE_ANDROID_NDK)
+
+	# 显式指定 PostAnvil NDK 后，不再混入宿主环境中的其他版本。
+elseif(CMAKE_ANDROID_NDK)
 	list(APPEND _postanvil_ndk_candidates "${CMAKE_ANDROID_NDK}")
-endif()
-if(DEFINED ENV{ANDROID_NDK_HOME} AND NOT "$ENV{ANDROID_NDK_HOME}" STREQUAL "")
+elseif(DEFINED ENV{ANDROID_NDK_HOME} AND NOT "$ENV{ANDROID_NDK_HOME}" STREQUAL "")
 	list(APPEND _postanvil_ndk_candidates "$ENV{ANDROID_NDK_HOME}")
-endif()
-if(DEFINED ENV{ANDROID_NDK_ROOT} AND NOT "$ENV{ANDROID_NDK_ROOT}" STREQUAL "")
+elseif(DEFINED ENV{ANDROID_NDK_ROOT} AND NOT "$ENV{ANDROID_NDK_ROOT}" STREQUAL "")
 	list(APPEND _postanvil_ndk_candidates "$ENV{ANDROID_NDK_ROOT}")
 endif()
 
