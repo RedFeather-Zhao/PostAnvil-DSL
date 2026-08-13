@@ -1,0 +1,117 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native:
+    uses: ./.github/workflows/native.yml
+
+  wheels:
+    uses: ./.github/workflows/wheels.yml
+
+  android:
+    uses: ./.github/workflows/android.yml
+
+  publish:
+    name: publish-release
+    needs:
+      - native
+      - wheels
+      - android
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+          import os
+
+          root = pathlib.Path.cwd()
+          tag = os.environ["GITHUB_REF_NAME"]
+          if not tag.startswith("v") or len(tag) == 1:
+              raise SystemExit(f"Invalid release tag: {tag}")
+          expected = tag[1:]
+
+          sources = {
+              "CMakeLists.txt": (
+                  root / "CMakeLists.txt",
+                  r"project\(PostAnvil VERSION ([^ )]+)",
+              ),
+              "pyproject.toml": (
+                  root / "pyproject.toml",
+                  r'^version = "([^"]+)"',
+              ),
+              "src/api.cpp": (
+                  root / "src/api.cpp",
+                  r'return "([^"]+)";',
+              ),
+          }
+
+          for name, (path, pattern) in sources.items():
+              match = re.search(pattern, path.read_text(encoding="utf-8"), re.MULTILINE)
+              if not match:
+                  raise SystemExit(f"Cannot read version from {name}")
+              actual = match.group(1)
+              if actual != expected:
+                  raise SystemExit(
+                      f"Version mismatch: tag={expected}, {name}={actual}"
+                  )
+
+          print(f"Release version verified: {expected}")
+          PY
+
+      - name: Download native Release SDKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: PostAnvil-*-Release
+          path: release-assets/native
+          merge-multiple: true
+
+      - name: Download Python wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: postanvil-wheels-*
+          path: release-assets/python
+          merge-multiple: true
+
+      - name: Download combined Android SDK
+        uses: actions/download-artifact@v4
+        with:
+          name: PostAnvil-android-all-abis
+          path: release-assets/android
+
+      - name: Generate SHA-256 checksums
+        shell: bash
+        run: |
+          cd release-assets
+          find native python android -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            release-assets/native/*.zip
+            release-assets/python/*.whl
+            release-assets/android/PostAnvil-android-all-abis.zip
+            release-assets/SHA256SUMS.txt

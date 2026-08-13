@@ -1,15 +1,18 @@
 name: android-sdk
 
 on:
+  workflow_call:
   workflow_dispatch:
   push:
+    branches:
+      - "**"
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: android-sdk-${{ github.ref }}
   cancel-in-progress: true
 
 env:

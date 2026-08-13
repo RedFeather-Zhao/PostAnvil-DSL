@@ -241,22 +241,22 @@ assert selected.id == person.id
 
 ```python
 try:
-    postanvil.compile(source)
+	postanvil.compile(source)
 except postanvil.PACompileError as error:
-    print(error.kind, error.line, error.column)
-    print(error.message)
-    if error.hint:
-        print("help:", error.hint)
+	print(error.kind, error.line, error.column)
+	print(error.message)
+	if error.hint:
+		print("help:", error.hint)
 ```
 
 ## 开发者构建方式
 
 ### 从 GitHub Actions 下载多平台 wheel
 
-仓库的 `.github/workflows/wheels.yml` 会在 push、Pull Request、推送 `v*` 标签时运行，
-也可以在 GitHub 的 **Actions → python-wheels → Run workflow** 中手工触发。普通 push 和
-Pull Request 构建 Python 3.12 作为快速回归；`v*` 版本标签和手动触发构建 Python
-3.9–3.14 的完整发布矩阵。工作流会分别在 Windows、Linux 和 macOS 上构建，并上传按
+仓库的 `.github/workflows/wheels.yml` 会在分支 push、Pull Request 时运行，也可以在
+GitHub 的 **Actions → python-wheels → Run workflow** 中手工触发。普通 push 和
+Pull Request 构建 Python 3.12 作为快速回归；手动触发以及由 `release.yml` 调用的
+`v*` 标签发布构建 Python 3.9–3.14 的完整矩阵。工作流会分别在 Windows、Linux 和 macOS 上构建，并上传按
 平台、运行器架构区分的 artifact，例如：
 
 ```text
@@ -288,6 +288,10 @@ Linux 或 macOS 将 artifact 名称替换为对应平台和运行器架构。Git
 $wheel = Get-ChildItem .\downloads\wheels-Windows\*.whl | Select-Object -First 1
 python -m pip install $wheel.FullName
 ```
+
+发布版本可以直接从仓库的 **Releases** 页面下载，不受单次 Actions artifact 的
+14 天保留期限制。Release 会同时附带各平台 wheel、C++ SDK、Android SDK 和
+`SHA256SUMS.txt`；只有全部构建通过才会创建。
 
 ### 仅调试 Python 扩展：直接使用 CMake
 

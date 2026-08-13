@@ -253,6 +253,10 @@ artifact 中的 ZIP 包包含对应平台的头文件、静态库、动态库和
 `lib/cmake/PostAnvil`。GitHub 托管运行器的架构可能随平台标签变化，因此实际名称以
 Actions 页面显示的 `${runner.arch}` 为准。
 
+打开仓库的 **Actions** 页面，进入某次成功运行，在运行摘要页底部的
+**Artifacts** 区域即可下载。这里的 artifact 是单次 CI 运行的临时产物，默认保留
+14 天，不会自动出现在仓库的 **Releases** 页面。
+
 `.github/workflows/android.yml` 会单独构建 API 32 的 `arm64-v8a` 和
 `armeabi-v7a`。它会验证静态库、JNI 导出、Java 类、ELF 架构、页面对齐和安装后的
 静态库消费工程，并上传：
@@ -265,6 +269,30 @@ PostAnvil-android-all-abis
 
 Android SDK 包含 `.a`、JNI `.so`、公开头文件、CMake Package、`NativeBridge.java`
 和编译后的 `postanvil-java.jar`。`all-abis` 是两个 ABI 的合并下载包。
+
+## GitHub Release 自动发布
+
+`.github/workflows/release.yml` 只在推送 `v*` 标签时运行。它会统一调用原生库、
+Python wheel 和 Android SDK 工作流；所有平台成功后，下载正式发布所需的产物，生成
+`SHA256SUMS.txt`，并创建同名 GitHub Release。任一平台失败时不会发布不完整版本。
+
+发布前必须确保标签版本与 `CMakeLists.txt`、`pyproject.toml` 和 `src/api.cpp` 中的
+版本一致。例如发布 `0.8.0`：
+
+```bash
+git tag v0.8.0
+git push origin v0.8.0
+```
+
+Release 附件包括：
+
+- Windows、Ubuntu、macOS 的 Release C++ SDK ZIP；
+- Windows、Linux、macOS 的全部 Python wheel；
+- 包含 `arm64-v8a` 和 `armeabi-v7a` 的 Android SDK ZIP；
+- 所有附件的 SHA-256 校验清单。
+
+带连字符的标签（例如 `v0.9.0-rc1`）会创建预发布版本。正式 Release 附件不会受
+Actions artifact 的 14 天保留期影响。
 
 ---
 
