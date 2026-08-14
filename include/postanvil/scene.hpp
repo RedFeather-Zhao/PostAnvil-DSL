@@ -45,14 +45,14 @@ struct Image {
 
 /**
  * @brief DSL 执行的完整场景上下文
- * @details Scene 统一持有所有 Instance，并单独维护 cls_name 到 InstanceId 列表的类别索引。
- *          Instance 本身不保存类别；同一 ID 出现在多个类别时仍指向同一个 Instance。
+ * @details Scene 统一持有所有 Instance，并单独维护 cls_name 到 InstanceId 列表的类别索引
+ *          Instance 本身不保存类别；同一 ID 出现在多个类别时仍指向同一个 Instance
  */
 struct Scene {
 
 	// ===================== Type Alias =====================
 
-	using InstanceIds	= std::vector<InstanceId>;
+	using InstanceIds		= std::vector<InstanceId>;
 	using ClassIndex		= detail::str_map<InstanceIds>;
 	using ClassProps		= detail::str_map<detail::str_map<Val>>;
 	using Variables			= detail::str_map<Val>;
@@ -64,16 +64,16 @@ struct Scene {
 	 *
 	 * @param image_info	- 图像元信息
 	 */
-	explicit Scene(Image image_info)
-		: image(std::move(image_info))
+	explicit Scene(Image image_info) : image(std::move(image_info))
 	{
 		m_instances.emplace_back(
-			std::make_unique<Instance>(0.0, 0.0, 0.0, 0.0, 0.0));
+			std::make_unique<Instance>(0.0, 0.0, 0.0, 0.0, 0.0)
+		);
 	}
 
 	/**
 	 * @brief 深拷贝场景
-	 * @details 类别索引和属性按值复制，Instance 逐项复制，副本拥有独立实例存储。
+	 * @details 类别索引和属性按值复制，Instance 逐项复制，副本拥有独立实例存储
 	 */
 	Scene(const Scene& other)
 		: image(other.image),
@@ -87,8 +87,6 @@ struct Scene {
 		}
 	}
 
-	Scene(Scene&&) noexcept = default;
-
 	Scene& operator=(const Scene& other) {
 		if (this == &other) { return *this; }
 
@@ -97,10 +95,14 @@ struct Scene {
 		return *this;
 	}
 
+	Scene(Scene&&) noexcept = default;
+
 	Scene& operator=(Scene&&) noexcept = default;
 
 	/**
 	 * @brief 交换两个场景的完整状态
+	 * 
+	 * @param other - 另一个场景对象
 	 */
 	void swap(Scene& other) noexcept {
 		using std::swap;
@@ -116,7 +118,8 @@ struct Scene {
 
 	/**
 	 * @brief 获取全局占位实例
-	 * @details 占位实例固定存储在实例表第 0 项，不属于任何类别。
+	 * 
+	 * @details 占位实例固定存储在实例表第 0 项，不属于任何类别
 	 */
 	[[nodiscard]] const Instance& inst_dummy() const noexcept {
 		return *m_instances.front();
@@ -148,27 +151,26 @@ struct Scene {
 
 	/**
 	 * @brief 获取有效实例数量，不包含第 0 项占位实例
+	 * 
 	 */
 	[[nodiscard]] std::size_t inst_count() const noexcept {
 		return m_instances.size() - 1;
 	}
 
 	/**
-	 * @brief 创建实例并加入指定类别
-	 * @details Scene 分配稳定 ID 并取得实例所有权；类别只记录该 ID，不复制 Instance。
+	 * @brief 创建实例并加入指定初始类别，为实例分配稳定 ID 并取得所有权
 	 *
-	 * @param cls_name	- 目标类别名
-	 * @param instance	- 实例数据
-	 * @return InstanceHandle 带该类别访问上下文的轻量句柄
+	 * @param cls_name			- 目标类别名
+	 * @param instance			- 实例数据
+	 * @return InstanceHandle	- 带该类别访问上下文的轻量句柄
 	 */
 	InstanceHandle add(std::string_view cls_name, Instance instance) {
-		auto normalized_cls_name = normalize_cls_name(cls_name);
+		auto nor_name = normalize_cls_name(cls_name);
 		const auto id = m_instances.size();
 		instance.set_id(id);
 
 		auto stored = std::make_unique<Instance>(std::move(instance));
-		auto [class_it, class_inserted] =
-			m_class_index.try_emplace(std::move(normalized_cls_name));
+		auto [class_it, class_inserted] = m_class_index.try_emplace(std::move(nor_name));
 		auto& ids = class_it->second;
 
 		try {
@@ -185,14 +187,13 @@ struct Scene {
 	}
 
 	/**
-	 * @brief 用指定 ID 列表替换类别内容
-	 * @details 所有 ID 必须已存在；保留首次出现顺序并移除重复 ID，不复制 Instance。
+	 * @brief 用指定 ID 列表替换类别内容，保留首次出现顺序并移除重复 ID
 	 *
 	 * @param cls_name	- 目标类别名
 	 * @param ids		- 新的实例 ID 列表
 	 */
 	void replace_class(std::string_view cls_name, InstanceIds ids) {
-		auto normalized_cls_name = normalize_cls_name(cls_name);
+		auto nor_name = normalize_cls_name(cls_name);
 
 		InstanceIds unique_ids;
 		unique_ids.reserve(ids.size());
@@ -202,16 +203,16 @@ struct Scene {
 
 		for (const auto id : ids) {
 			validate_inst_id(id);
-			if (visited.emplace(id).second) { unique_ids.emplace_back(id); }
+			if (visited.emplace(id).second) {
+				unique_ids.emplace_back(id);
+			}
 		}
 
-		m_class_index.insert_or_assign(
-			std::move(normalized_cls_name), std::move(unique_ids));
+		m_class_index.insert_or_assign(std::move(nor_name), std::move(unique_ids));
 	}
 
 	/**
-	 * @brief 将已有实例加入指定类别
-	 * @details 仅增加类别到 ID 的关系，不复制或移动 Instance。
+	 * @brief 将已有实例加入指定类别，仅增加类别到 ID 的关系
 	 *
 	 * @param cls_name	- 目标类别名
 	 * @param id		- 已存在的实例 ID
@@ -280,7 +281,7 @@ struct Scene {
 
 	/**
 	 * @brief 按稳定 ID 获取实例句柄
-	 * @details ID 本身不携带类别信息，因此返回的句柄没有类别上下文。
+	 * @details ID 本身不携带类别信息，因此返回的句柄没有类别上下文
 	 *
 	 * @throw PARuntimeError	- 输入不是有效正整数或 ID 不存在时抛出
 	 */
@@ -336,7 +337,7 @@ struct Scene {
 
 	/**
 	 * @brief 获取实例属性
-	 * @details CLS 和 INDEX 依赖句柄的类别上下文；ID 句柄访问这两个属性时会报错。
+	 * @details CLS 和 INDEX 依赖句柄的类别上下文；ID 句柄访问这两个属性时会报错
 	 *
 	 * @param handle		- 实例句柄
 	 * @param prop			- 属性名
@@ -490,7 +491,7 @@ public:
 private:
 	/**
 	 * @brief 校验并规范化类别名
-	 * @details 类别名统一转换为大写，保证创建、查询和类别操作使用同一键值。
+	 * @details 类别名统一转换为大写，保证创建、查询和类别操作使用同一键值
 	 */
 	[[nodiscard]] static std::string normalize_cls_name(std::string_view cls_name) {
 		if (cls_name.empty()) {
@@ -504,7 +505,7 @@ private:
 
 	/**
 	 * @brief 查找类别，已规范化名称使用透明查找且不产生临时 std::string
-	 * @details 仅当直接查找失败且名称含小写 ASCII 字符时才创建大写副本再次查找。
+	 * @details 仅当直接查找失败且名称含小写 ASCII 字符时才创建大写副本再次查找
 	 */
 	[[nodiscard]] ClassIndex::const_iterator find_class(std::string_view cls_name) const {
 		if (cls_name.empty()) {

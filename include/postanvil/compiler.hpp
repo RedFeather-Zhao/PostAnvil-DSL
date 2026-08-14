@@ -405,11 +405,9 @@ private: // Listener 回调实现
 		// 生成 CompiledFunc
 		auto& param_names = m_current_func->param_names;
 		m_current_func->body = [param_names, body_stmts]
-		(const std::vector<Val>& args, const Instance& self, EvaluationContext& ctx) -> Val
+		(const std::vector<Val>& args, EvaluationContext& ctx) -> Val
 		{
 			ctx.push_scope();
-			const Instance* previous_inst = ctx.curr_inst;
-			ctx.curr_inst = &self;
 
 			// 导入参数并执行
 			size_t arg_count = std::min(args.size(), param_names.size());
@@ -423,7 +421,6 @@ private: // Listener 回调实现
 				stmt(ctx);
 			}
 
-			ctx.curr_inst = previous_inst;
 			ctx.pop_scope();
 
 			// 返回计算值
@@ -466,7 +463,7 @@ private: // Listener 回调实现
 		m_type_scope.set_local(name, declared);
 
 		return [name, func = std::move(typed.func)](EvaluationContext& ctx) {
-			Val val = func(*ctx.curr_inst, ctx);
+			Val val = func(ctx);
 			ctx.set_var(name, val);
 		};
 	}
@@ -493,7 +490,7 @@ private: // Listener 回调实现
 		// 赋值并不改变变量类型
 
 		return [name, func = std::move(typed.func)](EvaluationContext& ctx) {
-			Val val = func(*ctx.curr_inst, ctx);
+			Val val = func(ctx);
 			ctx.set_var(name, val);
 		};
 	}
@@ -546,13 +543,13 @@ private: // Listener 回调实现
 			}
 			m_type_scope.pop();
 		}
-		branches.emplace_back([](const Instance&, EvaluationContext&) { return true; },
+		branches.emplace_back([](EvaluationContext&) { return true; },
 			std::move(else_stmts));
 
 		// 生成闭包：依次判断 if -> elif -> else
 		return [branches = std::move(branches)](EvaluationContext& ctx) {
 			for (const auto& branch : branches) {
-				if (!branch.cond(*ctx.curr_inst, ctx)) {
+				if (!branch.cond(ctx)) {
 					continue;
 				}
 				ctx.push_scope();
@@ -594,7 +591,7 @@ private: // Listener 回调实现
 		m_type_scope.pop();
 
 		return [loop_var, class_expr, body_stmts](EvaluationContext& ctx) {
-			std::string cls_name = class_expr(ctx.scene.inst_dummy(), ctx);
+			std::string cls_name = class_expr(ctx);
 
 			// 特殊处理 "GLOBAL"：遍历所有类别
 			if (cls_name == "GLOBAL") {
@@ -664,12 +661,12 @@ private: // Listener 回调实现
 				}
 			}
 			return [func = std::move(typed.func)](EvaluationContext& ctx) {
-				Val val = func(*ctx.curr_inst, ctx);
+				Val val = func(ctx);
 				ctx.do_return(std::move(val));
 			};
 		}
 		return [func = std::move(typed.func)](EvaluationContext& ctx) {
-			(void)func(*ctx.curr_inst, ctx);
+			(void)func(ctx);
 		};
 	}
 
@@ -693,7 +690,7 @@ private: // Listener 回调实现
 		}
 
 		return [func = std::move(typed.func)](EvaluationContext& ctx) {
-			Val val = func(*ctx.curr_inst, ctx);
+			Val val = func(ctx);
 			ctx.do_return(std::move(val));
 		};
 	}

@@ -350,11 +350,10 @@ struct EvaluationContext;	// 评估环境前向声明
 /**
  * @brief 带类型的表达式闭包函数类型
  *
- * @param instance 当前求值的实例
- * @param scene 当前场景上下文
+ * @param ctx 当前评估上下文
  * @return 表达式求值结果
  */
-using ValFunc = std::function<Val(const Instance&, EvaluationContext&)>;
+using ValFunc = std::function<Val(EvaluationContext&)>;
 
 /**
  * @brief 类型化表达式，包含求值函数及其返回类型
@@ -364,9 +363,9 @@ struct TypedExpr {
 	Type type;
 };
 
-using NumFunc		= std::function<double		(const Instance&, EvaluationContext& scene)>;
-using BoolFunc		= std::function<bool		(const Instance&, EvaluationContext& scene)>;
-using StrFunc		= std::function<std::string	(const Instance&, EvaluationContext& scene)>;
+using NumFunc		= std::function<double		(EvaluationContext&)>;
+using BoolFunc		= std::function<bool		(EvaluationContext&)>;
+using StrFunc		= std::function<std::string	(EvaluationContext&)>;
 
 using StatementFunc	= std::function<void		(EvaluationContext&)>;
 

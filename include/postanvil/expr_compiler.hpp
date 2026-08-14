@@ -77,8 +77,8 @@ public: // public method:
 			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
-		return [func](const Instance& self, EvaluationContext& ctx) {
-			return func(self, ctx).as_bool();
+		return [func](EvaluationContext& ctx) {
+			return func(ctx).as_bool();
 		};
 	}
 
@@ -97,8 +97,8 @@ public: // public method:
 			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
-		return [func](const Instance& self, EvaluationContext& ctx) {
-			return func(self, ctx).as_num();
+		return [func](EvaluationContext& ctx) {
+			return func(ctx).as_num();
 		};
 	}
 
@@ -117,8 +117,8 @@ public: // public method:
 			report_semantic_error(err, ctx);
 		}
 		const auto& func = typed.func;
-		return [func](const Instance& self, EvaluationContext& ctx) {
-			return func(self, ctx).as_str();
+		return [func](EvaluationContext& ctx) {
+			return func(ctx).as_str();
 		};
 	}
 
@@ -135,7 +135,7 @@ public: // public method:
 		// 字符串字面量
 		if (ctx->STRING()) {
 			std::string s = utils::strip_quotes(utils::get_upper_text(ctx->STRING()));
-			return [s = std::move(s)](const Instance&, EvaluationContext&) {
+			return [s = std::move(s)](EvaluationContext&) {
 				return s;
 			};
 		}
@@ -152,7 +152,7 @@ public: // public method:
 					"Class expression requires STR, got {}", type_name(var_type)), ctx);
 			}
 
-			return [var = std::move(var)](const Instance&, EvaluationContext& ctx) {
+			return [var = std::move(var)](EvaluationContext& ctx) {
 				Val val = ctx.get_var(var);
 				auto str = val.as_str();
 				utils::to_upper_inplace(str);
@@ -201,8 +201,8 @@ private:
 			}
 			left = {
 				[l = std::move(left.func), r = std::move(right.func)]
-				(const Instance& self, EvaluationContext& ctx) -> Val {
-					return l(self, ctx).as_bool() || r(self, ctx).as_bool();
+				(EvaluationContext& ctx) -> Val {
+					return l(ctx).as_bool() || r(ctx).as_bool();
 				},
 				Type::T_BOOL
 			};
@@ -246,8 +246,8 @@ private:
 				report_semantic_error(err, ctx);
 			}
 			left = { [l = std::move(left.func), r = std::move(right.func)]
-				(const Instance& self, EvaluationContext& ctx) -> Val {
-					return l(self, ctx).as_bool() && r(self, ctx).as_bool();
+				(EvaluationContext& ctx) -> Val {
+					return l(ctx).as_bool() && r(ctx).as_bool();
 				},
 				Type::T_BOOL
 			};
@@ -277,8 +277,8 @@ private:
 			report_semantic_error(err, ctx);
 		}
 		return { [r = std::move(rhs.func)]
-			(const Instance& self, EvaluationContext& ctx) -> Val {
-				return !r(self, ctx).as_bool();
+			(EvaluationContext& ctx) -> Val {
+				return !r(ctx).as_bool();
 			},
 			Type::T_BOOL
 		};
@@ -328,9 +328,9 @@ private:
 		}
 
 		return { [l = std::move(left.func), r = std::move(right.func), op = std::move(op)]
-			(const Instance& self, EvaluationContext& ctx) -> Val {
-				auto lval = l(self, ctx);
-				auto rval = r(self, ctx);
+			(EvaluationContext& ctx) -> Val {
+				auto lval = l(ctx);
+				auto rval = r(ctx);
 				if (op == ">")  return lval >  rval;
 				if (op == "<")  return lval <  rval;
 				if (op == ">=") return lval >= rval;
@@ -392,9 +392,9 @@ private:
 
 			left = {
 				[l = std::move(left.func), r = std::move(right.func), o = std::move(op)]
-				(const Instance& self, EvaluationContext& ctx) {
-					Val lv = l(self, ctx);
-					Val rv = r(self, ctx);
+				(EvaluationContext& ctx) {
+					Val lv = l(ctx);
+					Val rv = r(ctx);
 					if (o == "+") return lv + rv;
 					if (o == "-") return lv - rv;
 					throw PARuntimeError(std::format("Unknown operation: {}", o));
@@ -446,9 +446,9 @@ private:
 
 			left = {
 				[l = std::move(left.func), r = std::move(right.func), o = std::move(op)]
-				(const Instance& self, EvaluationContext& ctx) {
-					Val lv = l(self, ctx);
-					Val rv = r(self, ctx);
+				(EvaluationContext& ctx) {
+					Val lv = l(ctx);
+					Val rv = r(ctx);
 					if (o == "*") return lv * rv;
 					if (o == "/") return lv / rv;
 					throw PARuntimeError(std::format("Unknown operation: {}", o));
@@ -481,8 +481,8 @@ private:
 
 			return {
 				[r = std::move(rhs.func)]
-				(const Instance& self, EvaluationContext& ctx) -> Val {
-					return -(r(self, ctx).as_num());
+				(EvaluationContext& ctx) -> Val {
+					return -(r(ctx).as_num());
 				},
 				Type::T_NUM
 			};
@@ -517,7 +517,7 @@ private:
 		// SELF 当前实例值
 		if (ctx->SELF()) {
 			return {
-				[](const Instance&, EvaluationContext& eval_ctx) -> Val {
+				[](EvaluationContext& eval_ctx) -> Val {
 					if (!eval_ctx.curr_handle) {
 						throw PARuntimeError("SELF is unavailable outside an instance context");
 					}
@@ -560,7 +560,7 @@ private:
 	TypedExpr compileNumber(::PostAnvilParser::PrimaryContext* ctx) {
 		double v = std::stod(ctx->NUMBER()->getText());
 		return {
-			[v](const Instance&, EvaluationContext&) {
+			[v](EvaluationContext&) {
 				return Val(v);
 			},
 			Type::T_NUM
@@ -576,7 +576,7 @@ private:
 	TypedExpr compileString(::PostAnvilParser::PrimaryContext* ctx) {
 		std::string s = utils::strip_quotes(ctx->STRING()->getText());
 		return {
-			[s = std::move(s)](const Instance&, EvaluationContext&) {
+			[s = std::move(s)](EvaluationContext&) {
 				return Val(s);
 			},
 			Type::T_STR
@@ -593,7 +593,7 @@ private:
 		std::string text = utils::get_upper_text(ctx->BOOL_LIT());
 		bool v = (text == "TRUE");
 		return {
-			[v](const Instance&, EvaluationContext&) {
+			[v](EvaluationContext&) {
 				return Val(v);
 			},
 			Type::T_BOOL
@@ -616,7 +616,7 @@ private:
 		}
 
 		return {
-			[var](const Instance&, EvaluationContext& ctx) -> Val {
+			[var](EvaluationContext& ctx) -> Val {
 				// 使用 get_var 查找局部/全局
 				return ctx.get_var(var);
 			},
@@ -647,7 +647,7 @@ private:
 		if (auto* inst = dynamic_cast<::PostAnvilParser::InstanceAttrContext*>(ctx)) {
 			auto prop = utils::get_upper_text(inst->IDENTIFIER());
 			return {
-				[prop](const Instance&, EvaluationContext& ctx) -> Val {
+				[prop](EvaluationContext& ctx) -> Val {
 					return ctx.scene.get_inst_prop(ctx.curr_handle, prop);
 				},
 				Type::T_ANY
@@ -659,7 +659,7 @@ private:
 			auto cls_name = utils::strip_quotes(utils::get_upper_text(cls->STRING()));
 			auto prop = utils::get_upper_text(cls->IDENTIFIER());
 			return {
-				[cls_name, prop](const Instance&, EvaluationContext& ctx) -> Val {
+				[cls_name, prop](EvaluationContext& ctx) -> Val {
 					return ctx.scene.get_cls_prop(cls_name, prop);
 				},
 				Type::T_ANY
@@ -679,7 +679,7 @@ private:
 			// 1. img.prop	: 预定义图像对象属性
 			if (object == OBJECT_IMAGE) {
 				return {
-					[prop](const Instance&, EvaluationContext& ctx) -> Val {
+					[prop](EvaluationContext& ctx) -> Val {
 						return ctx.scene.get_img_prop(prop);
 					},
 					Type::T_ANY
@@ -697,7 +697,7 @@ private:
 			}
 
 			return {
-				[object, prop](const Instance&, EvaluationContext& ctx) -> Val {
+				[object, prop](EvaluationContext& ctx) -> Val {
 					Val object_val = ctx.get_var(object);
 					if (type_strict_equal(object_val.type(), Type::T_INST)) {
 						return ctx.scene.get_inst_prop(object_val.as_inst(), prop);
@@ -720,8 +720,8 @@ private:
 			auto prop_expr = compileAsStr(inst->expr());
 			return {
 				[prop_expr = std::move(prop_expr), normalize_prop]
-				(const Instance& self, EvaluationContext& ctx) -> Val {
-					auto prop = normalize_prop(prop_expr(self, ctx));
+				(EvaluationContext& ctx) -> Val {
+					auto prop = normalize_prop(prop_expr(ctx));
 					return ctx.scene.get_inst_prop(ctx.curr_handle, prop);
 				},
 				Type::T_ANY
@@ -734,8 +734,8 @@ private:
 			auto prop_expr = compileAsStr(cls->expr());
 			return {
 				[cls_name, prop_expr = std::move(prop_expr), normalize_prop]
-				(const Instance& self, EvaluationContext& ctx) -> Val {
-					auto prop = normalize_prop(prop_expr(self, ctx));
+				(EvaluationContext& ctx) -> Val {
+					auto prop = normalize_prop(prop_expr(ctx));
 					return ctx.scene.get_cls_prop(cls_name, prop);
 				},
 				Type::T_ANY
@@ -750,8 +750,8 @@ private:
 			if (object == OBJECT_IMAGE) {
 				return {
 					[prop_expr = std::move(prop_expr), normalize_prop]
-					(const Instance& self, EvaluationContext& ctx) -> Val {
-						auto prop = normalize_prop(prop_expr(self, ctx));
+					(EvaluationContext& ctx) -> Val {
+						auto prop = normalize_prop(prop_expr(ctx));
 						return ctx.scene.get_img_prop(prop);
 					},
 					Type::T_ANY
@@ -770,8 +770,8 @@ private:
 
 			return {
 				[object, prop_expr = std::move(prop_expr), normalize_prop]
-				(const Instance& self, EvaluationContext& ctx) -> Val {
-					auto prop = normalize_prop(prop_expr(self, ctx));
+				(EvaluationContext& ctx) -> Val {
+					auto prop = normalize_prop(prop_expr(ctx));
 					Val object_val = ctx.get_var(object);
 					if (type_strict_equal(object_val.type(), Type::T_INST)) {
 						return ctx.scene.get_inst_prop(object_val.as_inst(), prop);
@@ -833,7 +833,7 @@ private:
 
 		return {
 			[func_name, arg_exprs = std::move(arg_exprs)]
-			(const Instance& self, EvaluationContext& ctx) -> Val {
+			(EvaluationContext& ctx) -> Val {
 				auto it = ctx.functions.find(func_name);
 				if (it == ctx.functions.end()) {
 					throw PARuntimeError(std::format("Undefined function: '{}'", func_name));
@@ -844,10 +844,10 @@ private:
 				std::vector<Val> args;
 				args.reserve(arg_exprs.size());
 				for (auto& arg_expr : arg_exprs) {
-					args.emplace_back(arg_expr.func(self, ctx));
+					args.emplace_back(arg_expr.func(ctx));
 				}
 
-				return compiled_func.func(args, self, ctx);
+				return compiled_func.func(args, ctx);
 			},
 			ret_type
 		};

@@ -31,7 +31,6 @@ namespace postanvil {
  */
 using CompiledFunc = std::function<Val(
 	const std::vector<Val>&		args,					//< 参数值列表
-	const Instance&				self,					//< 当前实例上下文
 	EvaluationContext&			ctx						//< 评估上下文
 )>;
 
@@ -61,31 +60,27 @@ struct EvaluationContext {
 	 */
 	explicit EvaluationContext(const Scene& s)
 		: scene(s), is_returned(false)
-	{
-		curr_inst = &scene.inst_dummy();
-	}
+	{}
 
 	/**
-	 * @brief 当前实例上下文守卫，离开作用域时恢复原实例句柄和实例指针
+	 * @brief 当前实例上下文守卫，离开作用域时恢复原实例句柄
 	 *
 	 */
 	class CurrentInstanceScope {
 	public:
 		CurrentInstanceScope(EvaluationContext& context, InstanceHandle handle)
 			: m_context(&context),
-			  m_previous_handle(context.curr_handle),
-			  m_previous_instance(context.curr_inst)
+			  m_previous_handle(context.curr_handle)
 		{
+			(void)context.scene.inst(handle.id);
 			context.curr_handle = std::move(handle);
-			context.curr_inst = &context.scene.inst(context.curr_handle.id);
 		}
 
 		CurrentInstanceScope(const CurrentInstanceScope&) = delete;
 		CurrentInstanceScope& operator=(const CurrentInstanceScope&) = delete;
 		CurrentInstanceScope(CurrentInstanceScope&& other) noexcept
 			: m_context(std::exchange(other.m_context, nullptr)),
-			  m_previous_handle(std::move(other.m_previous_handle)),
-			  m_previous_instance(other.m_previous_instance)
+			  m_previous_handle(std::move(other.m_previous_handle))
 		{}
 
 		~CurrentInstanceScope() {
@@ -93,14 +88,12 @@ struct EvaluationContext {
 				return;
 			}
 			m_context->curr_handle = std::move(m_previous_handle);
-			m_context->curr_inst = m_previous_instance;
 		}
 
 
 	private:
 		EvaluationContext*	m_context;
 		InstanceHandle		m_previous_handle;
-		const Instance*		m_previous_instance;
 	};
 
 	[[nodiscard]]
@@ -182,7 +175,6 @@ public:
 	std::queue<Scene> frame_cache;					// 临近帧缓存
 
 	InstanceHandle curr_handle;						// 当前实例及其类名上下文
-	const Instance* curr_inst	= nullptr;			// curr_handle 对应的实例
 	bool is_returned			= true;				// 当前函数返回
 	Val return_value;								// 函数返回缓存
 };
@@ -257,9 +249,8 @@ struct FilterOperator : SceneOperator {
 	{
 		auto is_valid = [&](InstanceId id, const std::string& cls_name) {
 			auto scope = ctx.enter_instance(InstanceHandle{ id, cls_name });
-			const auto& inst = ctx.scene.inst(id);
 			return std::ranges::all_of(conditions, [&](const auto& cond) {
-				return cond(inst, ctx);
+				return cond(ctx);
 			});
 		};
 
@@ -269,7 +260,7 @@ struct FilterOperator : SceneOperator {
 			});
 		};
 
-		auto target_cls_name = target_cls_expr(ctx.scene.inst_dummy(), ctx);
+		auto target_cls_name = target_cls_expr(ctx);
 
 		if (target_cls_name == EvaluationContext::GLOBAL_TARGET) {
 			for (auto& [cls_name, ids] : ctx.scene.m_class_index) {
@@ -307,22 +298,21 @@ struct AttributeOperator : SceneOperator {
 
 	void apply(EvaluationContext& ctx) const override
 	{
-		auto target_cls_name = target_cls_expr(ctx.scene.inst_dummy(), ctx);
+		auto target_cls_name = target_cls_expr(ctx);
 
 		auto compute_attrs = [&](const std::string& cls_name, const Scene::InstanceIds& ids) {
 			// 逐语句计算
 			for (const auto& def : attr_defs) {
 				if (def.is_class_attr) {
 					// 类属性赋值
-					Val val = def.expression(ctx.scene.inst_dummy(), ctx);
+					Val val = def.expression(ctx);
 					ctx.scene.class_props[def.cls_name][def.name] = val;
 				}
 				else {
 					// 实例属性
 					for (const auto id : ids) {
 						auto scope = ctx.enter_instance(InstanceHandle{ id, cls_name });
-						const auto& inst = ctx.scene.inst(id);
-						Val val = def.expression(inst, ctx);
+						Val val = def.expression(ctx);
 						ctx.scene.set_inst_prop(ctx.curr_handle, def.name, std::move(val));
 					}
 				}
@@ -332,7 +322,7 @@ struct AttributeOperator : SceneOperator {
 		if (target_cls_name == EvaluationContext::GLOBAL_TARGET) {
 			for (const auto& def : attr_defs) {
 				if (def.is_class_attr) {
-					Val val = def.expression(ctx.scene.inst_dummy(), ctx);
+					Val val = def.expression(ctx);
 					ctx.scene.class_props[def.cls_name][def.name] = std::move(val);
 					continue;
 				}
@@ -341,8 +331,7 @@ struct AttributeOperator : SceneOperator {
 				for (InstanceId id = 1; id <= ctx.scene.inst_count(); ++id) {
 					auto scope = ctx.enter_instance(
 						InstanceHandle{ id, std::nullopt });
-					const auto& inst = ctx.scene.inst(id);
-					Val val = def.expression(inst, ctx);
+					Val val = def.expression(ctx);
 					ctx.scene.set_inst_prop(ctx.curr_handle, def.name, std::move(val));
 				}
 			}
@@ -367,8 +356,8 @@ struct GroupOperator : SceneOperator {
 	GroupOperator() : SceneOperator(OperatorKind::OP_GROUP) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		auto source_cls_name = source_cls_expr(ctx.scene.inst_dummy(), ctx);
-		auto new_cls_name = new_cls_expr(ctx.scene.inst_dummy(), ctx);
+		auto source_cls_name = source_cls_expr(ctx);
+		auto new_cls_name = new_cls_expr(ctx);
 
 		const auto& class_index = ctx.scene.class_index();
 		auto it = class_index.find(source_cls_name);
@@ -380,9 +369,8 @@ struct GroupOperator : SceneOperator {
 		Scene::InstanceIds selected;
 		for (const auto id : it->second) {
 			auto scope = ctx.enter_instance(InstanceHandle{ id, source_cls_name });
-			const auto& inst = ctx.scene.inst(id);
 			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
-				return cond(inst, ctx);
+				return cond(ctx);
 			});
 			if (all_pass) {
 				selected.emplace_back(id);
@@ -405,8 +393,8 @@ struct AppendOperator : SceneOperator {
 	AppendOperator() : SceneOperator(OperatorKind::OP_APPEND) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		auto dest_cls_name = dest_cls_expr(ctx.scene.inst_dummy(), ctx);
-		auto source_cls_name = source_cls_expr(ctx.scene.inst_dummy(), ctx);
+		auto dest_cls_name = dest_cls_expr(ctx);
+		auto source_cls_name = source_cls_expr(ctx);
 
 		const auto& class_index = ctx.scene.class_index();
 		auto it = class_index.find(source_cls_name);
@@ -417,9 +405,8 @@ struct AppendOperator : SceneOperator {
 		Scene::InstanceIds selected;
 		for (const auto id : it->second) {
 			auto scope = ctx.enter_instance(InstanceHandle{ id, source_cls_name });
-			const auto& inst = ctx.scene.inst(id);
 			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
-				return cond(inst, ctx);
+				return cond(ctx);
 			});
 			if (all_pass) {
 				selected.emplace_back(id);
@@ -452,7 +439,7 @@ struct SortOperator : SceneOperator {
 	SortOperator() : SceneOperator(OperatorKind::OP_SORT) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		const auto target_cls_name = target_cls_expr(ctx.scene.inst_dummy(), ctx);
+		const auto target_cls_name = target_cls_expr(ctx);
 
 		auto sort_instances = [&](const std::string& cls_name, Scene::InstanceIds& ids) {
 			if (ids.size() < 2 || keys.empty()) {
@@ -466,7 +453,7 @@ struct SortOperator : SceneOperator {
 				auto& values = cached_keys[i];
 				values.reserve(keys.size());
 				for (const auto& key : keys) {
-					values.emplace_back(key.expression(ctx.scene.inst(ids[i]), ctx));
+					values.emplace_back(key.expression(ctx));
 				}
 			}
 
@@ -579,7 +566,7 @@ struct VarDefOperator : SceneOperator {
 	VarDefOperator() : SceneOperator(OperatorKind::OP_VARDEF) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		Val val = initializer(ctx.scene.inst_dummy(), ctx);
+		Val val = initializer(ctx);
 		ctx.scene.variables[var_name] = val;
 	}
 };
@@ -619,7 +606,7 @@ struct ExportOperator : SceneOperator {
 	ExportOperator() : SceneOperator(OperatorKind::OP_EXPORT) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		Val result = expression(ctx.scene.inst_dummy(), ctx);
+		Val result = expression(ctx);
 		ctx.scene.variables["__export__" + host_name] = result;
 	}
 };
