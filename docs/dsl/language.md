@@ -22,7 +22,7 @@ IMPORT NUM threshold, BOOL debug, STR host_name AS local_name
 IMPORT INST host_anchor AS anchor
 ```
 
-每个导入项为 `类型 宿主名 [AS DSL本地名]`。执行前，宿主使用 DSL 本地名（无别名时即宿主名）注入值。C++ 侧建议使用大写形式，例如 `scene.add_import("MIN_CONF", 0.6)`；Python 绑定会自动规范化名称大小写。
+每个导入项为 `类型 宿主名 [AS DSL本地名]`。执行前，宿主使用 DSL 本地名（无别名时即宿主名）注入值。C++ 侧建议使用大写形式，例如 `scene.io_import("MIN_CONF", 0.6)`；Python 绑定会自动规范化名称大小写。
 
 #### 导出
 
@@ -32,7 +32,7 @@ EXPORT "car".avg_conf AS carAverage
 EXPORT 3.14159 AS pi
 ```
 
-一个 `EXPORT` 可用逗号包含多项。C++ 和 Python 均用 `result.get_export("person_count")` 读取；名称必须与 `AS` 后的拼写一致。
+一个 `EXPORT` 可用逗号包含多项。C++ 和 Python 均用 `result.io_export("person_count")` 读取；名称必须与 `AS` 后的拼写一致。
 
 ### 变量与实例句柄
 
@@ -68,7 +68,7 @@ RULE FUNC first_inst(cls: STR) -> INST {
 
 实例变量通过 `<变量>.<属性>` 读取属性，例如 `selected.area`。句柄通过所属 Scene 和 `id` 查找实例；`FILTER`、`GROUP`、`APPEND` 和 `SORT` 只修改类别中的 ID 列表，不会使句柄悬空。句柄不能跨 Scene 使用。
 
-Scene 内部的实例表按 ID 存放：第 `0` 项是 dummy，不属于任何用户类别；真实实例按插入顺序获得从 `1` 开始的 ID。类别索引 `Scene::m_class_index` 中每个 `cls_name` 对应一个有序、去重的 ID 列表。同一 Scene 内，同一 ID 在不同类别中始终指向同一个 `Instance`；对坐标、置信度或动态属性的修改会在所有包含该 ID 的类别中可见。复制 Scene 时会深复制实例，新 Scene 与原 Scene 不共享可变实例。
+Scene 内部的实例表按 ID 存放：第 `0` 项是 dummy，不属于任何用户类别；真实实例按插入顺序获得从 `1` 开始的 ID。每个类别对应一个有序、去重的 ID 列表，但内部容器不会对外暴露。同一 Scene 内，同一 ID 在不同类别中始终指向同一个 `Instance`；对坐标、置信度或动态属性的修改会在所有包含该 ID 的类别中可见。复制 Scene 时会深复制实例，新 Scene 与原 Scene 不共享可变实例。
 
 `self.cls` 表示当前句柄的 `cls_name`，`self.index` 表示该 ID 在当前类别中的 1-based 位置。按 ID 查询得到的句柄不带类别上下文，因此 `cls` 和 `index` 均不可用并会产生运行时错误。`Instance` 本身不保存类别归属，DSL 也不另外定义 `label` 或 `category` 属性。
 
@@ -79,9 +79,11 @@ STR cls_name = self.cls
 
 INST by_id = _INST_ID(12)
 INST by_position = _INST_INDEX("person", 3)
+BOOL has_id = _HAS_INST_ID(12)
+BOOL has_position = _HAS_INST_INDEX("person", 3)
 ```
 
-`_INST_ID(id)` 在场景中按稳定编号查询；`_INST_INDEX(class, index)` 按类别的当前位置查询。编号必须是正整数，目标不存在或索引越界时产生运行时错误。
+`_INST_ID(id)` 在场景中按稳定编号查询；`_INST_INDEX(class, index)` 按类别的当前位置查询。编号必须是正整数，目标不存在或索引越界时产生运行时错误。需要在查询前判断时使用 `_HAS_INST_ID` 或 `_HAS_INST_INDEX`；非法数值、不存在类别和越界位置均返回 `FALSE`。
 
 当前限制：
 

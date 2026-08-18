@@ -596,7 +596,7 @@ private: // Listener 回调实现
 			// 特殊处理 "GLOBAL"：遍历所有类别
 			if (cls_name == "GLOBAL") {
 				// TODO: "GLOBAL"视为所有类别的分组，未来支持若干类合并为一组，同样支持循环
-				for (const auto& [global_cls_name, _] : ctx.scene.class_index()) {
+				for (const auto& global_cls_name : ctx.scene.cls_names()) {
 					ctx.push_scope();
 					ctx.set_var(loop_var, global_cls_name);
 					for (auto& stmt : body_stmts) {
@@ -614,13 +614,11 @@ private: // Listener 回调实现
 			}
 
 			// 普通类别
-			const auto& class_index = ctx.scene.class_index();
-			auto it = class_index.find(cls_name);
-			if (it == class_index.end()) {
+			if (!ctx.scene.cls_exists(cls_name)) {
 				return;
 			}
 
-			for (const auto id : it->second) {
+			for (const auto id : ctx.scene.cls_insts(cls_name)) {
 				ctx.push_scope();
 				auto current = ctx.enter_instance(InstanceHandle{ id, cls_name });
 				ctx.set_var(loop_var, Val(ctx.curr_handle));

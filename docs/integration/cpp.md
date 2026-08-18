@@ -66,12 +66,14 @@ Compiler compiler;
 Program program = compiler.compile(source);
 
 Scene scene(Image{640, 480});
-scene.add("person", Instance(10, 20, 80, 120, 0.90));
-scene.add("person", Instance(30, 40, 60, 100, 0.40));
-scene.add_import("MIN_CONF", 0.60);
+const auto first = scene.inst_add(Instance(10, 20, 80, 120, 0.90));
+const auto second = scene.inst_add(Instance(30, 40, 60, 100, 0.40));
+scene.cls_add_inst("person", first.id);
+scene.cls_add_inst("person", second.id);
+scene.io_import("MIN_CONF", Val(0.60));
 
 Scene result = program.evaluate(scene);
-double kept = result.get_export("kept").as_num();
+double kept = result.io_export("kept").as_num();
 ```
 
 ## 实例身份和类别成员
@@ -79,17 +81,21 @@ double kept = result.get_export("kept").as_num();
 C++ 可向 Scene 添加实例，再导入、导出轻量 `INST` 句柄：
 
 ```cpp
-InstanceHandle anchor = scene.add(
-	"anchor", Instance(10, 20, 80, 120, 0.75));
-scene.add_import("ANCHOR", Val(anchor));
+InstanceHandle anchor = scene.inst_add(Instance(10, 20, 80, 120, 0.75));
+scene.cls_add_inst("anchor", anchor.id);
+scene.io_import("ANCHOR", Val(anchor));
 
-Val selected = result.get_export("selected_anchor");
-InstanceId id = selected.as_inst().id;
-double confidence = result.inst(id).conf();
+Val selected = result.io_export("selected_anchor");
+InstId id = selected.as_inst().id;
+double confidence = result.inst_at(id).conf();
 ```
 
 同一 ID 可以同时存在于多个类别中，但始终指向 Scene 中的同一个 `Instance`。类别操作只
 改变成员关系，不会隐式复制检测框。
+
+Scene 的公开方法按职责统一使用 `img_*`、`cls_*` 和 `inst_*` 前缀。图像信息通过
+`img_info()` / `img_set()` 访问；类别关系通过 `cls_add_inst()`、`cls_set_insts()`、
+`cls_insts()` 维护；实例实体通过 `inst_add()`、`inst_at()`、`inst_handle()` 维护。
 
 ## 错误处理
 

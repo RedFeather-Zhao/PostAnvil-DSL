@@ -1,4 +1,4 @@
-#include <PostAnvil.h>
+﻿#include <PostAnvil.h>
 
 #include <jni.h>
 
@@ -42,16 +42,11 @@ Program* program_from_handle(jlong handle)
 
 jobject make_scene_result(JNIEnv* env, const postanvil::Scene& scene)
 {
-    std::vector<std::string> cls_names;
-    cls_names.reserve(scene.class_index().size());
-    for (const auto& [cls_name, _] : scene.class_index()) {
-        cls_names.emplace_back(cls_name);
-    }
-    std::ranges::sort(cls_names);
+    const auto cls_names = scene.cls_names();
 
     std::size_t row_count = 0;
     for (const auto& cls_name : cls_names) {
-        row_count += scene.get_inst_count(cls_name);
+        row_count += scene.cls_inst_count(cls_name);
     }
     constexpr auto BOX_VALUE_COUNT = std::size_t{ 5 };
     const auto max_array_size = static_cast<std::size_t>(std::numeric_limits<jsize>::max());
@@ -74,14 +69,14 @@ jobject make_scene_result(JNIEnv* env, const postanvil::Scene& scene)
     std::vector<jdouble> boxes(row_count * 5);
     jsize row = 0;
     for (const auto& cls_name : cls_names) {
-        for (const auto id : scene.get_inst_ids(cls_name)) {
+        for (const auto id : scene.cls_insts(cls_name)) {
             const jstring output_cls_name = env->NewStringUTF(cls_name.c_str());
             if (output_cls_name == nullptr) return nullptr;
             env->SetObjectArrayElement(output_classes, row, output_cls_name);
             env->DeleteLocalRef(output_cls_name);
             if (env->ExceptionCheck()) return nullptr;
 
-            const auto& instance = scene.inst(id);
+            const auto& instance = scene.inst_at(id);
             ids[static_cast<std::size_t>(row)] = static_cast<jlong>(id);
             const auto offset = static_cast<std::size_t>(row) * 5;
             boxes[offset] = instance.x1();
@@ -191,12 +186,13 @@ Java_org_postanvil_NativeBridge_evaluate(
             if (env->ExceptionCheck()) return nullptr;
 
             const auto offset = static_cast<std::size_t>(i) * 5;
-            scene.add(cls_name, postanvil::Instance(
+            const auto handle = scene.inst_add(postanvil::Instance(
                 values[offset],
                 values[offset + 1],
                 values[offset + 2],
                 values[offset + 3],
                 values[offset + 4]));
+            scene.cls_add_inst(cls_name, handle.id);
         }
 
         return make_scene_result(env, program->evaluate(scene));

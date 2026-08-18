@@ -29,8 +29,8 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 		expect_num_prop(output, "PERSON", 1, "RISK", 1.0);
 		expect_bool_prop(output, "PERSON", 0, "IS_CHILD", false);
 		expect_export_num(output, "BiliBili", 514.0);
-		Assert::AreEqual(std::string("QwQ"), output.get_export("GanBei").as_str());
-		Assert::IsTrue(output.get_export("YouAreHappy").as_bool());
+		Assert::AreEqual(std::string("QwQ"), output.io_export("GanBei").as_str());
+		Assert::IsTrue(output.io_export("YouAreHappy").as_bool());
 	}
 
 	PA_TEST(AttributeThenFilter)

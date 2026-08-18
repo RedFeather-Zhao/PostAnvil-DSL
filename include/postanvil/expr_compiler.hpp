@@ -648,7 +648,7 @@ private:
 			auto prop = utils::get_upper_text(inst->IDENTIFIER());
 			return {
 				[prop](EvaluationContext& ctx) -> Val {
-					return ctx.scene.get_inst_prop(ctx.curr_handle, prop);
+					return ctx.scene.inst_prop(ctx.curr_handle, prop);
 				},
 				Type::T_ANY
 			};
@@ -660,7 +660,7 @@ private:
 			auto prop = utils::get_upper_text(cls->IDENTIFIER());
 			return {
 				[cls_name, prop](EvaluationContext& ctx) -> Val {
-					return ctx.scene.get_cls_prop(cls_name, prop);
+					return ctx.scene.cls_prop(cls_name, prop);
 				},
 				Type::T_ANY
 			};
@@ -680,7 +680,7 @@ private:
 			if (object == OBJECT_IMAGE) {
 				return {
 					[prop](EvaluationContext& ctx) -> Val {
-						return ctx.scene.get_img_prop(prop);
+						return ctx.scene.img_prop(prop);
 					},
 					Type::T_ANY
 				};
@@ -700,12 +700,12 @@ private:
 				[object, prop](EvaluationContext& ctx) -> Val {
 					Val object_val = ctx.get_var(object);
 					if (type_strict_equal(object_val.type(), Type::T_INST)) {
-						return ctx.scene.get_inst_prop(object_val.as_inst(), prop);
+						return ctx.scene.inst_prop(object_val.as_inst(), prop);
 					}
 					if (type_strict_equal(object_val.type(), Type::T_STR)) {
 						std::string cls_name = object_val.as_str();
 						utils::to_upper_inplace(cls_name);
-						return ctx.scene.get_cls_prop(cls_name, prop);
+						return ctx.scene.cls_prop(cls_name, prop);
 					}
 					throw PARuntimeError(std::format(
 						"Property access on '{}' requires INST or STR, got {}",
@@ -722,7 +722,7 @@ private:
 				[prop_expr = std::move(prop_expr), normalize_prop]
 				(EvaluationContext& ctx) -> Val {
 					auto prop = normalize_prop(prop_expr(ctx));
-					return ctx.scene.get_inst_prop(ctx.curr_handle, prop);
+					return ctx.scene.inst_prop(ctx.curr_handle, prop);
 				},
 				Type::T_ANY
 			};
@@ -736,7 +736,7 @@ private:
 				[cls_name, prop_expr = std::move(prop_expr), normalize_prop]
 				(EvaluationContext& ctx) -> Val {
 					auto prop = normalize_prop(prop_expr(ctx));
-					return ctx.scene.get_cls_prop(cls_name, prop);
+					return ctx.scene.cls_prop(cls_name, prop);
 				},
 				Type::T_ANY
 			};
@@ -752,7 +752,7 @@ private:
 					[prop_expr = std::move(prop_expr), normalize_prop]
 					(EvaluationContext& ctx) -> Val {
 						auto prop = normalize_prop(prop_expr(ctx));
-						return ctx.scene.get_img_prop(prop);
+						return ctx.scene.img_prop(prop);
 					},
 					Type::T_ANY
 				};
@@ -774,12 +774,12 @@ private:
 					auto prop = normalize_prop(prop_expr(ctx));
 					Val object_val = ctx.get_var(object);
 					if (type_strict_equal(object_val.type(), Type::T_INST)) {
-						return ctx.scene.get_inst_prop(object_val.as_inst(), prop);
+						return ctx.scene.inst_prop(object_val.as_inst(), prop);
 					}
 					if (type_strict_equal(object_val.type(), Type::T_STR)) {
 						std::string cls_name = object_val.as_str();
 						utils::to_upper_inplace(cls_name);
-						return ctx.scene.get_cls_prop(cls_name, prop);
+						return ctx.scene.cls_prop(cls_name, prop);
 					}
 					throw PARuntimeError(std::format(
 						"Dynamic property access on '{}' requires INST or STR, got {}",

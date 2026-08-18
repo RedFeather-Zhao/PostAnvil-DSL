@@ -196,41 +196,43 @@ RULE FILTER "global" {
 '''
 
 scene = postanvil.Scene(postanvil.Image(640, 640))
-scene.add("person", postanvil.Instance(10, 20, 100, 200, 0.9))
-scene.add("person", postanvil.Instance(30, 40, 80, 120, 0.2))
+first = scene.inst_add(postanvil.Instance(10, 20, 100, 200, 0.9))
+second = scene.inst_add(postanvil.Instance(30, 40, 80, 120, 0.2))
+scene.cls_add_inst("person", first)
+scene.cls_add_inst("person", second)
 result = postanvil.compile(source).evaluate(scene)
-assert result.count("PERSON") == 1
+assert result.cls_inst_count("PERSON") == 1
 ```
 
-`Instance` 只保存检测框、置信度和动态属性，不保存类别。类别关系由
-`Scene.add(cls_name, instance)` 建立；同一实例 ID 可以属于多个类别，但始终对应
-Scene 中同一个实例对象。
+`Instance` 只保存检测框、置信度和动态属性，不保存类别。`Scene.inst_add(instance)`
+创建实例并返回无类别上下文的句柄；`Scene.cls_add_inst(cls_name, handle)` 单独建立
+类别关系。同一实例 ID 可以属于多个类别，但始终对应 Scene 中同一个实例对象。
 
-`Scene.add()` 返回一个 `InstanceHandle`，句柄包含 Scene 内稳定 `id`和当前
-类别上下文 `cls_name`。可以用句柄将同一实例加入其他类别，不会复制检测框：
+`Scene.cls_inst_at()` 和 `Scene.cls_handles()` 返回带类别上下文的句柄。可以用
+`inst_add()` 返回的句柄将同一实例加入多个类别，不会复制检测框：
 
 ```python
 scene = postanvil.Scene(postanvil.Image(640, 640))
-person = scene.add("person", postanvil.Instance(10, 20, 100, 200, 0.9))
-scene.append_to_class("foreground", person)
+person = scene.inst_add(postanvil.Instance(10, 20, 100, 200, 0.9))
+scene.cls_add_inst("person", person)
+scene.cls_add_inst("foreground", person)
 
 assert person.id == 1
-assert scene.instance_ids("PERSON") == [1]
-assert scene.instance_ids("FOREGROUND") == [1]
-assert scene.instance_count == 1
+assert scene.cls_insts("PERSON") == [1]
+assert scene.cls_insts("FOREGROUND") == [1]
+assert scene.inst_count == 1
 ```
 
-`Scene.handles(cls_name)` 返回带该类别上下文的句柄；`get_by_id(id)` 返回不带类别
-上下文的句柄；`get_by_index(cls_name, index)` 使用从 1 开始的类别内位置。
-`append_id_to_class()` 适用于已有 ID，`replace_class_ids()` 用一组 ID 整体替换类别
-成员。这些操作只修改类别成员关系，不改变实例本身。
+`Scene.cls_handles(cls_name)` 返回带类别上下文的句柄；`inst_handle(id)` 返回不带类别
+上下文的句柄；`cls_inst_at(cls_name, index)` 使用从 1 开始的类别内位置。
+`cls_add_inst()` 追加已有实例，`cls_set_insts()` 用一组 ID 整体替换类别成员。
 
 Python 也支持用 `InstanceHandle` 交换 DSL `INST` 值：
 
 ```python
-scene.add_import("ANCHOR", person)
+scene.io_import("ANCHOR", person)
 result = postanvil.compile("IMPORT INST anchor\nEXPORT anchor AS selected").evaluate(scene)
-selected = result.get_export("selected")
+selected = result.io_export("selected")
 assert isinstance(selected, postanvil.InstanceHandle)
 assert selected.id == person.id
 ```

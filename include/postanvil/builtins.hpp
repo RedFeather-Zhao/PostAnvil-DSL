@@ -97,10 +97,10 @@ inline double safe_ratio(double numerator, double denominator)
  * @throw PARuntimeError	- 当参数不是实例类型或实例为空时抛出
  */
 inline const Instance& instance_arg(const std::vector<Val>& args,
-	size_t index,
-	EvaluationContext& ctx)
+									size_t index,
+									EvaluationContext& ctx)
 {
-	return ctx.scene.inst(args[index].as_inst().id);
+	return ctx.scene.inst_at(args[index].as_inst().id);
 }
 
 } // namespace postanvil::builtin_detail
@@ -117,6 +117,7 @@ namespace postanvil {
 inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 {
 	using namespace builtin_detail;
+	using enum Type;
 
 	auto add = [&functions](std::string name, FunctionInfo info) {
 		functions.try_emplace(std::move(name), std::move(info));
@@ -126,9 +127,9 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 
 	const auto unary_math = [&add](std::string name, auto operation) {
 		auto display_name = name;
-		add(std::move(name), make_builtin(Type::T_NUM, { Type::T_NUM },
+		add(std::move(name), make_builtin(T_NUM, { T_NUM },
 			[display_name = std::move(display_name), operation]
-			(const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
+			(const std::vector<Val>& args, EvaluationContext&) -> Val {
 				return checked_finite(display_name, operation(args[0].as_num()));
 			})
 		);
@@ -150,8 +151,8 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	unary_math("_ROUND", [](double value) { return std::round(value); });
 
 	//< 6.开平方根
-	add("_SQRT", make_builtin(Type::T_NUM, { Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
+	add("_SQRT", make_builtin(T_NUM, { T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext&) -> Val {
 			const double value = args[0].as_num();
 			if (value < 0.0) {
 				throw PARuntimeError("_SQRT requires a non-negative argument");
@@ -161,8 +162,8 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	);
 
 	//< 7.自然对数
-	add("_LOG", make_builtin(Type::T_NUM, { Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
+	add("_LOG", make_builtin(T_NUM, { T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext&) -> Val {
 			const double value = args[0].as_num();
 			if (value <= 0.0) {
 				throw PARuntimeError("_LOG requires a positive argument");
@@ -172,8 +173,8 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	);
 
 	//< 8.以10为底对数
-	add("_LOG10", make_builtin(Type::T_NUM, { Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
+	add("_LOG10", make_builtin(T_NUM, { T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext&) -> Val {
 			const double value = args[0].as_num();
 			if (value <= 0.0) {
 				throw PARuntimeError("_LOG10 requires a positive argument");
@@ -183,29 +184,29 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	);
 
 	//< 9最小值
-	add("_MIN", make_builtin(Type::T_NUM, { Type::T_NUM, Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
+	add("_MIN", make_builtin(T_NUM, { T_NUM, T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext&) -> Val {
 			return checked_finite("_MIN", std::min(args[0].as_num(), args[1].as_num()));
 		})
 	);
 
 	//< 10.最大值
-	add("_MAX", make_builtin(Type::T_NUM, { Type::T_NUM, Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
+	add("_MAX", make_builtin(T_NUM, { T_NUM, T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext&) -> Val {
 			return checked_finite("_MAX", std::max(args[0].as_num(), args[1].as_num()));
 		})
 	);
 
 	//< 11.幂运算
-	add("_POW", make_builtin(Type::T_NUM, { Type::T_NUM, Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
+	add("_POW", make_builtin(T_NUM, { T_NUM, T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext&) -> Val {
 			return checked_finite("_POW", std::pow(args[0].as_num(), args[1].as_num()));
 		})
 	);
 
 	//< 12.限制范围
-	add("_CLAMP", make_builtin(Type::T_NUM, { Type::T_NUM, Type::T_NUM, Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext&) -> Val {
+	add("_CLAMP", make_builtin(T_NUM, { T_NUM, T_NUM, T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext&) -> Val {
 			const double value = args[0].as_num();
 			const double low = args[1].as_num();
 			const double high = args[2].as_num();
@@ -217,15 +218,15 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	);
 
 	//< 13. 实例交集
-	add("_INTER_AREA", make_builtin(Type::T_NUM, { Type::T_INST, Type::T_INST },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_INTER_AREA", make_builtin(T_NUM, { T_INST, T_INST },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			return inter_area(instance_arg(args, 0, ctx), instance_arg(args, 1, ctx));
 		})
 	);
 
 	//< 14.实例交并比，Intersection over Union
-	add("_IOU", make_builtin(Type::T_NUM, { Type::T_INST, Type::T_INST },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_IOU", make_builtin(T_NUM, { T_INST, T_INST },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			const auto& a = instance_arg(args, 0, ctx);
 			const auto& b = instance_arg(args, 1, ctx);
 			const double intersection = inter_area(a, b);
@@ -234,8 +235,8 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	);
 
 	//< 15.实例重叠率，Intersection over First
-	add("_IOF", make_builtin(Type::T_NUM, { Type::T_INST, Type::T_INST },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_IOF", make_builtin(T_NUM, { T_INST, T_INST },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			const auto& a = instance_arg(args, 0, ctx);
 			const auto& b = instance_arg(args, 1, ctx);
 			return safe_ratio(inter_area(a, b), a.area());
@@ -243,8 +244,8 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	);
 
 	//< 16.实例重叠率，Intersection over Second
-	add("_IOS", make_builtin(Type::T_NUM, { Type::T_INST, Type::T_INST },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_IOS", make_builtin(T_NUM, { T_INST, T_INST },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			const auto& a = instance_arg(args, 0, ctx);
 			const auto& b = instance_arg(args, 1, ctx);
 			return safe_ratio(inter_area(a, b), b.area());
@@ -252,8 +253,8 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	);
 
 	//< 17.实例中心点距离
-	add("_DISTANCE", make_builtin(Type::T_NUM, { Type::T_INST, Type::T_INST },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_DISTANCE", make_builtin(T_NUM, { T_INST, T_INST },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			const auto& a = instance_arg(args, 0, ctx);
 			const auto& b = instance_arg(args, 1, ctx);
 			return std::hypot(a.cx() - b.cx(), a.cy() - b.cy());
@@ -263,15 +264,15 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	//=========================== 位置谓词 ===========================//
 
 	//< 18.实例是否重叠
-	add("_OVERLAPS", make_builtin(Type::T_BOOL, { Type::T_INST, Type::T_INST },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_OVERLAPS", make_builtin(T_BOOL, { T_INST, T_INST },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			return inter_area(instance_arg(args, 0, ctx), instance_arg(args, 1, ctx)) > 0.0;
 		})
 	);
 
 	//< 19.实例是否包含
-	add("_CONTAINS", make_builtin(Type::T_BOOL, { Type::T_INST, Type::T_INST },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_CONTAINS", make_builtin(T_BOOL, { T_INST, T_INST },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			const auto& inner = instance_arg(args, 0, ctx);
 			const auto& outer = instance_arg(args, 1, ctx);
 			return inner.x1() >= outer.x1() && inner.y1() >= outer.y1() &&
@@ -280,8 +281,8 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	);
 
 	//< 20.实例是否接近
-	add("_NEARBY", make_builtin(Type::T_BOOL, { Type::T_INST, Type::T_INST, Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_NEARBY", make_builtin(T_BOOL, { T_INST, T_INST, T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			const auto& a = instance_arg(args, 0, ctx);
 			const auto& b = instance_arg(args, 1, ctx);
 			const double threshold = args[2].as_num();
@@ -297,20 +298,37 @@ inline void register_builtin_functions(detail::str_map<FunctionInfo>& functions)
 	//=========================== 实例访问 ===========================//
 
 	//< 21.通过实例 ID 获取实例
-	add("_INST_ID", make_builtin(Type::T_INST, { Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
-			return ctx.scene.get_inst_by_id(args[0].as_num());
+	add("_INST_ID", make_builtin(T_INST, { T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
+			return ctx.scene.inst_handle(args[0].as_num());
 		})
 	);
 
 	//< 22.通过实例类别和索引获取实例
-	add("_INST_INDEX", make_builtin(Type::T_INST, { Type::T_STR, Type::T_NUM },
-		[](const std::vector<Val>& args, const Instance&, EvaluationContext& ctx) -> Val {
+	add("_INST_INDEX", make_builtin(T_INST, { T_STR, T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
 			std::string cls_name = args[0].as_str();
 			utils::to_upper_inplace(cls_name);
-			return ctx.scene.get_inst_by_index(cls_name, args[1].as_num());
+			return ctx.scene.cls_inst_at(cls_name, args[1].as_num());
 		})
 	);
+
+	//< 23.检查实例 ID 是否存在
+	add("_HAS_INST_ID", make_builtin(T_BOOL, { T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
+			return ctx.scene.inst_id_exists(args[0].as_num());
+		})
+	);
+
+	//< 24.检查指定类别和索引的实例是否存在
+	add("_HAS_INST_INDEX", make_builtin(T_BOOL, { T_STR, T_NUM },
+		[](const std::vector<Val>& args, EvaluationContext& ctx) -> Val {
+			std::string cls_name = args[0].as_str();
+			utils::to_upper_inplace(cls_name);
+			return ctx.scene.cls_inst_exists(cls_name, args[1].as_num());
+		})
+	);
+
 }
 
 } // namespace postanvil

@@ -110,7 +110,8 @@ def from_ultralytics(result: Any) -> Scene:
         instance.set_property(_CLASS_ID_PROPERTY, float(class_id))
         if track_ids is not None:
             instance.set_property(_TRACK_ID_PROPERTY, float(track_ids[index]))
-        scene.add(names[class_id], instance)
+        handle = scene.inst_add(instance)
+        scene.cls_add_inst(names[class_id], handle)
 
     return scene
 
@@ -158,8 +159,8 @@ def update_ultralytics(
     # 只剩一个输出类别。
     # 按选中类别的列表输出，以保留 SORT 顺序并避免 GROUP/APPEND 重复输出。
     instances_by_class = {
-        str(cls_name): list(scene.instances(cls_name))
-        for cls_name in sorted(scene.class_names(), key=str.casefold)
+        str(cls_name): list(scene.cls_instances(cls_name))
+        for cls_name in scene.cls_names()
     }
     instances_by_id: dict[int, Any] = {}
     cls_names_by_id: dict[int, list[str]] = {}
@@ -259,7 +260,7 @@ def apply_ultralytics(
     scene = from_ultralytics(result)
     if imports:
         for name, value in imports.items():
-            scene.add_import(str(name), value)
+            scene.io_import(str(name), value)
     output = program.evaluate(scene)
     return update_ultralytics(
         result,

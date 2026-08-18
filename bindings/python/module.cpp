@@ -158,90 +158,83 @@ PYBIND11_MODULE(_postanvil, module)
 
     py::class_<Scene>(module, "Scene")
         .def(py::init<Image>(), py::arg("image"))
-        .def_readwrite("image", &Scene::image)
-        .def_property_readonly("instance_count", &Scene::inst_count)
-        .def("add", [](Scene& self, const std::string& cls_name,
-                       const Instance& instance) {
-            return self.add(cls_name, instance);
-        }, py::arg("cls_name"), py::arg("instance"))
-        .def("ensure_class", &Scene::ensure_class, py::arg("cls_name"))
-        .def("append_to_class", [](Scene& self, const std::string& cls_name,
-                                   const InstanceHandle& handle) {
-            return self.append_to_class(cls_name, handle.id);
+        .def_property("image", [](const Scene& self) {
+            return self.img_info();
+        }, &Scene::img_set)
+        .def_property_readonly("inst_count", &Scene::inst_count)
+        .def("inst_add", &Scene::inst_add, py::arg("instance"))
+        .def("inst_at", [](Scene& self, InstId id) -> Instance& {
+            return self.inst_at(id);
+        }, py::arg("id"), py::return_value_policy::reference_internal)
+        .def("inst_exists", &Scene::inst_exists, py::arg("id"))
+        .def("inst_handle", &Scene::inst_handle, py::arg("id"))
+        .def("inst_prop", [](const Scene& self,
+                             const InstanceHandle& handle,
+                             std::string name) {
+            return to_python(self.inst_prop(
+                handle, normalize_name(std::move(name))));
+        })
+        .def("inst_set_prop", [](Scene& self,
+                                 const InstanceHandle& handle,
+                                 std::string name,
+                                 const py::handle& value) {
+            self.inst_set_prop(
+                handle, normalize_name(std::move(name)), from_python(value));
+        })
+        .def("cls_create", &Scene::cls_create, py::arg("cls_name"))
+        .def("cls_exists", &Scene::cls_exists, py::arg("cls_name"))
+        .def("cls_add_inst", [](Scene& self, const std::string& cls_name,
+                                const InstanceHandle& handle) {
+            return self.cls_add_inst(cls_name, handle.id);
         }, py::arg("cls_name"), py::arg("handle"))
-        .def("append_id_to_class", &Scene::append_to_class,
-             py::arg("cls_name"), py::arg("id"))
-        .def("replace_class_ids", &Scene::replace_class,
+        .def("cls_add_inst", [](Scene& self, const std::string& cls_name,
+                                InstId id) {
+            return self.cls_add_inst(cls_name, id);
+        }, py::arg("cls_name"), py::arg("id"))
+        .def("cls_set_insts", &Scene::cls_set_insts,
              py::arg("cls_name"), py::arg("ids"))
-        .def("count", [](const Scene& self, const std::string& cls_name) {
-            return self.get_inst_count(cls_name);
+        .def("cls_inst_count", &Scene::cls_inst_count, py::arg("cls_name"))
+        .def("cls_insts", [](const Scene& self, const std::string& cls_name) {
+            return self.cls_insts(cls_name);
         })
-        .def("instance", [](Scene& self, InstanceId id) -> Instance& {
-            return self.inst(id);
-        }, py::return_value_policy::reference_internal)
-        .def("instance_ids", [](const Scene& self, const std::string& cls_name) {
-            if (self.get_inst_count(cls_name) == 0) return Scene::InstanceIds{};
-            return self.get_inst_ids(cls_name);
-        })
-        .def("instances", [](Scene& self, const std::string& cls_name) {
+        .def("cls_instances", [](Scene& self, const std::string& cls_name) {
             py::list instances;
-            if (self.get_inst_count(cls_name) == 0) return instances;
-
             const auto owner = py::cast(&self, py::return_value_policy::reference);
-            for (const auto id : self.get_inst_ids(cls_name)) {
+            for (const auto id : self.cls_insts(cls_name)) {
                 instances.append(py::cast(
-                    &self.inst(id), py::return_value_policy::reference_internal, owner));
+                    &self.inst_at(id), py::return_value_policy::reference_internal, owner));
             }
             return instances;
         })
-        .def("handles", [](const Scene& self, const std::string& cls_name) {
+        .def("cls_handles", [](const Scene& self, const std::string& cls_name) {
             std::vector<InstanceHandle> handles;
-            const auto count = self.get_inst_count(cls_name);
+            const auto count = self.cls_inst_count(cls_name);
             handles.reserve(count);
             for (std::size_t index = 1; index <= count; ++index) {
-                handles.emplace_back(self.get_inst_by_index(
+                handles.emplace_back(self.cls_inst_at(
                     cls_name, static_cast<double>(index)));
             }
             return handles;
         })
-        .def("class_names", [](const Scene& self) {
-            std::vector<std::string> names;
-            names.reserve(self.class_index().size());
-            for (const auto& [cls_name, _] : self.class_index()) {
-                names.emplace_back(cls_name);
-            }
-            std::ranges::sort(names);
-            return names;
-        })
-        .def("get_by_id", &Scene::get_inst_by_id, py::arg("id"))
-        .def("get_by_index", &Scene::get_inst_by_index,
+        .def("cls_names", &Scene::cls_names)
+        .def("cls_inst_at", &Scene::cls_inst_at,
              py::arg("cls_name"), py::arg("index"))
-        .def("get_instance_property", [](const Scene& self,
-                                         const InstanceHandle& handle,
-                                         std::string name) {
-            return to_python(self.get_inst_prop(
-                handle, normalize_name(std::move(name))));
-        })
-        .def("set_instance_property", [](Scene& self,
-                                         const InstanceHandle& handle,
-                                         std::string name,
-                                         const py::handle& value) {
-            self.set_inst_prop(
-                handle, normalize_name(std::move(name)), from_python(value));
-        })
-        .def("get_class_property", [](const Scene& self,
-                                      const std::string& cls_name,
-                                      std::string name) {
-            return to_python(self.get_cls_prop(
+        .def("cls_inst_exists", &Scene::cls_inst_exists,
+             py::arg("cls_name"), py::arg("index"))
+        .def("cls_inst_index", &Scene::cls_inst_index, py::arg("handle"))
+        .def("cls_prop", [](const Scene& self,
+                            const std::string& cls_name,
+                            std::string name) {
+            return to_python(self.cls_prop(
                 cls_name, normalize_name(std::move(name))));
         })
-        .def("add_import", [](Scene& self, std::string name,
-                              const py::handle& value) -> Scene& {
-            return self.add_import(
+        .def("io_import", [](Scene& self, std::string name,
+                             const py::handle& value) -> Scene& {
+            return self.io_import(
                 normalize_name(std::move(name)), from_python(value));
         }, py::return_value_policy::reference_internal)
-        .def("get_export", [](const Scene& self, const std::string& name) {
-            return to_python(self.get_export(name));
+        .def("io_export", [](const Scene& self, const std::string& name) {
+            return to_python(self.io_export(name));
         });
 
     py::class_<Program>(module, "Program")

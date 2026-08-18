@@ -14,8 +14,8 @@ PA_TEST(ImportsHostVariables)
 			make_instance("PERSON", 0, 0, 10, 10, 0.4),
 			make_instance("CAR", 0, 0, 10, 10, 0.8)
 		});
-		input.add_import("EXTERNAL_THRESHOLD", Val(0.6));
-		input.add_import("TARGET_CLASS", Val("PERSON"));
+		input.io_import("EXTERNAL_THRESHOLD", Val(0.6));
+		input.io_import("TARGET_CLASS", Val("PERSON"));
 
 		evaluate_and_expect_counts(R"(
 			IMPORT NUM external_threshold
@@ -29,7 +29,7 @@ PA_TEST(ImportsHostVariables)
 	PA_TEST(ImportAlias)
 	{
 		auto input = make_confidence_scene("A", { 0.8, 0.3 });
-		input.add_import("CONF_THRESHOLD", Val(0.6));
+		input.io_import("CONF_THRESHOLD", Val(0.6));
 
 		evaluate_and_expect_counts(R"(
 			IMPORT NUM host_conf AS conf_threshold
@@ -69,8 +69,9 @@ PA_TEST(ExportsValues)
 	PA_TEST(ImportsAndExportsInstance)
 	{
 		auto input = make_confidence_scene("PERSON", { 0.9, 0.5 });
-		const auto anchor = input.add("ANCHOR", Instance(0, 0, 10, 10, 0.7));
-		input.add_import(
+		const auto anchor = input.inst_add(Instance(0, 0, 10, 10, 0.7));
+		input.cls_add_inst("ANCHOR", anchor.id);
+		input.io_import(
 			"ANCHOR",
 			Val(anchor));
 
@@ -82,9 +83,9 @@ PA_TEST(ExportsValues)
 			EXPORT anchor AS selected_anchor
 		)", std::move(input), { { "PERSON", 1 } });
 
-		const auto exported = output.get_export("selected_anchor");
+		const auto exported = output.io_export("selected_anchor");
 		Assert::IsTrue(type_strict_equal(exported.type(), Type::T_INST));
-		Assert::AreEqual(0.7, output.inst(exported.as_inst().id).conf(), 1e-9);
+		Assert::AreEqual(0.7, output.inst_at(exported.as_inst().id).conf(), 1e-9);
 	}
 
 	PA_TEST(EndToEndPipeline)
@@ -95,7 +96,7 @@ PA_TEST(ExportsValues)
 			make_instance("PERSON", 0, 0, 40, 30, 0.7),
 			make_instance("PERSON", 0, 0, 30, 20, 0.3)
 		});
-		input.add_import("MIN_CONF", Val(0.5));
+		input.io_import("MIN_CONF", Val(0.5));
 
 		auto output = evaluate_and_expect_counts(R"(
 			IMPORT NUM min_conf

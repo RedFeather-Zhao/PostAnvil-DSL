@@ -5,6 +5,16 @@ using Microsoft::VisualStudio::CppUnitTestFramework::Assert;
 
 namespace postanvil::test {
 
+namespace {
+
+void add_instance(Scene& scene, std::string_view cls_name, Instance instance)
+{
+	const auto handle = scene.inst_add(std::move(instance));
+	scene.cls_add_inst(cls_name, handle.id);
+}
+
+} // namespace
+
 LabeledInstance make_instance(
 	std::string_view cls_name,
 	double x,
@@ -23,7 +33,7 @@ Scene make_scene(std::initializer_list<LabeledInstance> instances, Image image)
 {
 	Scene scene(std::move(image));
 	for (const auto& input : instances) {
-		scene.add(input.cls_name, input.instance);
+		add_instance(scene, input.cls_name, input.instance);
 	}
 	return scene;
 }
@@ -37,7 +47,7 @@ Scene make_confidence_scene(
 {
 	Scene scene(image);
 	for (const double confidence : confidences) {
-		scene.add(cls_name, Instance(0, 0, width, height, confidence));
+		add_instance(scene, cls_name, Instance(0, 0, width, height, confidence));
 	}
 	return scene;
 }
@@ -62,7 +72,7 @@ Scene evaluate_and_expect_counts(std::string_view source,
 
 std::size_t count(const Scene& scene, std::string_view cls_name)
 {
-	return scene.get_inst_count(cls_name);
+	return scene.cls_inst_count(cls_name);
 }
 
 const Instance& instance_at(
@@ -70,9 +80,9 @@ const Instance& instance_at(
 	std::string_view cls_name,
 	std::size_t zero_based_index)
 {
-	const auto& ids = scene.get_inst_ids(cls_name);
+	const auto& ids = scene.cls_insts(cls_name);
 	Assert::IsTrue(zero_based_index < ids.size(), L"实例索引越界");
-	return scene.inst(ids[zero_based_index]);
+	return scene.inst_at(ids[zero_based_index]);
 }
 
 void expect_count(
@@ -127,9 +137,8 @@ void expect_class_num(
 	double expected,
 	double tolerance)
 {
-	const auto& actual = scene.class_props.at(std::string(cls_name))
-		.at(std::string(property));
-	Assert::AreEqual(expected, actual.as_num(), tolerance, L"类别数值属性不匹配");
+	const auto actual = scene.cls_prop(cls_name, property).as_num();
+	Assert::AreEqual(expected, actual, tolerance, L"类别数值属性不匹配");
 }
 
 void expect_class_bool(
@@ -138,9 +147,8 @@ void expect_class_bool(
 	std::string_view property,
 	bool expected)
 {
-	const auto& actual = scene.class_props.at(std::string(cls_name))
-		.at(std::string(property));
-	Assert::AreEqual(expected, actual.as_bool(), L"类别布尔属性不匹配");
+	const auto actual = scene.cls_prop(cls_name, property).as_bool();
+	Assert::AreEqual(expected, actual, L"类别布尔属性不匹配");
 }
 
 void expect_export_num(
@@ -149,7 +157,7 @@ void expect_export_num(
 	double expected,
 	double tolerance)
 {
-	const auto actual = scene.get_export(name).as_num();
+	const auto actual = scene.io_export(name).as_num();
 	Assert::AreEqual(expected, actual, tolerance, L"导出数值不匹配");
 }
 

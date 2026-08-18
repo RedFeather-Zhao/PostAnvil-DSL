@@ -23,9 +23,9 @@
 namespace postanvil {
 
 class Instance;
-struct Scene;
+class Scene;
 
-using InstanceId = std::size_t;
+using InstId = std::size_t;
 
 /**
  * @brief Scene 内实例的轻量句柄
@@ -33,7 +33,7 @@ using InstanceId = std::size_t;
  *          按 ID 查询的句柄没有 cls_name。
  */
 struct InstanceHandle {
-	InstanceId id = 0;
+	InstId id = 0;
 	std::optional<std::string> cls_name;
 
 	[[nodiscard]]

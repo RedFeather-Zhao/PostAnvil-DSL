@@ -27,13 +27,15 @@ EXPORT "person".count AS kept
 
 program = postanvil.Compiler().compile(source)
 scene = postanvil.Scene(postanvil.Image(640, 480))
-scene.add("person", postanvil.Instance(10, 20, 80, 120, 0.90))
-scene.add("person", postanvil.Instance(30, 40, 60, 100, 0.40))
-scene.add_import("MIN_CONF", 0.60)
+first = scene.inst_add(postanvil.Instance(10, 20, 80, 120, 0.90))
+second = scene.inst_add(postanvil.Instance(30, 40, 60, 100, 0.40))
+scene.cls_add_inst("person", first)
+scene.cls_add_inst("person", second)
+scene.io_import("MIN_CONF", 0.60)
 
 result = program.evaluate(scene)
-assert result.count("PERSON") == 1
-assert result.get_export("kept") == 1.0
+assert result.cls_inst_count("PERSON") == 1
+assert result.io_export("kept") == 1.0
 ```
 
 也可以使用模块级便捷函数：
@@ -46,29 +48,30 @@ program = postanvil.compile(source)
 
 ## 实例句柄与类别成员
 
-`Scene.add()` 会创建一个 Scene 内实例，建立初始类别成员关系，并返回
-`InstanceHandle`。句柄的 `id` 在该 Scene 内稳定；`cls_name` 是句柄的当前类别上下文，
-不是 `Instance` 的字段。
+`Scene.inst_add()` 创建 Scene 内实例并返回不带类别上下文的 `InstanceHandle`；
+`Scene.cls_add_inst()` 单独建立类别成员关系。句柄的 `id` 在该 Scene 内稳定；
+`cls_name` 是访问时的类别上下文，不是 `Instance` 的字段。
 
 ```python
 scene = postanvil.Scene(postanvil.Image(640, 480))
-person = scene.add("person", postanvil.Instance(10, 20, 80, 120, 0.90))
-scene.append_to_class("foreground", person)
+person = scene.inst_add(postanvil.Instance(10, 20, 80, 120, 0.90))
+scene.cls_add_inst("person", person)
+scene.cls_add_inst("foreground", person)
 
 assert person.id == 1
-assert person.cls_name == "PERSON"
-assert scene.instance_ids("PERSON") == [1]
-assert scene.instance_ids("FOREGROUND") == [1]
-assert scene.instance_count == 1
+assert person.cls_name is None
+assert scene.cls_insts("PERSON") == [1]
+assert scene.cls_insts("FOREGROUND") == [1]
+assert scene.inst_count == 1
 ```
 
-`append_to_class(cls_name, handle)` 和 `append_id_to_class(cls_name, id)` 都是幂等操作。
-`replace_class_ids(cls_name, ids)` 用给定 ID 列表整体替换类别成员。`instance_ids()`
-返回 ID 列表；`instances()` 返回实例引用；`handles()` 返回带该类别上下文的句柄。
-`get_by_id()` 的句柄无类别上下文，`get_by_index()` 的 `index` 从 1 开始。
+`cls_add_inst(cls_name, handle)` 是幂等操作；`cls_set_insts(cls_name, ids)` 用给定 ID
+列表整体替换类别成员。`cls_insts()` 返回 ID 列表；`cls_instances()` 返回实例引用；
+`cls_handles()` 返回带类别上下文的句柄。`inst_handle()` 的句柄无类别上下文，
+`cls_inst_at()` 的 `index` 从 1 开始。
 
-Python 的 `add_import()` 接受 `bool`、数字、字符串和 `InstanceHandle`；DSL 导出
-`INST` 时，`get_export()` 也返回 `InstanceHandle`。句柄只能在其所属 Scene 中使用。
+Python 的 `io_import()` 接受 `bool`、数字、字符串和 `InstanceHandle`；DSL 导出
+`INST` 时，`io_export()` 也返回 `InstanceHandle`。句柄只能在其所属 Scene 中使用。
 
 ## 结构化编译错误
 

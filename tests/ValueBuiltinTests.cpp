@@ -26,7 +26,7 @@ PA_TEST(StringConcatenationAndGlobalReference)
 
 		Assert::AreEqual(
 			std::string("class_person"),
-			output.get_export("generated_label").as_str());
+			output.io_export("generated_label").as_str());
 	}
 
 	PA_TEST(NormalizedProperties)
@@ -163,6 +163,31 @@ PA_TEST(StringConcatenationAndGlobalReference)
 		expect_num_prop(output, "PERSON", 0, "SAVED_ID", 2.0);
 		expect_num_prop(output, "PERSON", 0, "SAVED_INDEX", 1.0);
 		expect_str_prop(output, "PERSON", 0, "SAVED_CLS", "PERSON");
+	}
+
+	PA_TEST(SafeInstanceLookup)
+	{
+			auto output = evaluate(R"(
+			EXPORT _HAS_INST_ID(1) AS has_id
+			EXPORT _HAS_INST_ID(0) AS has_zero_id
+			EXPORT _HAS_INST_ID(-1) AS has_negative_id
+			EXPORT _HAS_INST_ID(99) AS has_missing_id
+			EXPORT _HAS_INST_INDEX("person", 2) AS has_index
+			EXPORT _HAS_INST_INDEX("person", 0) AS has_zero_index
+			EXPORT _HAS_INST_INDEX("person", 1.5) AS has_decimal_index
+			EXPORT _HAS_INST_INDEX("person", 3) AS has_missing_index
+			EXPORT _HAS_INST_INDEX("missing", 1) AS has_missing_class
+		)", make_confidence_scene("PERSON", { 0.4, 0.8 }));
+
+		Assert::IsTrue(output.io_export("has_id").as_bool());
+		Assert::AreEqual(false, output.io_export("has_zero_id").as_bool());
+		Assert::AreEqual(false, output.io_export("has_negative_id").as_bool());
+		Assert::AreEqual(false, output.io_export("has_missing_id").as_bool());
+		Assert::IsTrue(output.io_export("has_index").as_bool());
+		Assert::AreEqual(false, output.io_export("has_zero_index").as_bool());
+		Assert::AreEqual(false, output.io_export("has_decimal_index").as_bool());
+		Assert::AreEqual(false, output.io_export("has_missing_index").as_bool());
+		Assert::AreEqual(false, output.io_export("has_missing_class").as_bool());
 	}
 
 	PA_TEST(WritableBuiltinInstanceProperties)

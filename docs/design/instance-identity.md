@@ -15,20 +15,20 @@
 
 PostAnvil 只使用一个数据对象名称：`Instance`。
 
-- `Scene::m_instances` 保存全部 `Instance`，数组下标就是 `InstanceId`。
+- Scene 的私有实例表保存全部 `Instance`，数组下标就是 `InstId`。
 - 第 0 项是 dummy；真实实例的 ID 从 1 开始，按添加顺序增长。
-- `Scene::m_class_index` 保存 `cls_name -> InstanceId 列表`，不保存 `Instance` 副本。
+- Scene 的私有类别关系表保存 `cls_name -> InstId 列表`，不保存 `Instance` 副本。
 - `InstanceHandle` 保存 `id` 和可选的 `cls_name` 访问上下文；它不拥有、也不复制 `Instance`。
 
-`m_instances` 使用 `std::vector<std::unique_ptr<Instance>>`。Scene 是实例生命周期的唯一管理者；vector 扩容只移动 `unique_ptr`，不会移动已有 `Instance`。Scene 复制时深复制实例，不会让两个 Scene 共享可变状态。
+实例表使用 `std::vector<std::unique_ptr<Instance>>`。Scene 是实例生命周期的唯一管理者；vector 扩容只移动 `unique_ptr`，不会移动已有 `Instance`。Scene 复制时深复制实例，不会让两个 Scene 共享可变状态。
 
 ## ID、类别和内存
 
 同一 Scene 内，同一 ID 始终对应同一个 `Instance` 和同一个内存地址。把某个 ID 加入另一个类别，只会修改类别索引，不会创建副本，也不会修改 ID。
 
 `Instance` 不保存类别。`cls_name` 只存在于 Scene 的类别索引以及
-`InstanceHandle::cls_name` 访问上下文中。创建实例时通过
-`Scene::add(cls_name, instance)` 同时分配 ID 并建立第一条类别关系。
+`InstanceHandle::cls_name` 访问上下文中。`Scene::inst_add(instance)` 只创建实例并
+分配 ID，`Scene::cls_add_inst(cls_name, id)` 单独建立类别关系。
 
 DSL 中只暴露 `CLS / ID / INDEX`：
 
@@ -41,6 +41,7 @@ DSL 中只暴露 `CLS / ID / INDEX`：
 
 `_INST_ID(id)` 返回不带 `cls_name` 的句柄，因此不能读取 `cls` 或 `index`。
 `_INST_INDEX(cls_name, index)` 返回带类别上下文的句柄。
+`_HAS_INST_ID(id)` 和 `_HAS_INST_INDEX(cls_name, index)` 用于无异常地检查目标是否存在。
 
 ## 已有类别操作
 

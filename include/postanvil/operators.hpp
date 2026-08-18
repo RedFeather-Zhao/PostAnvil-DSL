@@ -72,7 +72,7 @@ struct EvaluationContext {
 			: m_context(&context),
 			  m_previous_handle(context.curr_handle)
 		{
-			(void)context.scene.inst(handle.id);
+			(void)context.scene.inst_at(handle.id);
 			context.curr_handle = std::move(handle);
 		}
 
@@ -128,11 +128,7 @@ struct EvaluationContext {
 		}
 
 		// 未找到则查找全局变量
-		auto it = scene.variables.find(name);
-		if (it == scene.variables.end()) {
-			throw PARuntimeError("Undefined variable '" + name + "'");
-		}
-		return it->second;
+		return scene.io_value(name);
 	}
 
 	/**
@@ -155,7 +151,7 @@ struct EvaluationContext {
 			return;
 		}
 		// 无局部作用域（顶层），视为全局变量
-		scene.variables[name] = val;
+		scene.io_set(name, val);
 	}
 
 	/**
@@ -247,31 +243,32 @@ struct FilterOperator : SceneOperator {
 
 	void apply(EvaluationContext& ctx) const override
 	{
-		auto is_valid = [&](InstanceId id, const std::string& cls_name) {
+		auto is_valid = [&](InstId id, const std::string& cls_name) {
 			auto scope = ctx.enter_instance(InstanceHandle{ id, cls_name });
 			return std::ranges::all_of(conditions, [&](const auto& cond) {
 				return cond(ctx);
 			});
 		};
 
-		auto filter_instances = [&](const std::string& cls_name, Scene::InstanceIds& ids) {
-			std::erase_if(ids, [&](InstanceId id) {
+		auto filter_instances = [&](const std::string& cls_name) {
+			auto ids = ctx.scene.cls_insts(cls_name);
+			std::erase_if(ids, [&](InstId id) {
 				return !is_valid(id, cls_name);
 			});
+			ctx.scene.cls_set_insts(cls_name, std::move(ids));
 		};
 
 		auto target_cls_name = target_cls_expr(ctx);
 
 		if (target_cls_name == EvaluationContext::GLOBAL_TARGET) {
-			for (auto& [cls_name, ids] : ctx.scene.m_class_index) {
-				filter_instances(cls_name, ids);
+			for (const auto& cls_name : ctx.scene.cls_names()) {
+				filter_instances(cls_name);
 			}
 			return;
 		}
 
-		auto it = ctx.scene.m_class_index.find(target_cls_name);
-		if (it != ctx.scene.m_class_index.end()) {
-			filter_instances(target_cls_name, it->second);
+		if (ctx.scene.cls_exists(target_cls_name)) {
+			filter_instances(target_cls_name);
 		}
 	}
 };
@@ -300,20 +297,20 @@ struct AttributeOperator : SceneOperator {
 	{
 		auto target_cls_name = target_cls_expr(ctx);
 
-		auto compute_attrs = [&](const std::string& cls_name, const Scene::InstanceIds& ids) {
+		auto compute_attrs = [&](const std::string& cls_name, const Scene::InstIdList& ids) {
 			// 逐语句计算
 			for (const auto& def : attr_defs) {
 				if (def.is_class_attr) {
 					// 类属性赋值
 					Val val = def.expression(ctx);
-					ctx.scene.class_props[def.cls_name][def.name] = val;
+					ctx.scene.cls_set_prop(def.cls_name, def.name, std::move(val));
 				}
 				else {
 					// 实例属性
 					for (const auto id : ids) {
 						auto scope = ctx.enter_instance(InstanceHandle{ id, cls_name });
 						Val val = def.expression(ctx);
-						ctx.scene.set_inst_prop(ctx.curr_handle, def.name, std::move(val));
+						ctx.scene.inst_set_prop(ctx.curr_handle, def.name, std::move(val));
 					}
 				}
 			}
@@ -323,23 +320,23 @@ struct AttributeOperator : SceneOperator {
 			for (const auto& def : attr_defs) {
 				if (def.is_class_attr) {
 					Val val = def.expression(ctx);
-					ctx.scene.class_props[def.cls_name][def.name] = std::move(val);
+					ctx.scene.cls_set_prop(def.cls_name, def.name, std::move(val));
 					continue;
 				}
 
 				// GLOBAL 直接遍历实例，同一实例只计算一次
-				for (InstanceId id = 1; id <= ctx.scene.inst_count(); ++id) {
+				for (InstId id = 1; id <= ctx.scene.inst_count(); ++id) {
 					auto scope = ctx.enter_instance(
 						InstanceHandle{ id, std::nullopt });
 					Val val = def.expression(ctx);
-					ctx.scene.set_inst_prop(ctx.curr_handle, def.name, std::move(val));
+					ctx.scene.inst_set_prop(ctx.curr_handle, def.name, std::move(val));
 				}
 			}
 			return;
 		}
 
-		ctx.scene.ensure_class(target_cls_name);
-		compute_attrs(target_cls_name, ctx.scene.get_inst_ids(target_cls_name));
+		ctx.scene.cls_create(target_cls_name);
+		compute_attrs(target_cls_name, ctx.scene.cls_insts(target_cls_name));
 	}
 };
 
@@ -359,15 +356,13 @@ struct GroupOperator : SceneOperator {
 		auto source_cls_name = source_cls_expr(ctx);
 		auto new_cls_name = new_cls_expr(ctx);
 
-		const auto& class_index = ctx.scene.class_index();
-		auto it = class_index.find(source_cls_name);
-		if (it == class_index.end()) {
-			ctx.scene.replace_class(new_cls_name, {});
+		if (!ctx.scene.cls_exists(source_cls_name)) {
+			ctx.scene.cls_set_insts(new_cls_name, {});
 			return;
 		}
 
-		Scene::InstanceIds selected;
-		for (const auto id : it->second) {
+		Scene::InstIdList selected;
+		for (const auto id : ctx.scene.cls_insts(source_cls_name)) {
 			auto scope = ctx.enter_instance(InstanceHandle{ id, source_cls_name });
 			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
 				return cond(ctx);
@@ -376,7 +371,7 @@ struct GroupOperator : SceneOperator {
 				selected.emplace_back(id);
 			}
 		}
-		ctx.scene.replace_class(new_cls_name, std::move(selected));
+		ctx.scene.cls_set_insts(new_cls_name, std::move(selected));
 	}
 };
 
@@ -396,14 +391,12 @@ struct AppendOperator : SceneOperator {
 		auto dest_cls_name = dest_cls_expr(ctx);
 		auto source_cls_name = source_cls_expr(ctx);
 
-		const auto& class_index = ctx.scene.class_index();
-		auto it = class_index.find(source_cls_name);
-		if (it == class_index.end()) {
+		if (!ctx.scene.cls_exists(source_cls_name)) {
 			return;
 		}
 
-		Scene::InstanceIds selected;
-		for (const auto id : it->second) {
+		Scene::InstIdList selected;
+		for (const auto id : ctx.scene.cls_insts(source_cls_name)) {
 			auto scope = ctx.enter_instance(InstanceHandle{ id, source_cls_name });
 			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
 				return cond(ctx);
@@ -413,7 +406,7 @@ struct AppendOperator : SceneOperator {
 			}
 		}
 		for (const auto id : selected) {
-			ctx.scene.append_to_class(dest_cls_name, id);
+			ctx.scene.cls_add_inst(dest_cls_name, id);
 		}
 	}
 };
@@ -441,7 +434,8 @@ struct SortOperator : SceneOperator {
 	void apply(EvaluationContext& ctx) const override {
 		const auto target_cls_name = target_cls_expr(ctx);
 
-		auto sort_instances = [&](const std::string& cls_name, Scene::InstanceIds& ids) {
+		auto sort_instances = [&](const std::string& cls_name) {
+			auto ids = ctx.scene.cls_insts(cls_name);
 			if (ids.size() < 2 || keys.empty()) {
 				return;
 			}
@@ -472,25 +466,24 @@ struct SortOperator : SceneOperator {
 				return false;
 			});
 
-			Scene::InstanceIds sorted;
+			Scene::InstIdList sorted;
 			sorted.reserve(ids.size());
 			for (const auto index : order) {
 				sorted.emplace_back(ids[index]);
 			}
-			ids = std::move(sorted);
+			ctx.scene.cls_set_insts(cls_name, std::move(sorted));
 		};
 
 		if (target_cls_name == EvaluationContext::GLOBAL_TARGET) {
-			for (auto& [cls_name, ids] : ctx.scene.m_class_index) {
-				sort_instances(cls_name, ids);
+			for (const auto& cls_name : ctx.scene.cls_names()) {
+				sort_instances(cls_name);
 			}
 			return;
 		}
 
 		// 不存在类别按空集合处理，排序为空操作。
-		if (auto it = ctx.scene.m_class_index.find(target_cls_name);
-			it != ctx.scene.m_class_index.end()) {
-			sort_instances(target_cls_name, it->second);
+		if (ctx.scene.cls_exists(target_cls_name)) {
+			sort_instances(target_cls_name);
 		}
 	}
 
@@ -567,7 +560,7 @@ struct VarDefOperator : SceneOperator {
 
 	void apply(EvaluationContext& ctx) const override {
 		Val val = initializer(ctx);
-		ctx.scene.variables[var_name] = val;
+		ctx.scene.io_set(var_name, std::move(val));
 	}
 };
 
@@ -584,10 +577,10 @@ struct ImportOperator : SceneOperator {
 	ImportOperator() : SceneOperator(OperatorKind::OP_IMPORT) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		if (!ctx.scene.variables.contains(local_name)) {
+		if (!ctx.scene.io_contains(local_name)) {
 			throw PARuntimeError("Imported variable '" + local_name + "' not provided by host");
 		}
-		Val const& val = ctx.scene.variables[local_name];
+		const auto& val = ctx.scene.io_value(local_name);
 		if (!type_strict_equal(val.type(), var_type)) {
 			throw PARuntimeError("Imported variable '" + local_name + "' type mismatch");
 		}
@@ -607,7 +600,7 @@ struct ExportOperator : SceneOperator {
 
 	void apply(EvaluationContext& ctx) const override {
 		Val result = expression(ctx);
-		ctx.scene.variables["__export__" + host_name] = result;
+		ctx.scene.io_set("__export__" + host_name, std::move(result));
 	}
 };
 

@@ -55,7 +55,7 @@ public:
 	[[nodiscard]] double x1()		const noexcept	{ return m_x1; }
 	[[nodiscard]] double y1()		const noexcept	{ return m_y1; }
 	[[nodiscard]] double conf()		const noexcept	{ return m_conf; }
-	[[nodiscard]] InstanceId id()	const noexcept	{ return m_id; }
+	[[nodiscard]] InstId id()		const noexcept	{ return m_id; }
 
 	void set_w(double value)		noexcept		{ m_w = value; }
 	void set_h(double value)		noexcept		{ m_h = value; }
@@ -136,11 +136,11 @@ public:
 
 private:
 
-	friend struct Scene;
-	void set_id(InstanceId id) noexcept {
+	friend class Scene;
+	void set_id(InstId id) noexcept {
 		m_id = id;
 	}
-	InstanceId m_id = 0;			//< 实例 ID，由 Scene 统一分配
+	InstId m_id = 0;			//< 实例 ID，由 Scene 统一分配
 
 	double m_x1		= 0.0;			//< 左上角 x 坐标
 	double m_y1		= 0.0;			//< 左上角 y 坐标

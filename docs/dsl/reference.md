@@ -86,8 +86,10 @@
 |---|---|---|
 | `_INST_ID(id)` | `INST` | 按 Scene 稳定编号获取无类别上下文的实例句柄 |
 | `_INST_INDEX(class, index)` | `INST` | 按类别和当前 1-based 位置获取带类别上下文的实例句柄 |
+| `_HAS_INST_ID(id)` | `BOOL` | 检查数字是否对应有效实例 ID，不存在时返回 `FALSE` |
+| `_HAS_INST_INDEX(class, index)` | `BOOL` | 检查类别中是否存在指定 1-based 位置，不存在时返回 `FALSE` |
 
-`_INST_ID` 和 `_INST_INDEX` 的数字参数必须是 DSL `NUM` 可精确表示的正整数。`_INST_INDEX` 的类别名不区分大小写；实例不存在或索引越界时会产生运行时错误。
+`_INST_ID` 和 `_INST_INDEX` 的数字参数必须是 DSL `NUM` 可精确表示的正整数。`_INST_INDEX` 的类别名不区分大小写；实例不存在或索引越界时会产生运行时错误。两个 `_HAS_` 函数不会为非法编号、不存在实例、不存在类别或越界索引抛出查询异常，而是返回 `FALSE`。
 
 ## SORT 排序规则
 

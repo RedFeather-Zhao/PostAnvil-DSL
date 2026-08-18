@@ -51,11 +51,13 @@ RULE FILTER "person" {
 ''')
 
 scene = postanvil.Scene(postanvil.Image(640, 480))
-scene.add("person", postanvil.Instance(10, 20, 80, 120, 0.90))
-scene.add("person", postanvil.Instance(30, 40, 60, 100, 0.40))
+first = scene.inst_add(postanvil.Instance(10, 20, 80, 120, 0.90))
+second = scene.inst_add(postanvil.Instance(30, 40, 60, 100, 0.40))
+scene.cls_add_inst("person", first)
+scene.cls_add_inst("person", second)
 
 result = program.evaluate(scene)
-assert result.count("PERSON") == 1
+assert result.cls_inst_count("PERSON") == 1
 ```
 
 完整语法和执行顺序请继续阅读 [DSL 快速开始](docs/dsl/README.md)。
