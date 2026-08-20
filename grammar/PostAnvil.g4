@@ -41,6 +41,7 @@ STR       : 'STR';
 BOOL      : 'BOOL';
 INST      : 'INST';
 ANY       : 'ANY';
+ALL_INST  : 'ALL_INST';
 
 // ---------- 控制 ----------
 RETURN    : 'RETURN';
@@ -73,6 +74,7 @@ LPAREN    : '(';
 RPAREN    : ')';
 COMMA     : ',';
 ASSIGN    : '=';
+AT        : '@';
 
 // ---------- 字面量 ----------
 NUMBER
@@ -192,35 +194,35 @@ rule_
 
 // FILTER 规则
 filter_rule
-    : RULE FILTER class_expr
+    : RULE FILTER class_selector
       newlines?
       condition_block
     ;
 
 // ATTR 规则
 attr_rule
-    : RULE ATTR class_expr
+    : RULE ATTR class_selector
       newlines?
       attr_block
     ;
 
 // GROUP 规则
 group_rule
-    : RULE GROUP class_expr FROM class_expr
+    : RULE GROUP class_expr FROM class_selector
       newlines?
       condition_block
     ;
 
 // APPEND 规则
 append_rule
-    : RULE APPEND class_expr FROM class_expr
+    : RULE APPEND class_expr FROM class_selector
       newlines?
       condition_block
     ;
 
 // SORT 规则
 sort_rule
-    : RULE SORT class_expr
+    : RULE SORT class_selector
       newlines?
       sort_block
     ;
@@ -286,7 +288,7 @@ elseBranch
     ;
 
 forStmt
-    : FOR IDENTIFIER IN class_expr
+    : FOR IDENTIFIER IN for_source
       newlines?
       stmt_block
     ;
@@ -305,6 +307,22 @@ direction
 class_expr
     : STRING
     | IDENTIFIER
+    | ALL_INST
+    ;
+
+// 类别选择器：逗号列表是临时类别组；@ 开头名称保留给内置/未来命名组。
+class_selector
+    : class_expr (COMMA class_expr)*
+    | class_group
+    ;
+
+class_group
+    : AT IDENTIFIER
+    ;
+
+for_source
+    : class_expr
+    | class_group
     ;
 
 bool_expr

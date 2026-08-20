@@ -1,5 +1,5 @@
 
-// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -168,6 +168,18 @@ public:
   }
 
   virtual std::any visitClass_expr(PostAnvilParser::Class_exprContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitClass_selector(PostAnvilParser::Class_selectorContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitClass_group(PostAnvilParser::Class_groupContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitFor_source(PostAnvilParser::For_sourceContext *ctx) override {
     return visitChildren(ctx);
   }
 

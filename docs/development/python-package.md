@@ -190,7 +190,7 @@ python -c "import runpy; runpy.run_path('bindings/python/ultralytics_smoke_test.
 import postanvil
 
 source = '''
-RULE FILTER "global" {
+RULE FILTER @ALL_CLASS {
 	self.conf >= 0.5
 }
 '''
@@ -356,7 +356,7 @@ import postanvil
 
 model = YOLO("model.pt")
 program = postanvil.compile('''
-RULE FILTER "global" {
+RULE FILTER @ALL_CLASS {
 	self.conf >= 0.5
 }
 ''')

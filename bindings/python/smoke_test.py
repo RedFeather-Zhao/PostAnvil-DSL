@@ -3,7 +3,7 @@ import postanvil
 
 source = """
 IMPORT INST anchor
-RULE FILTER "global" {
+RULE FILTER @ALL_CLASS {
     self.conf >= 0.5
 }
 EXPORT anchor AS selected_anchor
@@ -18,6 +18,12 @@ scene.io_import("anchor", anchor)
 
 assert anchor.id == 1
 assert anchor.cls_name is None
+assert postanvil.ALL_INST == "ALL_INST"
+assert scene.all_inst_count == 2
+assert scene.all_inst_ids() == [anchor.id, second.id]
+assert [instance.id for instance in scene.all_instances()] == [anchor.id, second.id]
+assert [handle.cls_name for handle in scene.all_inst_handles()] == ["ALL_INST", "ALL_INST"]
+assert postanvil.ALL_INST not in scene.cls_names()
 assert scene.cls_add_inst("selected", anchor)
 assert not scene.cls_add_inst("selected", anchor)
 assert scene.cls_insts("selected") == [anchor.id]
@@ -33,6 +39,7 @@ assert scene.inst_prop(by_id, "reviewed") is True
 result = postanvil.compile(source).evaluate(scene)
 
 assert result.cls_inst_count("PERSON") == 1
+assert result.all_inst_count == 2
 assert result.inst_count == 2
 assert result.io_export("selected_anchor") == anchor
 assert result.inst_prop(result.cls_inst_at("person", 1), "cls") == "PERSON"

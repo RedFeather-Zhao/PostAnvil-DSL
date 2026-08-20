@@ -1,6 +1,7 @@
 """Python interface for the PostAnvil DSL runtime."""
 
 from ._postanvil import (  # noqa: F401
+    ALL_INST,
     CompileErrorKind,
     Compiler,
     Image,
@@ -21,6 +22,7 @@ from .ultralytics import (  # noqa: F401
 )
 
 __all__ = [
+    "ALL_INST",
     "CompileErrorKind",
     "Compiler",
     "Image",

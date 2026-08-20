@@ -54,7 +54,7 @@ class FakeResult:
 program = postanvil.compile(
     '''
     IMPORT NUM min_conf
-    RULE FILTER "global" {
+    RULE FILTER @ALL_CLASS {
         self.conf >= min_conf
     }
     '''
@@ -66,6 +66,9 @@ result = FakeResult(
         [40, 10, 60, 20, 0.2, 1],
     ]
 )
+converted = postanvil.from_ultralytics(result)
+assert converted.all_inst_count == 2
+assert converted.all_inst_ids() == [1, 2]
 postanvil.apply_ultralytics(program, result, imports={"MIN_CONF": 0.5})
 assert result.boxes.data.values == [[10.0, 20.0, 30.0, 50.0, 0.9, 0.0]]
 
@@ -107,5 +110,14 @@ except ValueError as error:
     assert "desynchronise" in str(error)
 else:
     raise AssertionError("Task-specific result data must not be silently desynchronised")
+
+reserved_class_result = FakeResult([[1, 2, 6, 8, 0.8, 0]])
+reserved_class_result.names = {0: postanvil.ALL_INST}
+try:
+    postanvil.from_ultralytics(reserved_class_result)
+except ValueError as error:
+    assert "reserved" in str(error)
+else:
+    raise AssertionError("The ALL_INST built-in class name must remain reserved")
 
 print("Ultralytics adapter smoke test passed")

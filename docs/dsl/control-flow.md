@@ -66,12 +66,12 @@ RULE FUNC avg_conf(cls: STR) -> NUM {
 }
 ```
 
-`FOR cls IN "global"` 遍历类别名，因此可以嵌套遍历全部实例：
+`FOR cls IN @ALL_CLASS` 遍历类别名，因此可以嵌套遍历全部类别成员：
 
 ```postanvil
 RULE FUNC total_area() -> NUM {
     NUM total = 0
-    FOR cls IN "global" {
+    FOR cls IN @ALL_CLASS {
         FOR obj IN cls {
             total = total + obj.area
         }
@@ -79,6 +79,11 @@ RULE FUNC total_area() -> NUM {
     RETURN total
 }
 ```
+
+`FOR obj IN ALL_INST` 与遍历普通类别完全相同；循环变量是带 `ALL_INST`
+类别上下文的 `INST`，可读取 `obj.cls` 和 `obj.index`。`FOR` 当前不接受逗号临时组：
+遍历多个类别时请使用 `FOR cls IN @ALL_CLASS` 或分别编写类别循环，避免混淆“遍历类别名”和
+“遍历类别成员”。
 
 循环体拥有独立作用域；`RETURN` 会立即结束循环和函数。空类别和不存在的类别均视为空集合，循环执行零次。
 

@@ -30,6 +30,12 @@ foreach ($abi in $Abis) {
 	if ($LASTEXITCODE -ne 0) {
 		throw "CMake build failed for $abi."
 	}
+
+	$installDir = Join-Path $PSScriptRoot "../out/install/android-release/$abi"
+	$javaJar = Join-Path $installDir 'share/PostAnvil/android/postanvil-java.jar'
+	if (-not (Test-Path -LiteralPath $javaJar -PathType Leaf)) {
+		throw "Java binding JAR was not installed for $abi."
+	}
 }
 
 Write-Host 'Android SDK output: out/install/android-release'

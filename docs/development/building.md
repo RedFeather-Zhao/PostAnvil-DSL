@@ -49,7 +49,7 @@ PostAnvil 同时提供 C++ 库、Python 包和 Android JNI 绑定。它们面向
 | 安装 C++ 开发文件 | `cmake --build --preset ninja-release-install` | 头文件、库、CMake 包配置 | 供其他 CMake 工程使用 `find_package` |
 | 分发 C++ 开发包 | `cmake --workflow --preset ninja-release-package` | ZIP（也可用脚本生成 ZIP/TGZ） | 给不参与源码构建的 C++ 使用者 |
 | 分发或测试 Python 包 | `python -m build --wheel` | `.whl` | 安装到指定 Python/Conda 环境 |
-| 构建 Android 绑定 | Android NDK + CMake | `libpostanvil_jni.so` | Android Java/Kotlin 应用 |
+| 构建 Android 绑定 | Android NDK + JDK 11+ + CMake | `libpostanvil_jni.so` + `postanvil-java.jar` | Android Java/Kotlin 应用 |
 
 这里的“安装”有两种含义：`cmake --install` 安装的是 **C++ 开发文件**；
 `python -m pip install` 安装的是 **Python 包**。如果目标是让 Python 能执行
@@ -171,7 +171,8 @@ cmake --build out/build/custom --parallel
 
 ## 重新生成语法代码
 
-日常构建不依赖 Java。修改 `grammar/PostAnvil.g4` 后显式运行：
+C++ 和 Python 日常构建不依赖 Java；Android JNI 构建会用 JDK 11 或更高版本
+直接编译并安装 Java 8 目标 JAR。修改 `grammar/PostAnvil.g4` 后显式运行：
 
 ```bash
 cmake --build out/build/ninja-debug --target postanvil_generate_parser
@@ -185,7 +186,7 @@ cmake --build out/build/ninja-debug --target postanvil_generate_parser
 - Windows Release：`postanvil_static.lib`、`postanvil.dll/.lib`
 - Linux：`libpostanvil_static.a`、`libpostanvil.so`
 - macOS：`libpostanvil_static.a`、`libpostanvil.dylib`
-- Android：`libpostanvil_static.a`、可选 `libpostanvil_jni.so`
+- Android：`libpostanvil_static.a`、`libpostanvil_jni.so`、`postanvil-java.jar` 和 `NativeBridge.java`
 
 `cmake --build <build-dir> --target package` 可生成 ZIP/TGZ 原生开发包；安装树包含
 头文件、库和 `PostAnvilConfig.cmake`。

@@ -63,12 +63,22 @@ assert person.cls_name is None
 assert scene.cls_insts("PERSON") == [1]
 assert scene.cls_insts("FOREGROUND") == [1]
 assert scene.inst_count == 1
+assert postanvil.ALL_INST == "ALL_INST"
+assert scene.all_inst_count == 1
+assert scene.all_inst_ids() == [1]
+assert scene.all_inst_handles()[0].cls_name == "ALL_INST"
+assert "ALL_INST" not in scene.cls_names()
 ```
 
 `cls_add_inst(cls_name, handle)` 是幂等操作；`cls_set_insts(cls_name, ids)` 用给定 ID
 列表整体替换类别成员。`cls_insts()` 返回 ID 列表；`cls_instances()` 返回实例引用；
 `cls_handles()` 返回带类别上下文的句柄。`inst_handle()` 的句柄无类别上下文，
 `cls_inst_at()` 的 `index` 从 1 开始。
+
+`Scene.inst_add()` 还会自动维护内置 `ALL_INST` 类别。Python 可通过
+`postanvil.ALL_INST`、`all_inst_count`、`all_inst_ids()`、`all_instances()` 和
+`all_inst_handles()` 显式访问该类别。`cls_names()` 故意不返回 `ALL_INST`，
+避免将内置类别误当为模型的普通标签。
 
 Python 的 `io_import()` 接受 `bool`、数字、字符串和 `InstanceHandle`；DSL 导出
 `INST` 时，`io_export()` 也返回 `InstanceHandle`。句柄只能在其所属 Scene 中使用。
@@ -113,7 +123,7 @@ import postanvil
 model = YOLO("model.pt")
 program = postanvil.compile('''
 IMPORT NUM min_conf
-RULE FILTER "global" {
+RULE FILTER @ALL_CLASS {
     self.conf >= min_conf
 }
 ''')
@@ -130,6 +140,9 @@ for detection in model("image.jpg"):
 坐标转换读取 Ultralytics 的 `[x1, y1, x2, y2]`，并转换成 PostAnvil 的左上角坐标、
 宽和高。跟踪结果的 track ID 保存在 `YOLO_TRACK_ID` 动态属性中。PostAnvil 自身的
 稳定 `id` 与 YOLO track ID 含义不同，不应混用。
+
+Ultralytics 类别名不得为保留名 `ALL_INST`；适配器会明确拒绝这种输入，
+防止模型标签与内置类别冲突。写回 YOLO 时仅枚举普通类别，不会输出 `ALL_INST`。
 
 当前适配器只允许把普通轴对齐检测框写回 YOLO。分割、姿态、OBB、分类、语义掩码和
 深度结果包含与框逐项关联的额外数据，单独更新框会造成不同步，因此会被明确拒绝。

@@ -55,7 +55,7 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 			rule attr "X" {
 				"X".test = 1
 			}
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				SELF.CONF > 0.5
 				SELF.W > 10
 			}
@@ -69,7 +69,7 @@ PA_TEST(InstanceAttributesAndTypedGlobals)
 	PA_TEST(GlobalAttributeRule)
 	{
 		auto output = evaluate(R"(
-			RULE ATTR "global" {
+			RULE ATTR ALL_INST {
 				self.area_calc = self.w * self.h
 			}
 		)", make_scene({

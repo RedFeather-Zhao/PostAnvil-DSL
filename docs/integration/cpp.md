@@ -68,6 +68,7 @@ Program program = compiler.compile(source);
 Scene scene(Image{640, 480});
 const auto first = scene.inst_add(Instance(10, 20, 80, 120, 0.90));
 const auto second = scene.inst_add(Instance(30, 40, 60, 100, 0.40));
+// inst_add 会自动将两个稳定 ID 加入内置 ALL_INST 类别。
 scene.cls_add_inst("person", first.id);
 scene.cls_add_inst("person", second.id);
 scene.io_import("MIN_CONF", Val(0.60));
@@ -92,6 +93,10 @@ double confidence = result.inst_at(id).conf();
 
 同一 ID 可以同时存在于多个类别中，但始终指向 Scene 中的同一个 `Instance`。类别操作只
 改变成员关系，不会隐式复制检测框。
+
+`Scene::ALL_INST_CLASS` 是公开的内置类别名常量。`inst_add()` 会自动追加新 ID；
+`cls_insts(Scene::ALL_INST_CLASS)` 可读取该类别当前视图。`cls_names()` 只枚举普通类别，
+不包含 `ALL_INST`，因此宿主将类别写回模型结果时不会误把内置类别当成业务标签。
 
 Scene 的公开方法按职责统一使用 `img_*`、`cls_*` 和 `inst_*` 前缀。图像信息通过
 `img_info()` / `img_set()` 访问；类别关系通过 `cls_add_inst()`、`cls_set_insts()`、

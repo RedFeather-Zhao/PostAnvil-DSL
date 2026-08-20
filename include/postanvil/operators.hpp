@@ -51,8 +51,6 @@ struct FunctionInfo {
  *
  */
 struct EvaluationContext {
-	const static inline char* GLOBAL_TARGET = "GLOBAL";
-
 	/**
 	 * @brief 构造评估上下文
 	 *
@@ -175,6 +173,35 @@ public:
 	Val return_value;								// 函数返回缓存
 };
 
+/**
+ * @brief 类别选择器：单个/临时多类别，或内置类别组
+ */
+struct ClassSelector {
+	enum class Kind {
+		CLASSES,
+		ALL_CLASSES,
+	};
+
+	Kind kind = Kind::CLASSES;
+	std::vector<StrFunc> class_exprs;
+
+	[[nodiscard]]
+	std::vector<std::string> resolve_classes(EvaluationContext& ctx) const {
+		if (kind == Kind::ALL_CLASSES) {
+			return ctx.scene.cls_names();
+		}
+		std::vector<std::string> names;
+		names.reserve(class_exprs.size());
+		for (const auto& expression : class_exprs) {
+			auto name = expression(ctx);
+			if (std::ranges::find(names, name) == names.end()) {
+				names.emplace_back(std::move(name));
+			}
+		}
+		return names;
+	}
+};
+
 // ========================= Operator ============================
 
 /**
@@ -215,7 +242,6 @@ static const char* operation_kind_to_string(OperatorKind kind) {
  */
 struct SceneOperator {
 	OperatorKind kind = OperatorKind::OP_BASE;
-	StrFunc target_cls_expr;
 
 public:
 	explicit SceneOperator(OperatorKind kind_ = OperatorKind::OP_BASE) : kind(kind_)
@@ -237,6 +263,7 @@ public:
  * @brief 过滤算子，按条件保留或丢弃实例
  */
 struct FilterOperator : SceneOperator {
+	ClassSelector target;
 	std::vector<BoolFunc> conditions; // 过滤条件列表，全部满足才保留
 
 	FilterOperator() : SceneOperator(OperatorKind::OP_FILTER) {}
@@ -258,17 +285,10 @@ struct FilterOperator : SceneOperator {
 			ctx.scene.cls_set_insts(cls_name, std::move(ids));
 		};
 
-		auto target_cls_name = target_cls_expr(ctx);
-
-		if (target_cls_name == EvaluationContext::GLOBAL_TARGET) {
-			for (const auto& cls_name : ctx.scene.cls_names()) {
+		for (const auto& cls_name : target.resolve_classes(ctx)) {
+			if (ctx.scene.cls_exists(cls_name)) {
 				filter_instances(cls_name);
 			}
-			return;
-		}
-
-		if (ctx.scene.cls_exists(target_cls_name)) {
-			filter_instances(target_cls_name);
 		}
 	}
 };
@@ -279,6 +299,7 @@ struct FilterOperator : SceneOperator {
  * @brief 属性算子，为实例添加计算字段
  */
 struct AttributeOperator : SceneOperator {
+	ClassSelector target;
 	/**
 	 * @brief 属性定义
 	 */
@@ -295,8 +316,6 @@ struct AttributeOperator : SceneOperator {
 
 	void apply(EvaluationContext& ctx) const override
 	{
-		auto target_cls_name = target_cls_expr(ctx);
-
 		auto compute_attrs = [&](const std::string& cls_name, const Scene::InstIdList& ids) {
 			// 逐语句计算
 			for (const auto& def : attr_defs) {
@@ -316,27 +335,10 @@ struct AttributeOperator : SceneOperator {
 			}
 		};
 
-		if (target_cls_name == EvaluationContext::GLOBAL_TARGET) {
-			for (const auto& def : attr_defs) {
-				if (def.is_class_attr) {
-					Val val = def.expression(ctx);
-					ctx.scene.cls_set_prop(def.cls_name, def.name, std::move(val));
-					continue;
-				}
-
-				// GLOBAL 直接遍历实例，同一实例只计算一次
-				for (InstId id = 1; id <= ctx.scene.inst_count(); ++id) {
-					auto scope = ctx.enter_instance(
-						InstanceHandle{ id, std::nullopt });
-					Val val = def.expression(ctx);
-					ctx.scene.inst_set_prop(ctx.curr_handle, def.name, std::move(val));
-				}
-			}
-			return;
+		for (const auto& cls_name : target.resolve_classes(ctx)) {
+			ctx.scene.cls_create(cls_name);
+			compute_attrs(cls_name, ctx.scene.cls_insts(cls_name));
 		}
-
-		ctx.scene.cls_create(target_cls_name);
-		compute_attrs(target_cls_name, ctx.scene.cls_insts(target_cls_name));
 	}
 };
 
@@ -347,28 +349,30 @@ struct AttributeOperator : SceneOperator {
  */
 struct GroupOperator : SceneOperator {
 	StrFunc new_cls_expr;
-	StrFunc source_cls_expr;
+	ClassSelector source;
 	std::vector<BoolFunc> conditions;
 
 	GroupOperator() : SceneOperator(OperatorKind::OP_GROUP) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		auto source_cls_name = source_cls_expr(ctx);
 		auto new_cls_name = new_cls_expr(ctx);
 
-		if (!ctx.scene.cls_exists(source_cls_name)) {
-			ctx.scene.cls_set_insts(new_cls_name, {});
-			return;
-		}
-
 		Scene::InstIdList selected;
-		for (const auto id : ctx.scene.cls_insts(source_cls_name)) {
-			auto scope = ctx.enter_instance(InstanceHandle{ id, source_cls_name });
+		std::unordered_set<InstId> selected_ids;
+		auto select = [&](InstId id, std::optional<std::string> cls_name) {
+			auto scope = ctx.enter_instance(InstanceHandle{ id, std::move(cls_name) });
 			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
 				return cond(ctx);
 			});
-			if (all_pass) {
+			if (all_pass && selected_ids.emplace(id).second) {
 				selected.emplace_back(id);
+			}
+		};
+
+		for (const auto& cls_name : source.resolve_classes(ctx)) {
+			if (!ctx.scene.cls_exists(cls_name)) { continue; }
+			for (const auto id : ctx.scene.cls_insts(cls_name)) {
+				select(id, cls_name);
 			}
 		}
 		ctx.scene.cls_set_insts(new_cls_name, std::move(selected));
@@ -382,27 +386,30 @@ struct GroupOperator : SceneOperator {
  */
 struct AppendOperator : SceneOperator {
 	StrFunc dest_cls_expr;
-	StrFunc source_cls_expr;
+	ClassSelector source;
 	std::vector<BoolFunc> conditions;
 
 	AppendOperator() : SceneOperator(OperatorKind::OP_APPEND) {}
 
 	void apply(EvaluationContext& ctx) const override {
 		auto dest_cls_name = dest_cls_expr(ctx);
-		auto source_cls_name = source_cls_expr(ctx);
-
-		if (!ctx.scene.cls_exists(source_cls_name)) {
-			return;
-		}
 
 		Scene::InstIdList selected;
-		for (const auto id : ctx.scene.cls_insts(source_cls_name)) {
-			auto scope = ctx.enter_instance(InstanceHandle{ id, source_cls_name });
+		std::unordered_set<InstId> selected_ids;
+		auto select = [&](InstId id, std::optional<std::string> cls_name) {
+			auto scope = ctx.enter_instance(InstanceHandle{ id, std::move(cls_name) });
 			bool all_pass = std::ranges::all_of(conditions, [&](const auto& cond) {
 				return cond(ctx);
 			});
-			if (all_pass) {
+			if (all_pass && selected_ids.emplace(id).second) {
 				selected.emplace_back(id);
+			}
+		};
+
+		for (const auto& cls_name : source.resolve_classes(ctx)) {
+			if (!ctx.scene.cls_exists(cls_name)) { continue; }
+			for (const auto id : ctx.scene.cls_insts(cls_name)) {
+				select(id, cls_name);
 			}
 		}
 		for (const auto id : selected) {
@@ -419,6 +426,7 @@ struct AppendOperator : SceneOperator {
  *          所有键均相等时 stable_sort 保留实例原有顺序。
  */
 struct SortOperator : SceneOperator {
+	ClassSelector target;
 	/**
 	 * @brief 排序键及排序方向
 	 */
@@ -432,8 +440,6 @@ struct SortOperator : SceneOperator {
 	SortOperator() : SceneOperator(OperatorKind::OP_SORT) {}
 
 	void apply(EvaluationContext& ctx) const override {
-		const auto target_cls_name = target_cls_expr(ctx);
-
 		auto sort_instances = [&](const std::string& cls_name) {
 			auto ids = ctx.scene.cls_insts(cls_name);
 			if (ids.size() < 2 || keys.empty()) {
@@ -474,16 +480,11 @@ struct SortOperator : SceneOperator {
 			ctx.scene.cls_set_insts(cls_name, std::move(sorted));
 		};
 
-		if (target_cls_name == EvaluationContext::GLOBAL_TARGET) {
-			for (const auto& cls_name : ctx.scene.cls_names()) {
+		for (const auto& cls_name : target.resolve_classes(ctx)) {
+			// 不存在类别按空集合处理，排序为空操作。
+			if (ctx.scene.cls_exists(cls_name)) {
 				sort_instances(cls_name);
 			}
-			return;
-		}
-
-		// 不存在类别按空集合处理，排序为空操作。
-		if (ctx.scene.cls_exists(target_cls_name)) {
-			sort_instances(target_cls_name);
 		}
 	}
 

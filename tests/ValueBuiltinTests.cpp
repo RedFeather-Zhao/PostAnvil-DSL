@@ -15,7 +15,7 @@ PA_TEST(StringConcatenationAndGlobalReference)
 					"class_"
 				}
 				STR label = get_prefix() + "person"
-				RULE FILTER "global" {
+				RULE FILTER @ALL_CLASS {
 					self.conf > threshold
 				}
 				EXPORT label AS generated_label
@@ -81,7 +81,7 @@ PA_TEST(StringConcatenationAndGlobalReference)
 		evaluate_and_expect_counts(R"(
 			NUM min_conf = 0.6
 			NUM min_w = 15
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				self.conf > min_conf
 				self.w > min_w
 			}
@@ -96,7 +96,7 @@ PA_TEST(StringConcatenationAndGlobalReference)
 	{
 		evaluate_and_expect_counts(R"(
 			BOOL debug = FALSE
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				debug == FALSE
 				self.conf > 0.5
 			}

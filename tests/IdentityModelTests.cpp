@@ -100,7 +100,7 @@ PA_TEST(GlobalAttributeVisitsEachInstanceForEveryDefinition)
 	auto input = make_confidence_scene("PERSON", { 0.9 });
 	input.cls_add_inst("ALSO_PERSON", input.cls_insts("PERSON")[0]);
 	auto output = evaluate(R"(
-		RULE ATTR "global" {
+		RULE ATTR ALL_INST {
 			self.first = self.conf
 			self.second = self.conf * 2
 		}
@@ -109,6 +109,95 @@ PA_TEST(GlobalAttributeVisitsEachInstanceForEveryDefinition)
 	const auto id = output.cls_insts("PERSON")[0];
 	Assert::AreEqual(0.9, output.inst_at(id).get_prop("FIRST").as_num(), 1e-9);
 	Assert::AreEqual(1.8, output.inst_at(id).get_prop("SECOND").as_num(), 1e-9);
+}
+
+PA_TEST(AllInstVisitsSharedAndOrphanInstancesExactlyOnce)
+{
+	auto input = make_confidence_scene("PERSON", { 0.9 });
+	const auto shared_id = input.cls_insts("PERSON")[0];
+	input.cls_add_inst("ALSO_PERSON", shared_id);
+	const auto orphan = input.inst_add(Instance(0, 0, 10, 10, 0.5));
+
+	auto output = evaluate(R"(
+		RULE ATTR ALL_INST {
+			self.conf = self.conf + 1
+			self.all_index = self.index
+		}
+	)", std::move(input));
+
+	Assert::AreEqual(1.9, output.inst_at(shared_id).conf(), 1e-9);
+	Assert::AreEqual(1.5, output.inst_at(orphan.id).conf(), 1e-9);
+	Assert::AreEqual(1.0, output.inst_at(shared_id).get_prop("ALL_INDEX").as_num(), 1e-9);
+	Assert::AreEqual(2.0, output.inst_at(orphan.id).get_prop("ALL_INDEX").as_num(), 1e-9);
+}
+
+PA_TEST(FilterAllInstOnlyChangesBuiltInClass)
+{
+	auto output = evaluate(R"(
+		RULE FILTER ALL_INST {
+			self.conf >= 0.5
+		}
+	)", make_confidence_scene("PERSON", { 0.9, 0.4 }));
+
+	Assert::AreEqual(static_cast<std::size_t>(2), output.inst_count());
+	Assert::AreEqual(static_cast<std::size_t>(2), output.cls_inst_count("PERSON"));
+	Assert::AreEqual(static_cast<std::size_t>(1), output.cls_inst_count("ALL_INST"));
+}
+
+PA_TEST(AllClassAndTemporaryClassGroupPreserveClassContexts)
+{
+	auto input = make_confidence_scene("PERSON", { 0.9, 0.4 });
+	const auto shared_id = input.cls_insts("PERSON")[0];
+	input.cls_add_inst("ALSO_PERSON", shared_id);
+
+	auto output = evaluate(R"(
+		RULE ATTR @ALL_CLASS {
+			self.conf = self.conf + 1
+		}
+		RULE FILTER "person", "also_person" {
+			self.index == 1
+		}
+	)", std::move(input));
+
+	// shared_id 在两个类别视图中各处理一次；临时组随后分别过滤两个类别。
+	Assert::AreEqual(2.9, output.inst_at(shared_id).conf(), 1e-9);
+	Assert::AreEqual(static_cast<std::size_t>(1), output.cls_inst_count("PERSON"));
+	Assert::AreEqual(static_cast<std::size_t>(1), output.cls_inst_count("ALSO_PERSON"));
+}
+
+PA_TEST(GroupAndAppendAcceptTemporaryAndBuiltInGroups)
+{
+	auto input = make_scene({
+		make_instance("PERSON", 0, 0, 10, 10, 0.9),
+		make_instance("CAR", 0, 0, 10, 10, 0.8),
+	});
+	const auto shared_id = input.cls_insts("PERSON")[0];
+	input.cls_add_inst("CAR", shared_id);
+	const auto orphan = input.inst_add(Instance(0, 0, 10, 10, 0.7));
+
+	auto output = evaluate(R"(
+		RULE GROUP "VISIBLE" FROM "person", "car" {}
+		RULE APPEND "EVERYTHING" FROM ALL_INST {}
+	)", std::move(input));
+
+	Assert::AreEqual(static_cast<std::size_t>(2), output.cls_inst_count("VISIBLE"));
+	Assert::AreEqual(static_cast<std::size_t>(3), output.cls_inst_count("EVERYTHING"));
+	Assert::AreEqual(orphan.id, output.cls_insts("EVERYTHING")[2]);
+}
+
+PA_TEST(GlobalIsNowAnOrdinaryClassName)
+{
+	auto output = evaluate(R"(
+		RULE FILTER "global" {
+			self.conf > 0.5
+		}
+	)", make_scene({
+		make_instance("GLOBAL", 0, 0, 10, 10, 0.9),
+		make_instance("PERSON", 0, 0, 10, 10, 0.1),
+	}));
+
+	Assert::AreEqual(static_cast<std::size_t>(1), output.cls_inst_count("GLOBAL"));
+	Assert::AreEqual(static_cast<std::size_t>(1), output.cls_inst_count("PERSON"));
 }
 
 } // namespace UnitTest1Basic

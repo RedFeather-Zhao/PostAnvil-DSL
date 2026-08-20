@@ -1,5 +1,5 @@
 
-// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -15,12 +15,12 @@ public:
     T__0 = 1, RULE = 2, FILTER = 3, ATTR = 4, FUNC = 5, SORT = 6, GROUP = 7, 
     APPEND = 8, FROM = 9, IMPORT = 10, EXPORT = 11, AS = 12, AND = 13, OR = 14, 
     NOT = 15, BOOL_LIT = 16, SELF = 17, NUM = 18, STR = 19, BOOL = 20, INST = 21, 
-    ANY = 22, RETURN = 23, IF = 24, ELIF = 25, ELSE = 26, FOR = 27, IN = 28, 
-    ASC = 29, DESC = 30, LCURLY = 31, RCURLY = 32, ARROW = 33, PLUS = 34, 
-    MINUS = 35, STAR = 36, SLASH = 37, LT = 38, GT = 39, LE = 40, GE = 41, 
-    EQ = 42, NE = 43, DOT = 44, LPAREN = 45, RPAREN = 46, COMMA = 47, ASSIGN = 48, 
-    NUMBER = 49, STRING = 50, IDENTIFIER = 51, WS = 52, LINE_CONTINUATION = 53, 
-    NEWLINE = 54, COMMENT = 55
+    ANY = 22, ALL_INST = 23, RETURN = 24, IF = 25, ELIF = 26, ELSE = 27, 
+    FOR = 28, IN = 29, ASC = 30, DESC = 31, LCURLY = 32, RCURLY = 33, ARROW = 34, 
+    PLUS = 35, MINUS = 36, STAR = 37, SLASH = 38, LT = 39, GT = 40, LE = 41, 
+    GE = 42, EQ = 43, NE = 44, DOT = 45, LPAREN = 46, RPAREN = 47, COMMA = 48, 
+    ASSIGN = 49, AT = 50, NUMBER = 51, STRING = 52, IDENTIFIER = 53, WS = 54, 
+    LINE_CONTINUATION = 55, NEWLINE = 56, COMMENT = 57
   };
 
   enum {
@@ -32,10 +32,11 @@ public:
     RuleAttr_def = 20, RuleAttr_lvalue = 21, RuleTyped_params = 22, RuleTyped_param = 23, 
     RuleStatement = 24, RuleIfStmt = 25, RuleIfBranch = 26, RuleElifBranch = 27, 
     RuleElseBranch = 28, RuleForStmt = 29, RuleSort_key = 30, RuleDirection = 31, 
-    RuleClass_expr = 32, RuleBool_expr = 33, RuleExpr = 34, RuleOr_expr = 35, 
-    RuleAnd_expr = 36, RuleNot_expr = 37, RuleCmp_expr = 38, RuleAdd_expr = 39, 
-    RuleMul_expr = 40, RuleUnary_expr = 41, RulePrimary = 42, RuleFunc_call = 43, 
-    RuleAttribute = 44, RuleComp_op = 45, RuleAdd_op = 46, RuleMul_op = 47
+    RuleClass_expr = 32, RuleClass_selector = 33, RuleClass_group = 34, 
+    RuleFor_source = 35, RuleBool_expr = 36, RuleExpr = 37, RuleOr_expr = 38, 
+    RuleAnd_expr = 39, RuleNot_expr = 40, RuleCmp_expr = 41, RuleAdd_expr = 42, 
+    RuleMul_expr = 43, RuleUnary_expr = 44, RulePrimary = 45, RuleFunc_call = 46, 
+    RuleAttribute = 47, RuleComp_op = 48, RuleAdd_op = 49, RuleMul_op = 50
   };
 
   explicit PostAnvilParser(antlr4::TokenStream *input);
@@ -88,6 +89,9 @@ public:
   class Sort_keyContext;
   class DirectionContext;
   class Class_exprContext;
+  class Class_selectorContext;
+  class Class_groupContext;
+  class For_sourceContext;
   class Bool_exprContext;
   class ExprContext;
   class Or_exprContext;
@@ -377,7 +381,7 @@ public:
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *RULE();
     antlr4::tree::TerminalNode *FILTER();
-    Class_exprContext *class_expr();
+    Class_selectorContext *class_selector();
     Condition_blockContext *condition_block();
     NewlinesContext *newlines();
 
@@ -396,7 +400,7 @@ public:
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *RULE();
     antlr4::tree::TerminalNode *ATTR();
-    Class_exprContext *class_expr();
+    Class_selectorContext *class_selector();
     Attr_blockContext *attr_block();
     NewlinesContext *newlines();
 
@@ -415,9 +419,9 @@ public:
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *RULE();
     antlr4::tree::TerminalNode *GROUP();
-    std::vector<Class_exprContext *> class_expr();
-    Class_exprContext* class_expr(size_t i);
+    Class_exprContext *class_expr();
     antlr4::tree::TerminalNode *FROM();
+    Class_selectorContext *class_selector();
     Condition_blockContext *condition_block();
     NewlinesContext *newlines();
 
@@ -436,9 +440,9 @@ public:
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *RULE();
     antlr4::tree::TerminalNode *APPEND();
-    std::vector<Class_exprContext *> class_expr();
-    Class_exprContext* class_expr(size_t i);
+    Class_exprContext *class_expr();
     antlr4::tree::TerminalNode *FROM();
+    Class_selectorContext *class_selector();
     Condition_blockContext *condition_block();
     NewlinesContext *newlines();
 
@@ -457,7 +461,7 @@ public:
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *RULE();
     antlr4::tree::TerminalNode *SORT();
-    Class_exprContext *class_expr();
+    Class_selectorContext *class_selector();
     Sort_blockContext *sort_block();
     NewlinesContext *newlines();
 
@@ -757,7 +761,7 @@ public:
     antlr4::tree::TerminalNode *FOR();
     antlr4::tree::TerminalNode *IDENTIFIER();
     antlr4::tree::TerminalNode *IN();
-    Class_exprContext *class_expr();
+    For_sourceContext *for_source();
     Stmt_blockContext *stmt_block();
     NewlinesContext *newlines();
 
@@ -808,6 +812,7 @@ public:
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *STRING();
     antlr4::tree::TerminalNode *IDENTIFIER();
+    antlr4::tree::TerminalNode *ALL_INST();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -817,6 +822,57 @@ public:
   };
 
   Class_exprContext* class_expr();
+
+  class  Class_selectorContext : public antlr4::ParserRuleContext {
+  public:
+    Class_selectorContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    std::vector<Class_exprContext *> class_expr();
+    Class_exprContext* class_expr(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> COMMA();
+    antlr4::tree::TerminalNode* COMMA(size_t i);
+    Class_groupContext *class_group();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  Class_selectorContext* class_selector();
+
+  class  Class_groupContext : public antlr4::ParserRuleContext {
+  public:
+    Class_groupContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *AT();
+    antlr4::tree::TerminalNode *IDENTIFIER();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  Class_groupContext* class_group();
+
+  class  For_sourceContext : public antlr4::ParserRuleContext {
+  public:
+    For_sourceContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    Class_exprContext *class_expr();
+    Class_groupContext *class_group();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  For_sourceContext* for_source();
 
   class  Bool_exprContext : public antlr4::ParserRuleContext {
   public:

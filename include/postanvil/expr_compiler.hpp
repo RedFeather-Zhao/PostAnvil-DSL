@@ -132,6 +132,13 @@ public: // public method:
 	 *						  2.字符串变量: cls_name : STR
 	 */
 	StrFunc compileClassExpr(::PostAnvilParser::Class_exprContext* ctx) {
+		// 内置全实例类别
+		if (ctx->ALL_INST()) {
+			return [](EvaluationContext&) {
+				return std::string(Scene::ALL_INST_CLASS);
+			};
+		}
+
 		// 字符串字面量
 		if (ctx->STRING()) {
 			std::string s = utils::strip_quotes(utils::get_upper_text(ctx->STRING()));

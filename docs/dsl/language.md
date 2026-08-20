@@ -94,17 +94,34 @@ BOOL has_position = _HAS_INST_INDEX("person", 3)
 ## 规则
 
 ### FILTER
-语法结构如下，由规则名、类别名、规则块和若干并列的布尔表达式组成
+语法结构如下，由规则名、目标选择器、规则块和若干并列的布尔表达式组成：
 
 ```postanvil
-RULE FILTER <类别表达式> {
+RULE FILTER <类别选择器> {
     <布尔表达式>
     ...
 }
 ```
 
-类别表达式只能是字符串字面量或字符串变量。`"global"` 表示对所有类别应用条件过滤。
-当且仅当一个实例满足所有条件表达式为真，则该实例保留。
+单个类别可以是字符串字面量或字符串变量；用逗号分隔多个类别可组成临时类别组：
+
+```postanvil
+RULE FILTER "person", "car", target_class {
+    self.conf >= 0.7
+}
+```
+
+`@` 开头的名称只表示类别组；不带 `@` 的 `ALL_INST` 是内置类别：
+
+| 名称 | 类型 | 含义 | 实例上下文 |
+|---|---|---|---|
+| `@ALL_CLASS` | 类别组 | 当前 Scene 的全部类别，逐类别执行 | 有 `self.cls` 和 `self.index`；同一 ID 可因属于多个类别而执行多次 |
+| `ALL_INST` | 内置类别 | Scene 创建实例时自动记录其稳定 ID，初始覆盖全部传入实例 | 与普通类别一致，有 `self.cls` 和 `self.index` |
+
+`"global"` 不再具有特殊含义，现在只是普通的 `GLOBAL` 类别名。`FILTER ALL_INST`
+仅筛选内置类别的成员列表；它不删除实例、不改变稳定 ID，也不修改其他类别。`@ALL_CLASS`
+展开时不包含 `ALL_INST`，避免同一实例因内置类别而额外执行一次。
+当且仅当一个实例满足所有条件表达式为真，该类别成员关系才会保留。
 
 ```postanvil
 RULE FILTER "person" {
@@ -129,7 +146,8 @@ RULE ATTR "car" {
 - `"class".name = expr`：设置类别共享属性。
 - 目标写法必须是 `self.<属性>` 或字符串字面量类别的 `<类别>.<属性>`。
 - `ATTR` 规则体只接受属性赋值；需要条件计算时，将控制流写入函数，再从 `ATTR` 调用该函数。
-- `RULE ATTR "global"` 会遍历全部类别的实例。
+- `RULE ATTR ALL_INST` 会遍历内置类别当前的成员；`RULE ATTR @ALL_CLASS`
+  和逗号临时组则逐类别执行，并保留类别上下文。
 
 ### FUNC
 
@@ -161,13 +179,13 @@ RULE FUNC is_large(w: NUM, h: NUM) -> BOOL {
 ### GROUP
 
 ```postanvil
-RULE GROUP "large_person" FROM "person" {
+RULE GROUP "large_object" FROM "person", "car" {
     self.area > 1000
     self.conf > 0.8
 }
 ```
 
-从源类别选择满足全部条件的实例，用同一批实例 ID 替换目标类别成员；不会复制实例，源类别不受影响。目标和源均可使用字符串变量。同一 ID 在目标中只保留一次。
+从一个或多个源类别选择满足全部条件的实例，用同一批实例 ID 替换目标类别成员；不会复制实例，源类别不受影响。目标类别必须是单个类别，源选择器支持逗号临时组、`@ALL_CLASS` 和内置类别 `ALL_INST`。同一 ID 在目标中只保留一次；对类别组求值时，每个来源成员保留其类别上下文。
 
 ### APPEND
 
@@ -177,7 +195,7 @@ RULE APPEND "vip" FROM "person" {
 }
 ```
 
-将源类别中满足条件的实例 ID 合并到目标类别，目标不存在时会创建。追加是幂等操作：目标中已经存在的 ID 不会重复插入。
+将源选择器中满足条件的实例 ID 合并到目标类别，目标不存在时会创建。源选择器与 `GROUP` 相同；追加是幂等操作，目标中已经存在的 ID 不会重复插入。
 
 ---
 

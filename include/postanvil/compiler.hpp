@@ -205,8 +205,7 @@ private: // Listener 回调实现
 	void enterFilter_rule(::PostAnvilParser::Filter_ruleContext* ctx) override {
 		m_current_kind = RuleKind::FILTER;
 		m_current_filter = std::make_unique<FilterOperator>();
-		m_current_filter->target_cls_expr =
-			m_expr_compiler.compileClassExpr(ctx->class_expr());
+		m_current_filter->target = compileClassSelector(ctx->class_selector());
 	}
 
 	void exitFilter_rule(::PostAnvilParser::Filter_ruleContext* /*ctx*/) override {
@@ -238,8 +237,7 @@ private: // Listener 回调实现
 	void enterAttr_rule(::PostAnvilParser::Attr_ruleContext* ctx) override {
 		m_current_kind = RuleKind::ATTR;
 		m_current_attr = std::make_unique<AttributeOperator>();
-		m_current_attr->target_cls_expr =
-			m_expr_compiler.compileClassExpr(ctx->class_expr());
+		m_current_attr->target = compileClassSelector(ctx->class_selector());
 	}
 
 	void exitAttr_rule(::PostAnvilParser::Attr_ruleContext* /*ctx*/) override {
@@ -295,12 +293,8 @@ private: // Listener 回调实现
 	void enterGroup_rule(::PostAnvilParser::Group_ruleContext* ctx) override {
 		m_current_kind = RuleKind::GROUP;
 		m_current_group = std::make_unique<GroupOperator>();
-		auto class_exprs = ctx->class_expr();
-		if (class_exprs.size() >= 2) {
-			m_current_group->new_cls_expr = m_expr_compiler.compileClassExpr(class_exprs[0]);
-			m_current_group->source_cls_expr =
-				m_expr_compiler.compileClassExpr(class_exprs[1]);
-		}
+		m_current_group->new_cls_expr = m_expr_compiler.compileClassExpr(ctx->class_expr());
+		m_current_group->source = compileClassSelector(ctx->class_selector());
 	}
 
 	void exitGroup_rule(::PostAnvilParser::Group_ruleContext* /*ctx*/) override {
@@ -314,13 +308,8 @@ private: // Listener 回调实现
 	void enterAppend_rule(::PostAnvilParser::Append_ruleContext* ctx) override {
 		m_current_kind = RuleKind::APPEND;
 		m_current_append = std::make_unique<AppendOperator>();
-		auto class_exprs = ctx->class_expr();
-		if (class_exprs.size() >= 2) {
-			m_current_append->dest_cls_expr =
-				m_expr_compiler.compileClassExpr(class_exprs[0]);
-			m_current_append->source_cls_expr =
-				m_expr_compiler.compileClassExpr(class_exprs[1]);
-		}
+		m_current_append->dest_cls_expr = m_expr_compiler.compileClassExpr(ctx->class_expr());
+		m_current_append->source = compileClassSelector(ctx->class_selector());
 	}
 
 	void exitAppend_rule(::PostAnvilParser::Append_ruleContext* /*ctx*/) override {
@@ -339,8 +328,7 @@ private: // Listener 回调实现
 	void enterSort_rule(::PostAnvilParser::Sort_ruleContext* ctx) override {
 		m_current_kind = RuleKind::SORT;
 		m_current_sort = std::make_unique<SortOperator>();
-		m_current_sort->target_cls_expr =
-			m_expr_compiler.compileClassExpr(ctx->class_expr());
+		m_current_sort->target = compileClassSelector(ctx->class_selector());
 
 		for (auto* key_ctx : ctx->sort_block()->sort_key()) {
 			auto typed = m_expr_compiler.compile(key_ctx->expr());
@@ -574,13 +562,18 @@ private: // Listener 回调实现
 	StatementFunc compileForStmt(::PostAnvilParser::ForStmtContext* ctx) {
 		m_type_scope.push();
 		std::string loop_var = utils::get_upper_text(ctx->IDENTIFIER());
-		auto class_expr = m_expr_compiler.compileClassExpr(ctx->class_expr());
-
-		// "global" 遍历类别名；普通类别遍历 INST。动态类别表达式运行时决定。
-		Type loop_type = Type::T_ANY;
-		if (ctx->class_expr()->STRING()) {
-			auto literal = utils::strip_quotes(utils::get_upper_text(ctx->class_expr()->STRING()));
-			loop_type = literal == EvaluationContext::GLOBAL_TARGET ? Type::T_STR : Type::T_INST;
+		auto* source = ctx->for_source();
+		StrFunc class_expr;
+		enum class ForSourceKind { CLASS, ALL_CLASSES };
+		ForSourceKind source_kind = ForSourceKind::CLASS;
+		Type loop_type = Type::T_INST;
+		if (source->class_group()) {
+			auto group_name = parseBuiltinGroup(source->class_group());
+			source_kind = ForSourceKind::ALL_CLASSES;
+			loop_type = Type::T_STR;
+		}
+		else {
+			class_expr = m_expr_compiler.compileClassExpr(source->class_expr());
 		}
 		m_type_scope.set_local(loop_var, loop_type);
 
@@ -590,15 +583,11 @@ private: // Listener 回调实现
 		}
 		m_type_scope.pop();
 
-		return [loop_var, class_expr, body_stmts](EvaluationContext& ctx) {
-			std::string cls_name = class_expr(ctx);
-
-			// 特殊处理 "GLOBAL"：遍历所有类别
-			if (cls_name == "GLOBAL") {
-				// TODO: "GLOBAL"视为所有类别的分组，未来支持若干类合并为一组，同样支持循环
-				for (const auto& global_cls_name : ctx.scene.cls_names()) {
+		return [loop_var, class_expr, source_kind, body_stmts](EvaluationContext& ctx) {
+			if (source_kind == ForSourceKind::ALL_CLASSES) {
+				for (const auto& cls_name : ctx.scene.cls_names()) {
 					ctx.push_scope();
-					ctx.set_var(loop_var, global_cls_name);
+					ctx.set_var(loop_var, cls_name);
 					for (auto& stmt : body_stmts) {
 						if (ctx.is_returned) {
 							break;
@@ -612,8 +601,8 @@ private: // Listener 回调实现
 				}
 				return;
 			}
-
 			// 普通类别
+			std::string cls_name = class_expr(ctx);
 			if (!ctx.scene.cls_exists(cls_name)) {
 				return;
 			}
@@ -720,6 +709,32 @@ private: // Listener 回调实现
 	}
 
 	// ======================== Helpers ============================
+
+	std::string parseBuiltinGroup(::PostAnvilParser::Class_groupContext* ctx) {
+		auto name = utils::get_upper_text(ctx->IDENTIFIER());
+		if (name != "ALL_CLASS") {
+			report_semantic_error(std::format(
+				"Unknown class group '@{}'; available built-in group is @ALL_CLASS",
+				name), ctx);
+		}
+		return name;
+	}
+
+	ClassSelector compileClassSelector(
+		::PostAnvilParser::Class_selectorContext* ctx)
+	{
+		ClassSelector selector;
+		if (ctx->class_group()) {
+			parseBuiltinGroup(ctx->class_group());
+			selector.kind = ClassSelector::Kind::ALL_CLASSES;
+			return selector;
+		}
+
+		for (auto* class_expr : ctx->class_expr()) {
+			selector.class_exprs.emplace_back(m_expr_compiler.compileClassExpr(class_expr));
+		}
+		return selector;
+	}
 
 	/**
 	 * @brief 解析类型节点为 Type 枚举

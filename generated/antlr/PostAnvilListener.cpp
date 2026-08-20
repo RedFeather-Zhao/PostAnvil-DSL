@@ -1,5 +1,5 @@
 
-// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 
 #include "PostAnvilListener.h"

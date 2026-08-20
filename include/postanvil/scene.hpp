@@ -53,6 +53,7 @@ public:
 	using SizeType			= std::size_t;
 	using InstIdList		= std::vector<InstId>;
 	using ClsNameList		= std::vector<std::string>;
+	static constexpr std::string_view ALL_INST_CLASS = "ALL_INST";
 
 private:
 	using ClsInstMap		= detail::str_map<InstIdList>;
@@ -74,6 +75,7 @@ public:
 		m_insts.emplace_back(
 			std::make_unique<Instance>(0.0, 0.0, 0.0, 0.0, 0.0)
 		);
+		m_cls_insts.try_emplace(std::string(ALL_INST_CLASS));
 	}
 
 	/**
@@ -158,7 +160,8 @@ public:
 
 	/**
 	 * @brief 创建实例，为其分配稳定 ID 并取得所有权
-	 * @details 创建实例不会修改任何类别关系，类别关系由 cls_add_inst 单独维护
+	 * @details 创建实例会自动将稳定 ID 追加到内置 ALL_INST 类别；
+	 *          其他类别关系由 cls_add_inst 单独维护
 	 *
 	 * @param instance		- 实例数据
 	 * @return InstanceHandle	- 不带类别上下文的实例句柄
@@ -167,6 +170,13 @@ public:
 		const auto id = m_insts.size();
 		instance.set_id(id);
 		m_insts.emplace_back(std::make_unique<Instance>(std::move(instance)));
+		try {
+			m_cls_insts.find(ALL_INST_CLASS)->second.emplace_back(id);
+		}
+		catch (...) {
+			m_insts.pop_back();
+			throw;
+		}
 		return InstanceHandle{ id, std::nullopt };
 	}
 
@@ -317,13 +327,15 @@ public:
 
 	/**
 	 * @brief 获取所有类别名称
-	 * @details 返回结果按名称排序，不暴露内部类别容器
+	 * @details 返回结果按名称排序，不包含内置 ALL_INST 类别，
+	 *          也不暴露内部类别容器
 	 */
 	[[nodiscard]]
 	ClsNameList cls_names() const {
 		ClsNameList names;
 		names.reserve(m_cls_insts.size());
 		for (const auto& [cls_name, _] : m_cls_insts) {
+			if (cls_name == ALL_INST_CLASS) { continue; }
 			names.emplace_back(cls_name);
 		}
 		std::ranges::sort(names);

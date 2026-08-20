@@ -1,5 +1,5 @@
 
-// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -96,6 +96,12 @@ public:
     virtual std::any visitDirection(PostAnvilParser::DirectionContext *context) = 0;
 
     virtual std::any visitClass_expr(PostAnvilParser::Class_exprContext *context) = 0;
+
+    virtual std::any visitClass_selector(PostAnvilParser::Class_selectorContext *context) = 0;
+
+    virtual std::any visitClass_group(PostAnvilParser::Class_groupContext *context) = 0;
+
+    virtual std::any visitFor_source(PostAnvilParser::For_sourceContext *context) = 0;
 
     virtual std::any visitBool_expr(PostAnvilParser::Bool_exprContext *context) = 0;
 

@@ -7,7 +7,7 @@ int main()
 	using namespace std::literals;
 	postanvil::Compiler compiler;
 	auto program = compiler.compile(R"(
-		RULE FILTER "global" {
+		RULE FILTER @ALL_CLASS {
 			self.conf >= 0.5
 		}
 	)"sv);
@@ -18,5 +18,7 @@ int main()
 	input.cls_add_inst("person", first.id);
 	input.cls_add_inst("person", second.id);
 	const auto output = program.evaluate(input);
-	return output.cls_inst_count("PERSON") == 1 ? 0 : 1;
+	const bool valid = output.cls_inst_count("PERSON") == 1
+		&& output.cls_inst_count(postanvil::Scene::ALL_INST_CLASS) == 2;
+	return valid ? 0 : 1;
 }

@@ -1,5 +1,5 @@
 
-// Generated from ./grammar/PostAnvil.g4 by ANTLR 4.13.2
+// Generated from grammar/PostAnvil.g4 by ANTLR 4.13.2
 
 #pragma once
 
@@ -132,6 +132,15 @@ public:
 
   virtual void enterClass_expr(PostAnvilParser::Class_exprContext * /*ctx*/) override { }
   virtual void exitClass_expr(PostAnvilParser::Class_exprContext * /*ctx*/) override { }
+
+  virtual void enterClass_selector(PostAnvilParser::Class_selectorContext * /*ctx*/) override { }
+  virtual void exitClass_selector(PostAnvilParser::Class_selectorContext * /*ctx*/) override { }
+
+  virtual void enterClass_group(PostAnvilParser::Class_groupContext * /*ctx*/) override { }
+  virtual void exitClass_group(PostAnvilParser::Class_groupContext * /*ctx*/) override { }
+
+  virtual void enterFor_source(PostAnvilParser::For_sourceContext * /*ctx*/) override { }
+  virtual void exitFor_source(PostAnvilParser::For_sourceContext * /*ctx*/) override { }
 
   virtual void enterBool_expr(PostAnvilParser::Bool_exprContext * /*ctx*/) override { }
   virtual void exitBool_expr(PostAnvilParser::Bool_exprContext * /*ctx*/) override { }

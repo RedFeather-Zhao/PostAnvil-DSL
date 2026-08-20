@@ -101,4 +101,17 @@ PA_TEST(UnescapedPhysicalNewlineCannotAppearInsideString)
 		error.kind() == PACompileError::Kind::Syntax);
 }
 
+PA_TEST(UnknownBuiltInGroupIsRejected)
+{
+	const auto error = compile_error_from(
+		"RULE FILTER @UNKNOWN {\n"
+		"    TRUE\n"
+		"}\n");
+
+	Microsoft::VisualStudio::CppUnitTestFramework::Assert::IsTrue(
+		error.kind() == PACompileError::Kind::Semantic);
+	Microsoft::VisualStudio::CppUnitTestFramework::Assert::IsTrue(
+		contains(error.what(), "@UNKNOWN"));
+}
+
 } // namespace UnitTest1Basic

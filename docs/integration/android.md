@@ -57,7 +57,8 @@ out/install/android-release/
     └── lib/
 ```
 
-每个 ABI 目录都包含 `lib/libpostanvil_static.a`、公开头文件和
+每个 ABI 目录都包含 `lib/libpostanvil_static.a`、公开头文件、
+`share/PostAnvil/android/postanvil-java.jar` 和
 `lib/cmake/PostAnvil`；启用 Android JNI 构建时还包含
 `lib/libpostanvil_jni.so`。
 
@@ -206,6 +207,10 @@ try (NativeBridge.Program program = new NativeBridge.Program(
     if (result.count("PERSON") != 1) {
         throw new AssertionError("Unexpected filtered instance count");
     }
+    if (result.allInstanceCount() != 2
+        || result.count(NativeBridge.ALL_INST) != 2) {
+        throw new AssertionError("Unexpected ALL_INST membership");
+    }
 }
 ```
 
@@ -238,6 +243,8 @@ double[] boxes = {
 try (NativeBridge.Program program = new NativeBridge.Program(source)) {
     NativeBridge.SceneResult result = program.evaluate(640, 480, classes, boxes);
     long kept = result.count("PERSON");
+    long allKept = result.count(NativeBridge.ALL_INST);
+    long[] allIds = result.allInstanceIds();
     for (int i = 0; i < result.size(); ++i) {
         String clsName = result.className(i);
         long instanceId = result.instanceId(i);
@@ -250,6 +257,11 @@ try (NativeBridge.Program program = new NativeBridge.Program(source)) {
 和 5 个框数值。如果一个实例同时属于多个类别，结果中会出现多行，但这些行使用
 同一个 `instanceId`；这表示多个类别成员关系，不表示实例被复制。`classNames()`、
 `instanceIds()` 和 `boxes()` 返回防御性副本。
+
+内置类别不混入普通类别行。`allInstanceCount()`、`allInstanceId()`、
+`allInstanceBox()`、`allInstanceIds()` 和 `allInstanceBoxes()` 单独暴露 `ALL_INST`
+当前的类别视图；`count(NativeBridge.ALL_INST)` 也返回该数量。输入 `classes`
+不得使用保留名 `ALL_INST`，Java 和 JNI 两层都会拒绝冲突。
 
 只需类别数量时可使用 `evaluateCounts(..., outputClasses)`。应显式传入要查询的
 `outputClasses`，这样才能读取 `GROUP` 或 `APPEND` 新建类别的数量。不带

@@ -59,17 +59,16 @@ jobs:
       - name: Build and install ${{ matrix.abi }}
         run: cmake --build --preset ${{ matrix.preset }}-install --parallel 4
 
-      - name: Compile Java binding
+      - name: Verify installed Java binding
         shell: bash
         run: |
           install_dir="out/install/android-release/${{ matrix.abi }}"
-          mkdir -p out/jni-headers out/java-classes
-          javac --release 8 -h out/jni-headers -d out/java-classes \
-            bindings/android/java/org/postanvil/NativeBridge.java
-          mkdir -p "$install_dir/share/PostAnvil/android"
-          jar --create \
-            --file "$install_dir/share/PostAnvil/android/postanvil-java.jar" \
-            -C out/java-classes .
+          java_jar="$install_dir/share/PostAnvil/android/postanvil-java.jar"
+          test -f "$java_jar"
+          javap -classpath "$java_jar" 'org.postanvil.NativeBridge$SceneResult' \
+            | grep -F 'allInstanceCount()'
+          javap -classpath "$java_jar" org.postanvil.NativeBridge \
+            | grep -F 'ALL_INST'
 
       - name: Verify Android binaries and JNI exports
         shell: bash

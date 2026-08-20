@@ -10,7 +10,7 @@ namespace UnitTest1Basic {
 PA_TEST(FalseLiteralFiltersEverything)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				FALSE
 			}
 		)", make_confidence_scene("A", { 0.9, 0.6 }), { { "A", 0 } });
@@ -19,7 +19,7 @@ PA_TEST(FalseLiteralFiltersEverything)
 	PA_TEST(TrueLiteralKeepsEverything)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				TRUE
 			}
 		)", make_confidence_scene("A", { 0.9, 0.6 }), { { "A", 2 } });
@@ -87,7 +87,7 @@ PA_TEST(FalseLiteralFiltersEverything)
 			RULE FUNC always_true() -> BOOL {
 				TRUE
 			}
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				always_true()
 			}
 		)", make_scene({
@@ -102,7 +102,7 @@ PA_TEST(FalseLiteralFiltersEverything)
 			RULE FUNC always_false() -> BOOL {
 				FALSE
 			}
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				always_false()
 			}
 		)", make_scene({

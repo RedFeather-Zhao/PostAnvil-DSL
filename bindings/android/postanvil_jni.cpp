@@ -3,10 +3,12 @@
 #include <jni.h>
 
 #include <algorithm>
+#include <cctype>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using postanvil::Compiler;
@@ -40,9 +42,19 @@ Program* program_from_handle(jlong handle)
     return reinterpret_cast<Program*>(handle);
 }
 
+bool ascii_iequals(std::string_view lhs, std::string_view rhs)
+{
+    return lhs.size() == rhs.size()
+        && std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](char left, char right) {
+            return std::toupper(static_cast<unsigned char>(left))
+                == std::toupper(static_cast<unsigned char>(right));
+        });
+}
+
 jobject make_scene_result(JNIEnv* env, const postanvil::Scene& scene)
 {
     const auto cls_names = scene.cls_names();
+    const auto& all_inst_ids = scene.cls_insts(postanvil::Scene::ALL_INST_CLASS);
 
     std::size_t row_count = 0;
     for (const auto& cls_name : cls_names) {
@@ -50,20 +62,26 @@ jobject make_scene_result(JNIEnv* env, const postanvil::Scene& scene)
     }
     constexpr auto BOX_VALUE_COUNT = std::size_t{ 5 };
     const auto max_array_size = static_cast<std::size_t>(std::numeric_limits<jsize>::max());
-    if (row_count > max_array_size / BOX_VALUE_COUNT) {
+    if (row_count > max_array_size / BOX_VALUE_COUNT
+        || all_inst_ids.size() > max_array_size / BOX_VALUE_COUNT) {
         throw std::overflow_error("Scene result contains too many class memberships");
     }
 
     const auto output_count = static_cast<jsize>(row_count);
     const auto output_box_count = static_cast<jsize>(row_count * BOX_VALUE_COUNT);
+    const auto all_inst_count = static_cast<jsize>(all_inst_ids.size());
+    const auto all_inst_box_count = static_cast<jsize>(all_inst_ids.size() * BOX_VALUE_COUNT);
     const jclass string_class = env->FindClass("java/lang/String");
     if (string_class == nullptr) return nullptr;
 
     const jobjectArray output_classes = env->NewObjectArray(output_count, string_class, nullptr);
     const jlongArray output_ids = env->NewLongArray(output_count);
     const jdoubleArray output_boxes = env->NewDoubleArray(output_box_count);
+    const jlongArray output_all_inst_ids = env->NewLongArray(all_inst_count);
+    const jdoubleArray output_all_inst_boxes = env->NewDoubleArray(all_inst_box_count);
     env->DeleteLocalRef(string_class);
-    if (output_classes == nullptr || output_ids == nullptr || output_boxes == nullptr) return nullptr;
+    if (output_classes == nullptr || output_ids == nullptr || output_boxes == nullptr
+        || output_all_inst_ids == nullptr || output_all_inst_boxes == nullptr) return nullptr;
 
     std::vector<jlong> ids(row_count);
     std::vector<jdouble> boxes(row_count * 5);
@@ -92,21 +110,43 @@ jobject make_scene_result(JNIEnv* env, const postanvil::Scene& scene)
     env->SetDoubleArrayRegion(output_boxes, 0, output_box_count, boxes.data());
     if (env->ExceptionCheck()) return nullptr;
 
+    std::vector<jlong> all_ids(all_inst_ids.size());
+    std::vector<jdouble> all_boxes(all_inst_ids.size() * BOX_VALUE_COUNT);
+    for (std::size_t index = 0; index < all_inst_ids.size(); ++index) {
+        const auto id = all_inst_ids[index];
+        const auto& instance = scene.inst_at(id);
+        all_ids[index] = static_cast<jlong>(id);
+        const auto offset = index * BOX_VALUE_COUNT;
+        all_boxes[offset] = instance.x1();
+        all_boxes[offset + 1] = instance.y1();
+        all_boxes[offset + 2] = instance.w();
+        all_boxes[offset + 3] = instance.h();
+        all_boxes[offset + 4] = instance.conf();
+    }
+    env->SetLongArrayRegion(output_all_inst_ids, 0, all_inst_count, all_ids.data());
+    env->SetDoubleArrayRegion(
+        output_all_inst_boxes, 0, all_inst_box_count, all_boxes.data());
+    if (env->ExceptionCheck()) return nullptr;
+
     const jclass result_class = env->FindClass("org/postanvil/NativeBridge$SceneResult");
     if (result_class == nullptr) return nullptr;
     const jmethodID constructor = env->GetMethodID(
-        result_class, "<init>", "([Ljava/lang/String;[J[D)V");
+        result_class, "<init>", "([Ljava/lang/String;[J[D[J[D)V");
     if (constructor == nullptr) {
         env->DeleteLocalRef(result_class);
         return nullptr;
     }
 
     const jobject result = env->NewObject(
-        result_class, constructor, output_classes, output_ids, output_boxes);
+        result_class, constructor,
+        output_classes, output_ids, output_boxes,
+        output_all_inst_ids, output_all_inst_boxes);
     env->DeleteLocalRef(result_class);
     env->DeleteLocalRef(output_classes);
     env->DeleteLocalRef(output_ids);
     env->DeleteLocalRef(output_boxes);
+    env->DeleteLocalRef(output_all_inst_ids);
+    env->DeleteLocalRef(output_all_inst_boxes);
     return result;
 }
 
@@ -184,6 +224,10 @@ Java_org_postanvil_NativeBridge_evaluate(
             const auto cls_name = to_utf8(env, label);
             env->DeleteLocalRef(label);
             if (env->ExceptionCheck()) return nullptr;
+            if (ascii_iequals(cls_name, postanvil::Scene::ALL_INST_CLASS)) {
+                throw std::invalid_argument(
+                    "classes must not contain the reserved built-in class ALL_INST");
+            }
 
             const auto offset = static_cast<std::size_t>(i) * 5;
             const auto handle = scene.inst_add(postanvil::Instance(

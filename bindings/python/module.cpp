@@ -87,6 +87,7 @@ PYBIND11_MODULE(_postanvil, module)
 {
     module.doc() = "PostAnvil DSL native bindings";
     module.attr("__version__") = version();
+    module.attr("ALL_INST") = py::str(Scene::ALL_INST_CLASS);
 
     py::enum_<PACompileError::Kind>(module, "CompileErrorKind")
         .value("SYNTAX", PACompileError::Kind::Syntax)
@@ -162,6 +163,9 @@ PYBIND11_MODULE(_postanvil, module)
             return self.img_info();
         }, &Scene::img_set)
         .def_property_readonly("inst_count", &Scene::inst_count)
+        .def_property_readonly("all_inst_count", [](const Scene& self) {
+            return self.cls_inst_count(Scene::ALL_INST_CLASS);
+        })
         .def("inst_add", &Scene::inst_add, py::arg("instance"))
         .def("inst_at", [](Scene& self, InstId id) -> Instance& {
             return self.inst_at(id);
@@ -217,6 +221,28 @@ PYBIND11_MODULE(_postanvil, module)
             return handles;
         })
         .def("cls_names", &Scene::cls_names)
+        .def("all_inst_ids", [](const Scene& self) {
+            return self.cls_insts(Scene::ALL_INST_CLASS);
+        })
+        .def("all_instances", [](Scene& self) {
+            py::list instances;
+            const auto owner = py::cast(&self, py::return_value_policy::reference);
+            for (const auto id : self.cls_insts(Scene::ALL_INST_CLASS)) {
+                instances.append(py::cast(
+                    &self.inst_at(id), py::return_value_policy::reference_internal, owner));
+            }
+            return instances;
+        })
+        .def("all_inst_handles", [](const Scene& self) {
+            std::vector<InstanceHandle> handles;
+            const auto count = self.cls_inst_count(Scene::ALL_INST_CLASS);
+            handles.reserve(count);
+            for (std::size_t index = 1; index <= count; ++index) {
+                handles.emplace_back(self.cls_inst_at(
+                    Scene::ALL_INST_CLASS, static_cast<double>(index)));
+            }
+            return handles;
+        })
         .def("cls_inst_at", &Scene::cls_inst_at,
              py::arg("cls_name"), py::arg("index"))
         .def("cls_inst_exists", &Scene::cls_inst_exists,

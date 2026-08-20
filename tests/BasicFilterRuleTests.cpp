@@ -10,7 +10,7 @@ namespace UnitTest1Basic {
 PA_TEST(FilterTest_1_Conf)
 	{
 		evaluate_and_expect_counts(R"(
-				RULE FILTER "global" {
+				RULE FILTER @ALL_CLASS {
 					self.conf > 0.5	\
 						OR self.conf > 0.5
 				}
@@ -23,7 +23,7 @@ PA_TEST(FilterTest_1_Conf)
 	PA_TEST(FilterTest_2_Area_W_H)
 	{
 		evaluate_and_expect_counts(R"(
-				RULE FILTER "Global" {
+				RULE FILTER @ALL_CLASS {
 					self.w > 10
 					self.h > 10
 					self.area > 200
@@ -157,7 +157,7 @@ PA_TEST(FilterTest_1_Conf)
 	PA_TEST(FilterTest_8_MultiClass)
 	{
 		evaluate_and_expect_counts(R"(
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				self.conf > 0.5
 			}
 			RULE FILTER "person" {

@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ._postanvil import Image, Instance, PARuntimeError, Scene
+from ._postanvil import ALL_INST, Image, Instance, PARuntimeError, Scene
 
 
 _TRACK_ID_PROPERTY = "YOLO_TRACK_ID"
@@ -51,6 +51,14 @@ def _require_detection_result(result: Any) -> None:
             "Only axis-aligned object-detection results are supported; "
             "classification, segmentation, pose, OBB, semantic-mask, and "
             "depth results require task-specific adapters"
+        )
+
+
+def _require_user_class_name(name: str) -> None:
+    if name.casefold() == ALL_INST.casefold():
+        raise ValueError(
+            f"Ultralytics class name {name!r} conflicts with the reserved "
+            f"PostAnvil built-in class {ALL_INST!r}"
         )
 
 
@@ -98,6 +106,7 @@ def from_ultralytics(result: Any) -> Scene:
         class_id = int(raw_class_id)
         if class_id not in names:
             raise ValueError(f"Ultralytics class ID {class_id} is missing from result.names")
+        _require_user_class_name(names[class_id])
 
         x1, y1, x2, y2 = (float(value) for value in xyxy)
         instance = Instance(

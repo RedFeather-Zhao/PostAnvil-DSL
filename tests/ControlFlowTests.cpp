@@ -107,14 +107,14 @@ PA_TEST(NestedIfElseFunction)
 		auto output = evaluate(R"(
 			RULE FUNC sum_areas() -> NUM {
 				NUM total = 0
-				FOR cls IN "global" {
+				FOR cls IN @ALL_CLASS {
 					FOR obj IN cls {
 						total = total + obj.area
 					}
 				}
 				RETURN total
 			}
-			RULE ATTR "global" {
+			RULE ATTR ALL_INST {
 				"global".total_area = sum_areas()
 			}
 		)", make_scene({

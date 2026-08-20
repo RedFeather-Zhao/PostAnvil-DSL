@@ -33,7 +33,7 @@ PA_TEST(ImportsHostVariables)
 
 		evaluate_and_expect_counts(R"(
 			IMPORT NUM host_conf AS conf_threshold
-			RULE FILTER "global" {
+			RULE FILTER @ALL_CLASS {
 				self.conf > conf_threshold
 			}
 		)", std::move(input), { { "A", 1 } });
